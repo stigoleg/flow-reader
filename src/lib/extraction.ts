@@ -2,6 +2,14 @@ import { Readability } from '@mozilla/readability';
 import type { FlowDocument, Block } from '@/types';
 import { parseHtmlToBlocks } from './html-parser';
 import { getBlockText, createDocument } from './block-utils';
+import { cleanArticleDocument, setCleanupDebug } from './article-cleanup';
+import { normalizeArticleMarkup, setNormalizeDebug } from './article-normalize';
+
+/**
+ * Enable debug logging for extraction pipeline.
+ * Set to true during development to see which nodes are removed/normalized.
+ */
+const DEBUG_EXTRACTION = false;
 
 /**
  * Elements to remove BEFORE Readability parsing.
@@ -41,43 +49,27 @@ const ELEMENTS_TO_REMOVE_PRE = [
   // Related content
   '[class*="related-articles"]', '[class*="recommended"]', '[class*="more-stories"]',
   '[class*="read-next"]',
+  // Summary/takeaway boxes (English + Norwegian)
+  '[class*="summary"]', '[class*="ai-summary"]', '[class*="tldr"]', '[class*="tl-dr"]',
+  '[class*="key-points"]', '[class*="highlights"]', '[class*="takeaway"]',
+  '[class*="oppsummering"]', '[class*="sammendrag"]', '[class*="kortversjon"]',
+  '[class*="hovedpoeng"]',
+  // Info/fact boxes
+  '[class*="infobox"]', '[class*="info-box"]', '[class*="factbox"]', '[class*="fact-box"]',
+  '[class*="callout"]', '[class*="pullquote"]', '[class*="faktaboks"]', '[class*="infoboks"]',
 ];
 
 /**
- * Elements to remove AFTER Readability parsing.
- * These may be embedded within article content but are not part of the actual article.
+ * Additional structural elements to remove before Readability.
+ * These are semantic elements that should never contain article content.
  */
-const ELEMENTS_TO_REMOVE_POST = [
-  // AI-generated summaries (common patterns)
-  '[class*="summary"]',
-  '[class*="Summary"]',
-  '[data-track-element-type*="Summary"]',
-  '[data-track-id*="summary"]',
-  '[class*="ai-summary"]',
-  '[class*="tldr"]',
-  '[class*="key-points"]',
-  '[class*="highlights"]',
-  '[class*="quick-read"]',
-  '[class*="brief"]',
-  // Specific Norwegian news site patterns
-  '[class*="kortversjon"]',
-  '[class*="oppsummering"]',
-  // Buttons and interactive elements that Readability may keep
-  'button',
-  '[role="button"]',
-  // Track elements (analytics wrappers)
-  'track-element',
-  // SVG icons (often decorative)
-  'svg',
-  // Disclaimers about AI
-  '[class*="disclaimer"]',
-  // Figure captions (often not part of main reading flow)
-  'figcaption',
-  // Info boxes that interrupt reading
-  '[class*="infobox"]',
-  '[class*="factbox"]',
-  '[class*="info-box"]',
-  '[class*="fact-box"]',
+const STRUCTURAL_PRE_SELECTORS = [
+  'nav', 'aside', 
+  'header:not(article header)', 
+  'footer:not(article footer)',
+  '[role="complementary"]', '[role="banner"]', '[role="contentinfo"]',
+  // Media elements that Readability might keep
+  'figure', 'picture', 'video', 'audio', 'canvas', 'embed', 'object',
 ];
 
 /**
@@ -158,6 +150,7 @@ function safeRemove(el: Element): void {
  * Removes elements that are clearly not article content.
  */
 function cleanupDomPre(doc: Document): void {
+  // Remove elements by class/id patterns
   ELEMENTS_TO_REMOVE_PRE.forEach(selector => {
     try {
       doc.querySelectorAll(selector).forEach(el => safeRemove(el));
@@ -166,10 +159,21 @@ function cleanupDomPre(doc: Document): void {
     }
   });
 
+  // Remove structural elements that shouldn't contain article content
+  STRUCTURAL_PRE_SELECTORS.forEach(selector => {
+    try {
+      doc.querySelectorAll(selector).forEach(el => safeRemove(el));
+    } catch {
+      // Ignore invalid selectors
+    }
+  });
+
+  // Remove hidden elements
   doc.querySelectorAll('[hidden], [aria-hidden="true"], [style*="display: none"], [style*="display:none"]').forEach(el => {
     safeRemove(el);
   });
 
+  // Remove tiny font elements (likely UI chrome)
   doc.querySelectorAll('[style*="font-size"]').forEach(el => {
     const style = (el as HTMLElement).style;
     const fontSize = parseFloat(style.fontSize);
@@ -177,25 +181,6 @@ function cleanupDomPre(doc: Document): void {
       safeRemove(el);
     }
   });
-}
-
-/**
- * Clean HTML after Readability extraction.
- * Removes elements that Readability kept but shouldn't be part of reading content.
- */
-function cleanupHtmlPost(html: string): string {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  
-  ELEMENTS_TO_REMOVE_POST.forEach(selector => {
-    try {
-      doc.querySelectorAll(selector).forEach(el => el.remove());
-    } catch {
-      // Ignore invalid selectors
-    }
-  });
-  
-  return doc.body.innerHTML;
 }
 
 /**
@@ -263,18 +248,34 @@ function textToParagraphBlocks(text: string): Block[] {
     }));
 }
 
+/**
+ * Extract article content from a web page document.
+ * 
+ * Pipeline:
+ * 1. Clone document
+ * 2. Pre-Readability cleanup (remove obvious non-content)
+ * 3. Readability extraction
+ * 4. Post-extraction cleanup (remove summary boxes, sidebars, captions)
+ * 5. Markup normalization (strip formatting, unwrap containers/spans)
+ * 6. Parse to blocks
+ * 7. Filter UI text patterns
+ */
 export function extractContent(doc: Document, url: string): FlowDocument | null {
+  // Enable debug logging if configured
+  if (DEBUG_EXTRACTION) {
+    setCleanupDebug(true);
+    setNormalizeDebug(true);
+  }
+
   // Create a proper document clone using DOMParser
-  // doc.cloneNode(true) can produce invalid documents in some browser contexts
-  // XMLSerializer can also produce problematic output for HTML documents
   const parser = new DOMParser();
   
-  // Get HTML string from the document - prefer documentElement.outerHTML 
-  // as it preserves the full document structure
+  // Get HTML string from the document
   const html = doc.documentElement?.outerHTML || doc.body?.outerHTML || '';
   
-  console.log('FlowReader: HTML length:', html.length);
-  console.log('FlowReader: HTML starts with:', html.substring(0, 100));
+  if (DEBUG_EXTRACTION) {
+    console.log('FlowReader: HTML length:', html.length);
+  }
   
   if (!html) {
     console.log('FlowReader: No HTML content found');
@@ -283,26 +284,26 @@ export function extractContent(doc: Document, url: string): FlowDocument | null 
   
   const documentClone = parser.parseFromString(html, 'text/html');
   
-  console.log('FlowReader: documentClone:', documentClone);
-  console.log('FlowReader: documentClone.documentElement:', documentClone?.documentElement);
-  console.log('FlowReader: documentClone.body:', documentClone?.body);
-  console.log('FlowReader: documentClone constructor:', documentClone?.constructor?.name);
-  
   // Verify we have a valid document for Readability
   if (!documentClone || !documentClone.documentElement) {
     console.log('FlowReader: Invalid document clone');
     return null;
   }
   
+  // Step 1: Pre-Readability cleanup
   cleanupDomPre(documentClone);
   
-  console.log('FlowReader: After cleanup, documentElement:', documentClone.documentElement);
-  console.log('FlowReader: After cleanup, body:', documentClone.body);
-  console.log('FlowReader: About to create Readability with:', typeof documentClone, documentClone?.nodeType);
+  if (DEBUG_EXTRACTION) {
+    console.log('FlowReader: Pre-cleanup complete');
+  }
 
+  // Step 2: Readability extraction
+  // Note: keepClasses: true allows our post-extraction cleanup to match
+  // class-based patterns (summary boxes, info boxes, etc.). Classes are
+  // stripped later during normalization.
   const reader = new Readability(documentClone, {
     charThreshold: 500,
-    keepClasses: false,
+    keepClasses: true,
     nbTopCandidates: 5,
   });
 
@@ -311,11 +312,32 @@ export function extractContent(doc: Document, url: string): FlowDocument | null 
     return null;
   }
 
-  // Clean the extracted HTML to remove embedded non-article content
-  const cleanedHtml = cleanupHtmlPost(article.content);
-  const blocks = filterUIBlocks(parseHtmlToBlocks(cleanedHtml), true);
+  // Step 3: Parse extracted HTML for cleanup and normalization
+  const articleDoc = parser.parseFromString(article.content, 'text/html');
+  
+  // Step 4: Post-extraction cleanup (removes summary boxes, sidebars, etc.)
+  cleanArticleDocument(articleDoc.body, {
+    title: article.title || undefined,
+    byline: article.byline || undefined,
+  });
+  
+  // Step 5: Markup normalization (strips formatting, unwraps containers)
+  normalizeArticleMarkup(articleDoc.body);
+  
+  // Get the cleaned and normalized HTML
+  const cleanedHtml = articleDoc.body.innerHTML;
+  
+  if (DEBUG_EXTRACTION) {
+    console.log('FlowReader: Cleaned HTML length:', cleanedHtml.length);
+  }
+  
+  // Step 6: Parse to blocks
+  const blocks = parseHtmlToBlocks(cleanedHtml);
+  
+  // Step 7: Filter UI text patterns
+  const filteredBlocks = filterUIBlocks(blocks, true);
 
-  return createDocument(blocks, {
+  return createDocument(filteredBlocks, {
     title: article.title || 'Untitled',
     author: article.byline || undefined,
     publishedAt: article.publishedTime || undefined,
@@ -341,4 +363,13 @@ export function extractFromPaste(text: string): FlowDocument {
     title: 'Pasted Text',
     source: 'paste',
   });
+}
+
+/**
+ * Enable or disable debug logging for the extraction pipeline.
+ * When enabled, logs which nodes are removed and why.
+ */
+export function setExtractionDebug(enabled: boolean): void {
+  setCleanupDebug(enabled);
+  setNormalizeDebug(enabled);
 }

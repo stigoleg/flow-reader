@@ -51,6 +51,53 @@ The reader adjusts word timing based on:
 | Syllable count | Complex pronunciation = slower |
 | Punctuation | Pauses at commas, periods, etc. |
 
+### Content Cleanup & Normalization
+
+FlowReader uses a two-layer post-extraction system to ensure clean article output:
+
+#### Cleanup Layer (`article-cleanup.ts`)
+
+Removes non-article modules after Readability extraction:
+
+- **Structural elements**: nav, header, footer, aside, forms
+- **Media elements**: figure, figcaption, video, audio, galleries
+- **Summary boxes**: AI summaries, key takeaways, TL;DR sections
+- **Promotional content**: share buttons, newsletter prompts, related articles
+- **Norwegian equivalents**: oppsummering, kort fortalt, hovedpoenger, sammendrag
+
+**Heuristics applied:**
+
+| Check | Threshold | Description |
+|-------|-----------|-------------|
+| Text density | < 80 chars | Removes blocks with too little visible content |
+| Link density | > 50% | Removes navigation-heavy link blocks |
+| Boilerplate | Pattern match | Removes "Read more", "Related", "Subscribe" patterns |
+
+#### Normalization Layer (`article-normalize.ts`)
+
+Produces minimal, predictable markup:
+
+- **Allowed block tags**: `h2`, `h3`, `p`, `ul`, `ol`, `li`, `blockquote`, `pre`, `code`
+- **Heading conversion**: `h4`-`h6` → `h3`, `h1` removed (title from metadata)
+- **Attribute stripping**: No `style`, `class`, `id` (except `code` for language hints)
+- **Span handling**: Unwraps presentational spans, removes non-content spans (captions, credits, promos)
+- **Whitespace**: Collapses repeated spaces, trims block elements
+
+**Extending patterns:**
+
+To add new cleanup patterns, edit the constants in `src/lib/article-cleanup.ts`:
+
+```typescript
+// Add class/id patterns for promotional content
+PROMO_PATTERNS.push('new-pattern');
+
+// Add heading text patterns (regex) for summary sections
+SUMMARY_HEADING_PATTERNS.push(/^new heading$/i);
+
+// Add "starts with" patterns for boilerplate removal
+BOILERPLATE_PATTERNS.push(/^new boilerplate/i);
+```
+
 ### Supported Content Types
 
 - **Web pages** - Any article or blog post
@@ -66,14 +113,20 @@ src/
   content/        # Content script injected into pages
   reader/         # Main reader UI (React + Zustand)
   lib/            # Core logic
+    extraction.ts       # Content extraction orchestration
+    article-cleanup.ts  # Post-extraction cleanup layer
+    article-normalize.ts # Markup normalization layer
+    html-parser.ts      # HTML to block model conversion
     bionic.ts           # Bionic reading text formatting
     tokenizer.ts        # Text tokenization and timing
-    readability.ts      # Readability analysis
+    readability.ts      # Readability analysis (Flesch-Kincaid, etc.)
     syllables.ts        # Multi-language syllable counting
     word-frequency.ts   # Word complexity (language-agnostic)
-    extraction.ts       # Content extraction from pages
     pdf-handler.ts      # PDF parsing
     docx-handler.ts     # DOCX parsing
+tests/
+  unit/                 # Unit tests
+  fixtures/articles/    # HTML test fixtures for extraction
 ```
 
 ## Configuration

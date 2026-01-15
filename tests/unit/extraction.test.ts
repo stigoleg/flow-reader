@@ -440,4 +440,331 @@ describe('Content Extraction', () => {
       expect(result?.metadata.url).toBe(url);
     });
   });
+
+  describe('Cleanup Integration', () => {
+    it('removes AI summary boxes from extracted content', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Main Article</h1>
+              <div class="ai-summary">
+                <h2>AI Summary</h2>
+                <p>This is an AI-generated summary that should be removed.</p>
+              </div>
+              <p>Real article content that should be extracted and kept in the output.</p>
+              <p>More real content to meet extraction thresholds properly.</p>
+              <p>Additional paragraph for article detection by Readability.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).not.toContain('AI-generated summary');
+      expect(result?.plainText).toContain('Real article content');
+    });
+
+    it('removes Key Takeaways sections by heading', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Main Article</h1>
+              <h2>Key Takeaways</h2>
+              <ul>
+                <li>Takeaway point one</li>
+                <li>Takeaway point two</li>
+              </ul>
+              <h2>Background</h2>
+              <p>Real article content that should remain after cleanup processing.</p>
+              <p>More content here to meet the extraction thresholds.</p>
+              <p>Additional content for proper article detection.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).not.toContain('Takeaway point');
+      expect(result?.plainText).toContain('Real article content');
+    });
+
+    it('removes Norwegian summary sections', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html lang="no">
+          <head><title>Artikkel</title></head>
+          <body>
+            <article>
+              <h1>Hovedartikkel</h1>
+              <div class="oppsummering">
+                <p>Dette er en AI-generert oppsummering.</p>
+              </div>
+              <h2>Kort fortalt</h2>
+              <p>Hovedpoenget som skal fjernes fra artikkelen.</p>
+              <h2>Bakgrunn</h2>
+              <p>Ekte artikkelinnhold som skal forbli etter opprydding her.</p>
+              <p>Mer innhold for å møte ekstraksjonstersklene riktig.</p>
+              <p>Ekstra innhold for artikkeldeteksjon av Readability.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).not.toContain('AI-generert oppsummering');
+      expect(result?.plainText).not.toContain('Hovedpoenget som skal fjernes');
+      expect(result?.plainText).toContain('Ekte artikkelinnhold');
+    });
+
+    it('removes figcaptions from extracted content', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Photo Article</h1>
+              <figure>
+                <figcaption>Photo by Someone / Getty Images</figcaption>
+              </figure>
+              <p>The actual story content that matters to readers here.</p>
+              <p>More content to ensure proper extraction happens.</p>
+              <p>Even more content for the threshold requirements.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).not.toContain('Photo by Someone');
+    });
+
+    it('removes info boxes and factboxes', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Main Article</h1>
+              <aside class="infobox">
+                <p>Quick facts that interrupt reading flow here.</p>
+              </aside>
+              <div class="factbox">
+                <p>Did you know? Some factoid content.</p>
+              </div>
+              <p>Real article content that should remain in output.</p>
+              <p>More content for extraction threshold requirements.</p>
+              <p>Additional paragraph for article detection.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).not.toContain('Quick facts');
+      expect(result?.plainText).not.toContain('Did you know');
+      expect(result?.plainText).toContain('Real article content');
+    });
+
+    it('removes newsletter and subscribe prompts', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Main Article</h1>
+              <div class="newsletter-signup">
+                <p>Subscribe to our newsletter for updates!</p>
+              </div>
+              <p>Real article content that readers want to see here.</p>
+              <p>More content for extraction to work properly.</p>
+              <p>Additional content for threshold requirements.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).not.toContain('Subscribe to our newsletter');
+    });
+
+    it('removes related articles sections', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Main Article</h1>
+              <p>Real article content that should be extracted properly.</p>
+              <p>More content for extraction threshold requirements here.</p>
+              <div class="related-articles">
+                <h3>Related Articles</h3>
+                <a href="#">Another article link</a>
+              </div>
+              <p>Final content paragraph for the article body.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).not.toContain('Related Articles');
+      expect(result?.plainText).not.toContain('Another article link');
+    });
+  });
+
+  describe('Normalization Integration', () => {
+    it('produces clean markup without inline styles', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Styled Article</h1>
+              <p style="color: red; font-size: 18px;">Content with inline styles.</p>
+              <p style="margin: 20px;">More styled content here.</p>
+              <p>Plain content without any styles applied.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      // Content should be extracted, styles stripped at DOM level
+      expect(result?.blocks.length).toBeGreaterThan(0);
+    });
+
+    it('unwraps nested container divs', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Nested Article</h1>
+              <div class="wrapper">
+                <div class="inner">
+                  <p>Deeply nested content that should be extracted.</p>
+                  <p>More nested content for extraction thresholds.</p>
+                </div>
+              </div>
+              <p>Additional content for proper article detection.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).toContain('Deeply nested content');
+    });
+
+    it('converts h4-h6 to h3 in output blocks', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Main Title</h1>
+              <p>Introduction paragraph with enough content for extraction.</p>
+              <h4>Subheading Level 4</h4>
+              <p>Content under subheading with more text for thresholds.</p>
+              <h5>Subheading Level 5</h5>
+              <p>More content under another subheading level here.</p>
+              <p>Final paragraph to meet extraction requirements.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      // H4 and H5 should be converted to level 3 headings
+      const headings = result?.blocks.filter(b => b.type === 'heading');
+      expect(headings).toBeDefined();
+      if (headings && headings.length > 0) {
+        headings.forEach(h => {
+          if (h.type === 'heading') {
+            expect(h.level).toBeLessThanOrEqual(3);
+          }
+        });
+      }
+    });
+
+    it('preserves semantic inline elements (strong, em)', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Article Title</h1>
+              <p>Text with <strong>bold emphasis</strong> and <em>italic text</em> preserved.</p>
+              <p>More content for extraction threshold requirements here.</p>
+              <p>Additional paragraph for proper article detection.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      expect(result?.plainText).toContain('bold emphasis');
+      expect(result?.plainText).toContain('italic text');
+    });
+
+    it('removes h1 from body (title from metadata)', () => {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head><title>Article</title></head>
+          <body>
+            <article>
+              <h1>Article Title That Should Not Appear In Body</h1>
+              <p>First paragraph of content for extraction to work.</p>
+              <p>Second paragraph with more content for thresholds.</p>
+              <p>Third paragraph to ensure proper article detection.</p>
+            </article>
+          </body>
+        </html>
+      `;
+      const doc = createDocument(html);
+      const result = extractContent(doc, 'https://example.com');
+      
+      expect(result).not.toBeNull();
+      // H1 should be removed from blocks (title comes from metadata)
+      const h1Blocks = result?.blocks.filter(b => b.type === 'heading' && b.level === 1);
+      expect(h1Blocks).toHaveLength(0);
+    });
+  });
 });

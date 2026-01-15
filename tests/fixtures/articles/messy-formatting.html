@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head><title>Messy Article</title></head>
+<body>
+<article>
+  <h1>Poorly Formatted Article</h1>
+  
+  <div style="padding: 20px; margin-left: 40px;">
+    <div class="wrapper">
+      <p style="font-size: 14px; color: blue;">
+        <span class="highlight">
+          <span>
+            This text has excessive span wrapping that should be cleaned up properly.
+          </span>
+        </span>
+      </p>
+    </div>
+  </div>
+  
+  <p id="intro" class="lead-para" style="font-weight: bold;">
+    Another paragraph with unnecessary attributes that should be stripped away.
+  </p>
+  
+  <h4>This H4 Should Become H3</h4>
+  <p>Content under the heading that should remain in the article.</p>
+  
+  <h5>This H5 Should Also Become H3</h5>
+  <p>More content under another subheading level.</p>
+  
+  <br><br><br>
+  
+  <p>Content after multiple line breaks that should still be preserved.</p>
+  
+  <section>
+    <div>
+      <article>
+        <p>Deeply nested paragraph that should be unwrapped from its containers.</p>
+      </article>
+    </div>
+  </section>
+  
+  <p>
+    Text with <b>bold</b> and <i>italic</i> that should become 
+    <strong>strong</strong> and <em>em</em> tags.
+  </p>
+  
+  <p>
+    A paragraph with a <a href="https://example.com" class="link" id="my-link" style="color: red;">valid link</a>
+    and an <a>anchor without href</a> that should be unwrapped.
+  </p>
+</article>
+</body>
+</html>
