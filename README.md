@@ -1,7 +1,6 @@
 # FlowReader
 
-![FlowReader Demo](docs/demo.gif)
-<!-- TODO: Replace with actual screenshot or gif of the extension in action -->
+![FlowReader Demo](docs/flowreader.png)
 
 A Chrome extension for faster reading with better comprehension. Strips away web clutter and presents content in a clean reader mode with optional pacing aids.
 
