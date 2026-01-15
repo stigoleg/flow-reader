@@ -13,6 +13,9 @@ interface KeyboardShortcutsOptions {
   adjustWPM: (delta: number) => void;
   setMode: (mode: ReadingMode) => void;
   updateSettings: (settings: Partial<ReaderSettings>) => void;
+  // RSVP navigation
+  rsvpAdvance?: () => void;
+  rsvpRetreat?: () => void;
   // Overlay state for Escape key handling
   overlays?: {
     isSettingsOpen: boolean;
@@ -31,7 +34,8 @@ const GRANULARITIES: PacingGranularity[] = ['block', 'sentence', 'word'];
 type ActionHandler = (e: KeyboardEvent, options: KeyboardShortcutsOptions) => void;
 
 function getNextNavigation(options: KeyboardShortcutsOptions): () => void {
-  const { settings, nextWord, nextSentence, nextBlock } = options;
+  const { settings, nextWord, nextSentence, nextBlock, rsvpAdvance } = options;
+  if (settings.activeMode === 'rsvp') return rsvpAdvance || nextBlock;
   if (settings.activeMode !== 'pacing') return nextBlock;
   if (settings.pacingGranularity === 'word') return nextWord;
   if (settings.pacingGranularity === 'sentence') return nextSentence;
@@ -39,7 +43,8 @@ function getNextNavigation(options: KeyboardShortcutsOptions): () => void {
 }
 
 function getPrevNavigation(options: KeyboardShortcutsOptions): () => void {
-  const { settings, prevWord, prevSentence, prevBlock } = options;
+  const { settings, prevWord, prevSentence, prevBlock, rsvpRetreat } = options;
+  if (settings.activeMode === 'rsvp') return rsvpRetreat || prevBlock;
   if (settings.activeMode !== 'pacing') return prevBlock;
   if (settings.pacingGranularity === 'word') return prevWord;
   if (settings.pacingGranularity === 'sentence') return prevSentence;

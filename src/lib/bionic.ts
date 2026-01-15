@@ -6,7 +6,7 @@ export interface BionicWord {
 }
 
 export interface AdaptiveBionicWord extends BionicWord {
-  frequencyTier: 1 | 2 | 3 | 4 | 5;
+  complexityTier: 1 | 2 | 3 | 4 | 5;
 }
 
 /**
@@ -30,19 +30,19 @@ export function bionicWord(word: string, proportion: number): BionicWord {
 }
 
 /**
- * Get adaptive proportion based on word frequency
- * Common words get less bolding (readers recognize them faster)
- * Rare words get more bolding (need more visual emphasis)
+ * Get adaptive proportion based on word complexity
+ * Simple words get less bolding (readers recognize them faster)
+ * Complex words get more bolding (need more visual emphasis)
  */
 function getAdaptiveProportion(word: string, baseProportion: number): number {
   const tier = getWordFrequencyTier(word);
   
-  // Adjust proportion based on frequency tier
-  // Tier 1 (very common): reduce bolding by 30%
-  // Tier 2 (common): reduce bolding by 15%
+  // Adjust proportion based on complexity tier
+  // Tier 1 (very simple): reduce bolding by 30%
+  // Tier 2 (simple): reduce bolding by 15%
   // Tier 3 (standard): use base proportion
-  // Tier 4 (less common): increase bolding by 15%
-  // Tier 5 (rare): increase bolding by 30%
+  // Tier 4 (complex): increase bolding by 15%
+  // Tier 5 (very complex): increase bolding by 30%
   const adjustments: Record<number, number> = {
     1: 0.7,  // 30% less bold
     2: 0.85, // 15% less bold
@@ -58,20 +58,20 @@ function getAdaptiveProportion(word: string, baseProportion: number): number {
 }
 
 /**
- * Convert a word to bionic format with adaptive proportion based on word frequency
+ * Convert a word to bionic format with adaptive proportion based on word complexity
  */
 export function adaptiveBionicWord(word: string, baseProportion: number = 0.4): AdaptiveBionicWord {
   if (!word || word.length === 0) {
-    return { bold: '', regular: '', frequencyTier: 3 };
+    return { bold: '', regular: '', complexityTier: 3 };
   }
   
-  const frequencyTier = getWordFrequencyTier(word);
+  const complexityTier = getWordFrequencyTier(word);
   const adaptedProportion = getAdaptiveProportion(word, baseProportion);
   const result = bionicWord(word, adaptedProportion);
   
   return {
     ...result,
-    frequencyTier,
+    complexityTier,
   };
 }
 
@@ -90,8 +90,8 @@ export function bionicText(text: string, proportion: number = 0.4): BionicWord[]
 }
 
 /**
- * Convert text to adaptive bionic format (proportion varies by word frequency)
- * Common words get less emphasis, rare words get more
+ * Convert text to adaptive bionic format (proportion varies by word complexity)
+ * Simple words get less emphasis, complex words get more
  */
 export function adaptiveBionicText(text: string, baseProportion: number = 0.4): AdaptiveBionicWord[] {
   const tokens = text.match(/[\w]+|[^\w]+/g) || [];
@@ -100,7 +100,7 @@ export function adaptiveBionicText(text: string, baseProportion: number = 0.4): 
     if (/\w/.test(token)) {
       return adaptiveBionicWord(token, baseProportion);
     }
-    return { bold: '', regular: token, frequencyTier: 3 as const };
+    return { bold: '', regular: token, complexityTier: 3 as const };
   });
 }
 

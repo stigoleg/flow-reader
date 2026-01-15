@@ -40,6 +40,9 @@ export default function ReaderView() {
     setHelpOpen,
     // Completion
     showCompletion,
+    // RSVP navigation
+    rsvpAdvance,
+    rsvpRetreat,
   } = useReaderStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +59,8 @@ export default function ReaderView() {
     adjustWPM,
     setMode,
     updateSettings,
+    rsvpAdvance,
+    rsvpRetreat,
     overlays: {
       isSettingsOpen,
       closeSettings: toggleSettings,

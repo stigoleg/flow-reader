@@ -16,6 +16,10 @@ interface ReaderState {
   // Sub-block position tracking for sentence/word pacing
   currentSentenceIndex: number;
   currentWordIndex: number;
+  
+  // RSVP mode position tracking
+  currentRsvpIndex: number;
+  rsvpTokenCount: number;
 
   // Playback
   isPlaying: boolean;
@@ -70,6 +74,12 @@ interface ReaderState {
   nextWord: () => void;
   prevWord: () => void;
   resetWordIndex: () => void;
+  
+  // RSVP navigation
+  setRsvpIndex: (index: number) => void;
+  setRsvpTokenCount: (count: number) => void;
+  rsvpAdvance: () => void;
+  rsvpRetreat: () => void;
 }
 
 export const useReaderStore = create<ReaderState>((set, get) => ({
@@ -81,6 +91,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   currentCharOffset: 0,
   currentSentenceIndex: 0,
   currentWordIndex: 0,
+  currentRsvpIndex: 0,
+  rsvpTokenCount: 0,
   isPlaying: false,
   currentWPM: DEFAULT_SETTINGS.baseWPM,
   settings: DEFAULT_SETTINGS,
@@ -99,6 +111,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       currentBlockIndex: 0,
       currentSentenceIndex: 0,
       currentWordIndex: 0,
+      currentRsvpIndex: 0,
     });
     
     // Add to recent documents
@@ -270,6 +283,27 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   },
   
   resetWordIndex: () => set({ currentWordIndex: 0 }),
+
+  // RSVP navigation
+  setRsvpIndex: (index) => set({ currentRsvpIndex: index }),
+  
+  setRsvpTokenCount: (count) => set({ rsvpTokenCount: count }),
+  
+  rsvpAdvance: () => {
+    const { currentRsvpIndex, rsvpTokenCount, showCompletion } = get();
+    if (currentRsvpIndex >= rsvpTokenCount - 1) {
+      showCompletion();
+    } else {
+      set({ currentRsvpIndex: currentRsvpIndex + 1 });
+    }
+  },
+  
+  rsvpRetreat: () => {
+    const { currentRsvpIndex } = get();
+    if (currentRsvpIndex > 0) {
+      set({ currentRsvpIndex: currentRsvpIndex - 1 });
+    }
+  },
 }));
 
 // =============================================================================

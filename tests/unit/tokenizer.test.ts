@@ -9,7 +9,7 @@ import {
   tokenizeIntoWords,
   calculateSentenceDuration,
   calculateWordDuration,
-  estimateSyllables,
+  countSyllables,
   calculateWordComplexity,
 } from '@/lib/tokenizer';
 
@@ -330,69 +330,69 @@ describe('RSVP Tokenizer', () => {
     });
   });
 
-  describe('estimateSyllables', () => {
+  describe('countSyllables', () => {
     it('returns 1 for short words', () => {
-      expect(estimateSyllables('a')).toBe(1);
-      expect(estimateSyllables('the')).toBe(1);
-      expect(estimateSyllables('on')).toBe(1);
+      expect(countSyllables('a')).toBe(1);
+      expect(countSyllables('the')).toBe(1);
+      expect(countSyllables('on')).toBe(1);
     });
 
     it('counts syllables in common words', () => {
-      expect(estimateSyllables('reading')).toBe(2);
-      expect(estimateSyllables('beautiful')).toBe(3);
-      expect(estimateSyllables('extraordinary')).toBe(5);
+      expect(countSyllables('reading')).toBe(2);
+      expect(countSyllables('beautiful')).toBe(3);
+      expect(countSyllables('extraordinary')).toBe(5);
     });
 
     it('handles silent e', () => {
-      expect(estimateSyllables('make')).toBe(1);
-      expect(estimateSyllables('have')).toBe(1);
+      expect(countSyllables('make')).toBe(1);
+      expect(countSyllables('have')).toBe(1);
     });
 
     it('handles words with punctuation', () => {
-      expect(estimateSyllables('hello,')).toBe(2);
-      expect(estimateSyllables('world.')).toBe(1);
+      expect(countSyllables('hello,')).toBe(2);
+      expect(countSyllables('world.')).toBe(1);
     });
 
     it('handles consonant + le endings', () => {
-      expect(estimateSyllables('table')).toBe(2);
-      expect(estimateSyllables('apple')).toBe(2);
+      expect(countSyllables('table')).toBe(2);
+      expect(countSyllables('apple')).toBe(2);
     });
 
     it('handles -ed endings (silent after voiceless consonants)', () => {
-      expect(estimateSyllables('walked')).toBe(1);
-      expect(estimateSyllables('jumped')).toBe(1);
-      expect(estimateSyllables('pushed')).toBe(1);
-      expect(estimateSyllables('worked')).toBe(1);
+      expect(countSyllables('walked')).toBe(1);
+      expect(countSyllables('jumped')).toBe(1);
+      expect(countSyllables('pushed')).toBe(1);
+      expect(countSyllables('worked')).toBe(1);
     });
 
     it('handles -ed endings (pronounced after t/d)', () => {
-      expect(estimateSyllables('wanted')).toBe(2);
-      expect(estimateSyllables('needed')).toBe(2);
-      expect(estimateSyllables('started')).toBe(2);
+      expect(countSyllables('wanted')).toBe(2);
+      expect(countSyllables('needed')).toBe(2);
+      expect(countSyllables('started')).toBe(2);
     });
 
     it('handles -es endings (silent usually)', () => {
-      expect(estimateSyllables('makes')).toBe(1);
-      expect(estimateSyllables('takes')).toBe(1);
-      expect(estimateSyllables('moves')).toBe(1);
+      expect(countSyllables('makes')).toBe(1);
+      expect(countSyllables('takes')).toBe(1);
+      expect(countSyllables('moves')).toBe(1);
     });
 
     it('handles -es endings (pronounced after sibilants)', () => {
-      expect(estimateSyllables('boxes')).toBe(2);
-      expect(estimateSyllables('churches')).toBe(2);
-      expect(estimateSyllables('wishes')).toBe(2);
+      expect(countSyllables('boxes')).toBe(2);
+      expect(countSyllables('churches')).toBe(2);
+      expect(countSyllables('wishes')).toBe(2);
     });
 
     it('uses exception dictionary for irregular words', () => {
-      expect(estimateSyllables('queue')).toBe(1);
-      expect(estimateSyllables('area')).toBe(3);
-      expect(estimateSyllables('idea')).toBe(3);
-      expect(estimateSyllables('rhythm')).toBe(2);
+      expect(countSyllables('queue')).toBe(1);
+      expect(countSyllables('area')).toBe(3);
+      expect(countSyllables('idea')).toBe(3);
+      expect(countSyllables('rhythm')).toBe(2);
     });
 
     it('handles words where silent-e rule would over-correct', () => {
-      expect(estimateSyllables('recipe')).toBe(3);
-      expect(estimateSyllables('karate')).toBe(3);
+      expect(countSyllables('recipe')).toBe(3);
+      expect(countSyllables('karate')).toBe(3);
     });
   });
 

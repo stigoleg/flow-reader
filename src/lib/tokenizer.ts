@@ -161,15 +161,8 @@ export function calculateSentenceDuration(sentence: SentenceToken, wpm: number, 
   return Math.max(300, duration);
 }
 
-// Re-export from syllables module for backward compatibility
+// Re-export from syllables module
 export { countSyllables, detectLanguage, countTotalSyllables, type SupportedLanguage } from './syllables';
-
-/**
- * @deprecated Use `countSyllables` instead. This is a legacy wrapper kept for backward compatibility.
- */
-export function estimateSyllables(word: string, language: SupportedLanguage = 'en'): number {
-  return countSyllables(word, language);
-}
 
 // Complexity score: 0 = simple (short), 1 = complex (long, many syllables)
 export function calculateWordComplexity(word: string, language: SupportedLanguage = 'en'): number {

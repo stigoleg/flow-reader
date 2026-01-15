@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { tokenizeForRSVP, calculateTokenDuration, findORP, getWordCount } from '@/lib/tokenizer';
 import { useReaderStore } from '../store';
 import { useSpeedRamp } from '../hooks/useSpeedRamp';
@@ -10,14 +10,25 @@ interface RSVPModeProps {
 }
 
 export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
-  const { settings, adjustWPM, showCompletion } = useReaderStore();
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const { 
+    settings, 
+    adjustWPM, 
+    currentRsvpIndex, 
+    setRsvpIndex,
+    setRsvpTokenCount,
+    rsvpAdvance,
+  } = useReaderStore();
   const [showWarning, setShowWarning] = useState(true);
   const timerRef = useRef<number | null>(null);
 
   const tokens = tokenizeForRSVP(text, settings.rsvpChunkSize);
   const totalWords = getWordCount(text);
-  const currentToken = tokens[currentIndex];
+  const currentToken = tokens[currentRsvpIndex];
+
+  // Update token count in store when tokens change
+  useEffect(() => {
+    setRsvpTokenCount(tokens.length);
+  }, [tokens.length, setRsvpTokenCount]);
 
   // Speed ramp-up effect (shared hook)
   useSpeedRamp({
@@ -29,18 +40,6 @@ export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
     rampInterval: settings.rampInterval,
     onAdjustWPM: adjustWPM,
   });
-
-  // Advance to next token
-  const advance = useCallback(() => {
-    setCurrentIndex((prev) => {
-      if (prev >= tokens.length - 1) {
-        // Show completion overlay when reaching the end
-        showCompletion();
-        return prev;
-      }
-      return prev + 1;
-    });
-  }, [tokens.length, showCompletion]);
 
   // Timer for auto-advance
   useEffect(() => {
@@ -57,35 +56,14 @@ export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
       settings.rsvpPauseOnPunctuation
     );
 
-    timerRef.current = window.setTimeout(advance, duration);
+    timerRef.current = window.setTimeout(rsvpAdvance, duration);
 
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-  }, [isPlaying, currentIndex, currentToken, wpm, settings.rsvpPauseOnPunctuation, advance]);
-
-  // Keyboard controls for RSVP
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'ArrowRight':
-        case 'j':
-          e.preventDefault();
-          advance();
-          break;
-        case 'ArrowLeft':
-        case 'k':
-          e.preventDefault();
-          setCurrentIndex((prev) => Math.max(0, prev - 1));
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [advance]);
+  }, [isPlaying, currentRsvpIndex, currentToken, wpm, settings.rsvpPauseOnPunctuation, rsvpAdvance]);
 
   // Dismiss warning
   const dismissWarning = () => setShowWarning(false);
@@ -114,8 +92,8 @@ export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
     );
   };
 
-  const progress = ((currentIndex + 1) / tokens.length) * 100;
-  const wordsRead = Math.round((currentIndex / tokens.length) * totalWords);
+  const progress = ((currentRsvpIndex + 1) / tokens.length) * 100;
+  const wordsRead = Math.round((currentRsvpIndex / tokens.length) * totalWords);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center pt-16 pb-8 px-4">
@@ -194,8 +172,8 @@ export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
           type="range"
           min="0"
           max={tokens.length - 1}
-          value={currentIndex}
-          onChange={(e) => setCurrentIndex(Number(e.target.value))}
+          value={currentRsvpIndex}
+          onChange={(e) => setRsvpIndex(Number(e.target.value))}
           className="w-full"
         />
       </div>

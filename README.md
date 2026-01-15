@@ -70,7 +70,7 @@ src/
     tokenizer.ts        # Text tokenization and timing
     readability.ts      # Readability analysis
     syllables.ts        # Multi-language syllable counting
-    word-frequency.ts   # Word frequency corpus (EN/NO)
+    word-frequency.ts   # Word complexity (language-agnostic)
     extraction.ts       # Content extraction from pages
     pdf-handler.ts      # PDF parsing
     docx-handler.ts     # DOCX parsing

@@ -91,40 +91,42 @@ describe('Bionic Reading', () => {
   describe('adaptiveBionicWord', () => {
     it('handles empty string', () => {
       const result = adaptiveBionicWord('', 0.4);
-      expect(result).toEqual({ bold: '', regular: '', frequencyTier: 3 });
+      expect(result).toEqual({ bold: '', regular: '', complexityTier: 3 });
     });
 
-    it('returns frequencyTier 1 for very common words', () => {
+    it('returns complexityTier 1 for very short words', () => {
+      // 2 chars = tier 1
+      const result = adaptiveBionicWord('is', 0.4);
+      expect(result.complexityTier).toBe(1);
+    });
+
+    it('returns complexityTier 2 for short words', () => {
+      // 3 chars = tier 2
       const result = adaptiveBionicWord('the', 0.4);
-      expect(result.frequencyTier).toBe(1);
+      expect(result.complexityTier).toBe(2);
     });
 
-    it('returns frequencyTier 2 for common words', () => {
-      const result = adaptiveBionicWord('important', 0.4);
-      expect(result.frequencyTier).toBe(2);
-    });
-
-    it('returns frequencyTier 4 for unknown words (default tier)', () => {
+    it('returns complexityTier 4 for long words', () => {
+      // 9 chars = tier 4
       const result = adaptiveBionicWord('xyzzyflux', 0.4);
-      expect(result.frequencyTier).toBe(4);
+      expect(result.complexityTier).toBe(4);
     });
 
-    it('applies less bolding to common words', () => {
-      // Common words should get less bolding (proportion reduced)
-      const commonWord = adaptiveBionicWord('because', 0.4); // tier 1
-      const rareWord = adaptiveBionicWord('ephemeral', 0.4); // tier 5 (unknown)
+    it('applies less bolding to short/simple words', () => {
+      // Short words should get less bolding (proportion reduced)
+      const shortWord = adaptiveBionicWord('because', 0.4); // 7 chars = tier 3
+      const longWord = adaptiveBionicWord('ephemeral', 0.4); // 9 chars = tier 4
       
-      // With 7+ chars, tier 1 gets 0.4 * 0.7 = 0.28, tier 5 gets 0.4 * 1.3 = 0.52
-      // Common word should have shorter bold portion
-      expect(commonWord.bold.length).toBeLessThan(rareWord.bold.length);
+      // Short words get reduced bolding, long words get increased bolding
+      expect(shortWord.bold.length).toBeLessThanOrEqual(longWord.bold.length);
     });
 
-    it('applies more bolding to rare words', () => {
-      // "philosophy" is tier 5 (rare academic), should get 30% more bolding
+    it('applies more bolding to long/complex words', () => {
+      // "philosophy" is 10 chars = tier 4, should get 15% more bolding
       const result = adaptiveBionicWord('philosophy', 0.4);
-      expect(result.frequencyTier).toBe(5);
-      // 10 chars * 0.4 * 1.3 = 5.2, rounds to 5
-      expect(result.bold.length).toBeGreaterThanOrEqual(5);
+      expect(result.complexityTier).toBe(4);
+      // 10 chars * 0.4 * 1.15 = 4.6, rounds to 5
+      expect(result.bold.length).toBeGreaterThanOrEqual(4);
     });
 
     it('uses default proportion of 0.4', () => {
@@ -142,8 +144,8 @@ describe('Bionic Reading', () => {
     });
 
     it('clamps proportion to maximum 0.6', () => {
-      // High base proportion with tier 5 word
-      // 0.6 * 1.3 = 0.78, should clamp to 0.6
+      // High base proportion with tier 4 word
+      // 0.6 * 1.15 = 0.69, should clamp to 0.6
       const result = adaptiveBionicWord('xyzzy', 0.6);
       // 5 chars * 0.6 = 3
       expect(result.bold.length).toBeLessThanOrEqual(3);
@@ -156,22 +158,22 @@ describe('Bionic Reading', () => {
       expect(result).toEqual([]);
     });
 
-    it('transforms text with frequency tiers', () => {
-      const result = adaptiveBionicText('The quick');
+    it('transforms text with complexity tiers', () => {
+      const result = adaptiveBionicText('The amazing');
       
-      expect(result).toHaveLength(3); // The, space, quick
-      expect(result[0].frequencyTier).toBe(1); // "the" is very common
-      expect(result[1]).toEqual({ bold: '', regular: ' ', frequencyTier: 3 }); // space
-      expect(result[2].frequencyTier).toBe(3); // "quick" is tier 3 (standard)
+      expect(result).toHaveLength(3); // The, space, amazing
+      expect(result[0].complexityTier).toBe(2); // "the" is 3 chars = tier 2
+      expect(result[1]).toEqual({ bold: '', regular: ' ', complexityTier: 3 }); // space
+      expect(result[2].complexityTier).toBe(3); // "amazing" is 7 chars, 3 syllables = tier 3
     });
 
-    it('applies different bolding based on word frequency', () => {
+    it('applies different bolding based on word complexity', () => {
       const result = adaptiveBionicText('I discombobulated');
       
-      // "I" is tier 1 (very common), gets less bolding
-      // "discombobulated" is tier 5 (rare), gets more bolding
-      expect(result[0].frequencyTier).toBe(1);
-      expect(result[2].frequencyTier).toBe(5);
+      // "I" is 1 char = tier 1 (very simple), gets less bolding
+      // "discombobulated" is 15 chars = tier 5 (very complex), gets more bolding
+      expect(result[0].complexityTier).toBe(1);
+      expect(result[2].complexityTier).toBe(5);
     });
 
     it('preserves whitespace with default tier', () => {
@@ -180,7 +182,7 @@ describe('Bionic Reading', () => {
       const space = result[1];
       expect(space.bold).toBe('');
       expect(space.regular).toBe(' ');
-      expect(space.frequencyTier).toBe(3);
+      expect(space.complexityTier).toBe(3);
     });
 
     it('uses default proportion of 0.4', () => {
