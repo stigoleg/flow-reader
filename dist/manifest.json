@@ -1,0 +1,72 @@
+{
+  "manifest_version": 3,
+  "name": "FlowReader",
+  "version": "1.0.0",
+  "description": "Read faster while maintaining comprehension. A distraction-free reader mode with pacing aids.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "FlowReader"
+  },
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "contextMenus",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "commands": {
+    "open-reader": {
+      "suggested_key": {
+        "default": "Alt+Shift+R",
+        "mac": "Alt+Shift+R"
+      },
+      "description": "Open Reader Mode"
+    },
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+O",
+        "mac": "Alt+Shift+O"
+      }
+    }
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "assets/content-script.ts-loader-DlMXpe4O.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "resources": [
+        "pdf.worker.min.mjs",
+        "assets/extraction-DvKe7Jqe.js",
+        "assets/content-script.ts-CM6RGciL.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}

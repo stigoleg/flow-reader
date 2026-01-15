@@ -1,0 +1,439 @@
+@import "tailwindcss";
+
+/* OpenDyslexic font for dyslexia-friendly reading */
+@import url('https://fonts.cdnfonts.com/css/opendyslexic');
+
+:root {
+  --reader-bg: #ffffff;
+  --reader-text: #1a1a1a;
+  --reader-link: #0066cc;
+  --reader-selection: #b4d5fe;
+  --reader-highlight: #fff3cd;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--reader-bg);
+  color: var(--reader-text);
+}
+
+::selection {
+  background-color: var(--reader-selection);
+}
+
+/* Reader specific styles */
+.reader-content {
+  font-family: var(--font-reader, Georgia, serif);
+  font-size: var(--font-size, 20px);
+  line-height: var(--line-height, 1.8);
+}
+
+.reader-content p {
+  margin-bottom: var(--paragraph-spacing, 24px);
+  position: relative;
+  z-index: 1;
+}
+
+.reader-content h1,
+.reader-content h2,
+.reader-content h3,
+.reader-content h4,
+.reader-content h5,
+.reader-content h6 {
+  font-weight: 700;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+  position: relative;
+  z-index: 1;
+}
+
+.reader-content h1 { font-size: 2em; }
+.reader-content h2 { font-size: 1.5em; }
+.reader-content h3 { font-size: 1.25em; }
+.reader-content h4 { font-size: 1.1em; }
+
+.reader-content a {
+  color: var(--reader-link);
+  text-decoration: underline;
+}
+
+.reader-content blockquote {
+  border-left: 4px solid var(--reader-link);
+  padding-left: 1em;
+  margin-left: 0;
+  font-style: italic;
+  opacity: 0.9;
+  position: relative;
+  z-index: 1;
+}
+
+.reader-content pre {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1em;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.9em;
+  position: relative;
+  z-index: 1;
+}
+
+.reader-content ul,
+.reader-content ol {
+  padding-left: 1.5em;
+  margin-bottom: var(--paragraph-spacing, 24px);
+  position: relative;
+  z-index: 1;
+}
+
+.reader-content li {
+  margin-bottom: 0.5em;
+}
+
+/* ============================================
+   Enhanced Pacing Mode Styles
+   Word-level and Sentence-level highlighting
+   ============================================ */
+
+/* Block-level active highlight */
+.pacing-block-active {
+  transition: background-color 0.15s ease;
+}
+
+.pacing-block-active.pacing-style-background {
+  background-color: var(--reader-highlight, rgba(255, 243, 205, 0.4));
+}
+
+.pacing-block-active.pacing-style-underline {
+  text-decoration: underline;
+  text-decoration-color: var(--reader-link);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+
+.pacing-block-active.pacing-style-box {
+  outline: 2px solid var(--reader-link);
+  outline-offset: 4px;
+}
+
+/* Word and sentence containers */
+.pacing-text {
+  display: inline;
+}
+
+/* Word-level pacing */
+.pacing-word {
+  display: inline;
+  transition: background-color 0.1s ease, color 0.1s ease;
+  border-radius: 2px;
+  /* Apply consistent padding to ALL words so layout doesn't shift */
+  padding: 1px 3px;
+  margin: 0 1px;
+}
+
+.pacing-word-active {
+  position: relative;
+}
+
+/* Word highlight styles */
+.pacing-word-active.pacing-style-background {
+  background-color: var(--reader-highlight, rgba(255, 243, 205, 0.6));
+  /* No box-shadow needed - padding is already on all words */
+}
+
+.pacing-word-active.pacing-style-underline {
+  text-decoration: underline;
+  text-decoration-color: var(--reader-link);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+}
+
+.pacing-word-active.pacing-style-box {
+  outline: 2px solid var(--reader-link);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* Reading guide - small indicator above current word, positioned at ORP */
+.pacing-word-guide::before {
+  content: '';
+  position: absolute;
+  /* Use CSS custom property for ORP-based positioning, fallback to center */
+  left: var(--orp-position, 50%);
+  top: -8px;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid var(--reader-link);
+  opacity: 0.8;
+}
+
+/* ORP (Optimal Recognition Point) letter styling */
+.pacing-orp-letter {
+  /* Default: no special styling, just marks the position */
+}
+
+/* Bold the ORP letter when enabled */
+.pacing-orp-bold {
+  font-weight: 700;
+  color: var(--reader-link);
+}
+
+/* Context dimming for words */
+.pacing-word-past {
+  opacity: 0.4;
+}
+
+.pacing-word-future {
+  opacity: 0.7;
+}
+
+/* Sentence-level pacing */
+.pacing-sentence {
+  display: inline;
+  transition: all 0.15s ease;
+  border-radius: 3px;
+  padding: 2px 0;
+}
+
+.pacing-sentence-active {
+  position: relative;
+}
+
+/* Sentence highlight styles */
+.pacing-sentence-active.pacing-style-background {
+  background-color: var(--reader-highlight, rgba(255, 243, 205, 0.5));
+  box-shadow: 0 0 0 3px var(--reader-highlight, rgba(255, 243, 205, 0.5));
+}
+
+.pacing-sentence-active.pacing-style-underline {
+  text-decoration: underline;
+  text-decoration-color: var(--reader-link);
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+
+.pacing-sentence-active.pacing-style-box {
+  outline: 2px solid var(--reader-link);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Context dimming for sentences */
+.pacing-sentence-past {
+  opacity: 0.4;
+}
+
+.pacing-sentence-future {
+  opacity: 0.7;
+}
+
+/* Bionic text */
+.bionic-bold {
+  font-weight: var(--bionic-weight, 700);
+}
+
+/* RSVP display */
+.rsvp-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+.rsvp-word {
+  font-size: 3rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+.rsvp-orp {
+  color: var(--reader-link);
+  font-weight: 600;
+}
+
+/* UI controls */
+.control-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.control-button:hover {
+  opacity: 0.85;
+}
+
+.control-button-primary {
+  background: var(--reader-link);
+  color: white;
+}
+
+.control-button-secondary {
+  background: transparent;
+  border-color: currentColor;
+  opacity: 0.7;
+}
+
+.control-button-secondary:hover {
+  opacity: 1;
+}
+
+/* Speed control slider - mobile first (larger touch targets) */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 4px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  background: var(--reader-link);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+@media (min-width: 768px) {
+  input[type="range"] {
+    height: 4px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* Checkbox - mobile first (larger touch targets) */
+input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+@media (min-width: 768px) {
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* Settings panel - mobile first */
+.settings-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  background: var(--reader-bg);
+  border-left: none;
+  padding: 1rem;
+  padding-bottom: 2rem;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  z-index: 100;
+}
+
+@media (min-width: 768px) {
+  .settings-panel {
+    width: 320px;
+    border-left: 1px solid rgba(128, 128, 128, 0.2);
+    padding: 1.5rem;
+  }
+}
+
+.settings-panel.open {
+  transform: translateX(0);
+}
+
+.settings-panel h3 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  margin-bottom: 0.75rem;
+}
+
+.settings-group {
+  margin-bottom: 1.5rem;
+}
+
+/* Progress bar */
+.progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(128, 128, 128, 0.1);
+  z-index: 50;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--reader-link);
+  transition: width 0.1s ease;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to { 
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.2s ease-out;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .pacing-highlight,
+  .pacing-ruler,
+  .settings-panel,
+  .progress-bar-fill {
+    transition: none;
+  }
+  
+  .fade-in {
+    animation: none;
+  }
+}

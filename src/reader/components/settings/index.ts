@@ -1,0 +1,8 @@
+export { ThemeSection } from './ThemeSection';
+export { PresetSection } from './PresetSection';
+export { TypographySection } from './TypographySection';
+export { SpeedSection } from './SpeedSection';
+export { PacingSection } from './PacingSection';
+export { BionicSection } from './BionicSection';
+export { DisplaySection } from './DisplaySection';
+export { KeyboardSection } from './KeyboardSection';
