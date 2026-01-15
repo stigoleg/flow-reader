@@ -156,6 +156,7 @@ export interface StorageSchema {
   positions: Record<string, ReadingPosition>;
   recentDocuments: RecentDocument[];
   onboardingCompleted: boolean;
+  exitConfirmationDismissed: boolean;
 }
 
 export interface RecentDocument {

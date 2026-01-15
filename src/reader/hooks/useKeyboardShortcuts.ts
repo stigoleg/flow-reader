@@ -25,6 +25,7 @@ interface KeyboardShortcutsOptions {
     isHelpOpen: boolean;
     openHelp: () => void;
     closeHelp: () => void;
+    closeReader: () => void;
   };
 }
 
@@ -95,7 +96,7 @@ const ACTIONS: Record<string, ActionHandler> = {
     } else if (overlays?.isSettingsOpen) {
       overlays.closeSettings();
     } else {
-      window.close();
+      overlays?.closeReader();
     }
   },
   '?': (_, { overlays }) => {

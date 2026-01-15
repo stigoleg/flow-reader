@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { FlowDocument, ReaderSettings, ReadingMode } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
-import { getSettings, saveSettings, savePosition, getPosition, addRecentDocument } from '@/lib/storage';
+import { getSettings, saveSettings, savePosition, getPosition, addRecentDocument, isExitConfirmationDismissed, dismissExitConfirmation } from '@/lib/storage';
 
 interface ReaderState {
   // Document
@@ -34,6 +34,8 @@ interface ReaderState {
   isImportOpen: boolean;
   isHelpOpen: boolean;
   isCompletionOpen: boolean;
+  isExitConfirmOpen: boolean;
+  exitConfirmationDismissed: boolean;
   readingStartTime: number | null;
 
   // Actions
@@ -52,6 +54,9 @@ interface ReaderState {
   setImportOpen: (open: boolean) => void;
   setHelpOpen: (open: boolean) => void;
   setCompletionOpen: (open: boolean) => void;
+  setExitConfirmOpen: (open: boolean) => void;
+  closeReader: () => void;
+  confirmCloseReader: (dontShowAgain: boolean) => void;
   startReading: () => void;
   showCompletion: () => void;
   
@@ -101,6 +106,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   isImportOpen: false,
   isHelpOpen: false,
   isCompletionOpen: false,
+  isExitConfirmOpen: false,
+  exitConfirmationDismissed: false,
   readingStartTime: null,
 
   // Actions
@@ -195,6 +202,25 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   setHelpOpen: (open) => set({ isHelpOpen: open }),
 
   setCompletionOpen: (open) => set({ isCompletionOpen: open }),
+
+  setExitConfirmOpen: (open) => set({ isExitConfirmOpen: open }),
+
+  closeReader: async () => {
+    // Check if user has dismissed the exit confirmation
+    const dismissed = await isExitConfirmationDismissed();
+    if (dismissed) {
+      window.close();
+    } else {
+      set({ isExitConfirmOpen: true });
+    }
+  },
+
+  confirmCloseReader: async (dontShowAgain) => {
+    if (dontShowAgain) {
+      await dismissExitConfirmation();
+    }
+    window.close();
+  },
 
   startReading: () => set({ readingStartTime: Date.now() }),
 
@@ -326,3 +352,4 @@ export const selectIsSettingsOpen = (state: ReaderState) => state.isSettingsOpen
 export const selectIsImportOpen = (state: ReaderState) => state.isImportOpen;
 export const selectIsHelpOpen = (state: ReaderState) => state.isHelpOpen;
 export const selectIsCompletionOpen = (state: ReaderState) => state.isCompletionOpen;
+export const selectIsExitConfirmOpen = (state: ReaderState) => state.isExitConfirmOpen;

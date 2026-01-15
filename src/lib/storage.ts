@@ -39,6 +39,7 @@ export async function getStorage(): Promise<StorageSchema> {
           positions: {},
           recentDocuments: [],
           onboardingCompleted: false,
+          exitConfirmationDismissed: false,
         };
         // Save the initial state to storage
         chrome.storage.local.set(initial, () => {
@@ -60,6 +61,7 @@ export async function getStorage(): Promise<StorageSchema> {
           positions: (data.positions || {}) as Record<string, ReadingPosition>,
           recentDocuments: (data.recentDocuments || []) as RecentDocument[],
           onboardingCompleted: (data.onboardingCompleted || false) as boolean,
+          exitConfirmationDismissed: (data.exitConfirmationDismissed || false) as boolean,
         });
       }
     });
@@ -210,6 +212,24 @@ export async function clearStorage(): Promise<void> {
     chrome.storage.local.clear(() => {
       try {
         checkLastError('clearStorage');
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+export async function isExitConfirmationDismissed(): Promise<boolean> {
+  const storage = await getStorage();
+  return storage.exitConfirmationDismissed;
+}
+
+export async function dismissExitConfirmation(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ exitConfirmationDismissed: true }, () => {
+      try {
+        checkLastError('dismissExitConfirmation');
         resolve();
       } catch (error) {
         reject(error);

@@ -3,6 +3,7 @@ import { useReaderStore } from '../store';
 import PacingMode from '../modes/PacingMode';
 import RSVPMode from '../modes/RSVPMode';
 import BlockRenderer from './BlockRenderer';
+import ExitConfirmDialog from './ExitConfirmDialog';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useSwipeGestures } from '../hooks/useSwipeGestures';
 import type { ModeConfig, BionicConfig, PacingConfig, PositionState, BlockHandlers } from './types';
@@ -43,6 +44,11 @@ export default function ReaderView() {
     // RSVP navigation
     rsvpAdvance,
     rsvpRetreat,
+    // Exit confirmation
+    isExitConfirmOpen,
+    setExitConfirmOpen,
+    closeReader,
+    confirmCloseReader,
   } = useReaderStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -69,6 +75,7 @@ export default function ReaderView() {
       isHelpOpen,
       openHelp: () => setHelpOpen(true),
       closeHelp: () => setHelpOpen(false),
+      closeReader,
     },
   });
 
@@ -113,7 +120,16 @@ export default function ReaderView() {
   };
 
   if (settings.activeMode === 'rsvp') {
-    return <RSVPMode text={document.plainText} wpm={currentWPM} isPlaying={isPlaying} />;
+    return (
+      <>
+        <RSVPMode text={document.plainText} wpm={currentWPM} isPlaying={isPlaying} />
+        <ExitConfirmDialog
+          isOpen={isExitConfirmOpen}
+          onCancel={() => setExitConfirmOpen(false)}
+          onConfirm={confirmCloseReader}
+        />
+      </>
+    );
   }
 
   const isPacingMode = settings.activeMode === 'pacing';
@@ -144,64 +160,72 @@ export default function ReaderView() {
   };
 
   return (
-    <main
-      ref={containerRef}
-      className="reader-content pt-20 pb-16 px-4"
-      style={{
-        maxWidth: settings.columnWidth,
-        margin: '0 auto',
-        textAlign: settings.textAlign,
-        hyphens: settings.hyphenation ? 'auto' : 'none',
-      }}
-    >
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">{document.metadata.title}</h1>
-        {document.metadata.author && <p className="opacity-60">{document.metadata.author}</p>}
-        {document.metadata.publishedAt && <p className="text-sm opacity-50">{document.metadata.publishedAt}</p>}
-      </header>
+    <>
+      <main
+        ref={containerRef}
+        className="reader-content pt-20 pb-16 px-4"
+        style={{
+          maxWidth: settings.columnWidth,
+          margin: '0 auto',
+          textAlign: settings.textAlign,
+          hyphens: settings.hyphenation ? 'auto' : 'none',
+        }}
+      >
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">{document.metadata.title}</h1>
+          {document.metadata.author && <p className="opacity-60">{document.metadata.author}</p>}
+          {document.metadata.publishedAt && <p className="text-sm opacity-50">{document.metadata.publishedAt}</p>}
+        </header>
 
-      {isPacingMode && (
-        <PacingMode
-          blocks={document.blocks}
-          currentBlockIndex={currentBlockIndex}
-          wpm={currentWPM}
-          isPlaying={isPlaying}
-          settings={settings}
-          onNextBlock={nextBlock}
-          currentSentenceIndex={currentSentenceIndex}
-          currentWordIndex={currentWordIndex}
-          onNextSentence={nextSentence}
-          onNextWord={nextWord}
-          onResetSentenceIndex={resetSentenceIndex}
-          onResetWordIndex={resetWordIndex}
-          onAdjustWPM={adjustWPM}
-          onComplete={showCompletion}
-        />
-      )}
+        {isPacingMode && (
+          <PacingMode
+            blocks={document.blocks}
+            currentBlockIndex={currentBlockIndex}
+            wpm={currentWPM}
+            isPlaying={isPlaying}
+            settings={settings}
+            onNextBlock={nextBlock}
+            currentSentenceIndex={currentSentenceIndex}
+            currentWordIndex={currentWordIndex}
+            onNextSentence={nextSentence}
+            onNextWord={nextWord}
+            onResetSentenceIndex={resetSentenceIndex}
+            onResetWordIndex={resetWordIndex}
+            onAdjustWPM={adjustWPM}
+            onComplete={showCompletion}
+          />
+        )}
 
-      <div className="relative">
-        {document.blocks.map((block, index) => {
-          const handlers: BlockHandlers = {
-            onClick: () => handleBlockClick(index),
-            onWordClick: (wordIndex: number) => handleWordClick(index, wordIndex),
-            onSentenceClick: (sentenceIndex: number) => handleSentenceClick(index, sentenceIndex),
-          };
+        <div className="relative">
+          {document.blocks.map((block, index) => {
+            const handlers: BlockHandlers = {
+              onClick: () => handleBlockClick(index),
+              onWordClick: (wordIndex: number) => handleWordClick(index, wordIndex),
+              onSentenceClick: (sentenceIndex: number) => handleSentenceClick(index, sentenceIndex),
+            };
 
-          return (
-            <BlockRenderer
-              key={block.id}
-              block={block}
-              index={index}
-              isActive={index === currentBlockIndex}
-              mode={mode}
-              bionicConfig={bionicConfig}
-              pacingConfig={pacingConfig}
-              position={position}
-              handlers={handlers}
-            />
-          );
-        })}
-      </div>
-    </main>
+            return (
+              <BlockRenderer
+                key={block.id}
+                block={block}
+                index={index}
+                isActive={index === currentBlockIndex}
+                mode={mode}
+                bionicConfig={bionicConfig}
+                pacingConfig={pacingConfig}
+                position={position}
+                handlers={handlers}
+              />
+            );
+          })}
+        </div>
+      </main>
+
+      <ExitConfirmDialog
+        isOpen={isExitConfirmOpen}
+        onCancel={() => setExitConfirmOpen(false)}
+        onConfirm={confirmCloseReader}
+      />
+    </>
   );
 }
