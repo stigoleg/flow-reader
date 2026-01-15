@@ -4,6 +4,7 @@ import { parseHtmlToBlocks } from './html-parser';
 import { getBlockText, createDocument } from './block-utils';
 import { cleanArticleDocument, setCleanupDebug } from './article-cleanup';
 import { normalizeArticleMarkup, setNormalizeDebug } from './article-normalize';
+import { isFlowCasePage, extractFlowCaseContent } from './site-extractors/flowcase';
 
 /**
  * Enable debug logging for extraction pipeline.
@@ -252,19 +253,41 @@ function textToParagraphBlocks(text: string): Block[] {
  * Extract article content from a web page document.
  * 
  * Pipeline:
- * 1. Clone document
- * 2. Pre-Readability cleanup (remove obvious non-content)
- * 3. Readability extraction
- * 4. Post-extraction cleanup (remove summary boxes, sidebars, captions)
- * 5. Markup normalization (strip formatting, unwrap containers/spans)
- * 6. Parse to blocks
- * 7. Filter UI text patterns
+ * 1. Check for site-specific extractors (FlowCase, etc.)
+ * 2. Clone document
+ * 3. Pre-Readability cleanup (remove obvious non-content)
+ * 4. Readability extraction
+ * 5. Post-extraction cleanup (remove summary boxes, sidebars, captions)
+ * 6. Markup normalization (strip formatting, unwrap containers/spans)
+ * 7. Parse to blocks
+ * 8. Filter UI text patterns
  */
 export function extractContent(doc: Document, url: string): FlowDocument | null {
   // Enable debug logging if configured
   if (DEBUG_EXTRACTION) {
     setCleanupDebug(true);
     setNormalizeDebug(true);
+  }
+
+  // Step 0: Try site-specific extractors first
+  // These handle SPAs and specialized content that Readability doesn't extract well
+  if (isFlowCasePage(doc)) {
+    if (DEBUG_EXTRACTION) {
+      console.log('FlowReader: Detected FlowCase/CVPartner page, using site-specific extractor');
+    }
+    const flowcaseResult = extractFlowCaseContent(doc);
+    if (flowcaseResult) {
+      return createDocument(flowcaseResult.blocks, {
+        title: flowcaseResult.title,
+        author: flowcaseResult.author,
+        source: 'web',
+        url,
+      });
+    }
+    // Fall through to standard extraction if site-specific failed
+    if (DEBUG_EXTRACTION) {
+      console.log('FlowReader: FlowCase extractor returned null, falling back to Readability');
+    }
   }
 
   // Create a proper document clone using DOMParser
