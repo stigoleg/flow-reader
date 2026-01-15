@@ -155,12 +155,22 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   setPlaying: (playing) => set({ isPlaying: playing }),
 
-  setWPM: (wpm) => set({ currentWPM: Math.max(50, Math.min(1000, wpm)) }),
+  setWPM: (wpm) => {
+    const clampedWPM = Math.max(50, Math.min(1000, wpm));
+    const newSettings = { ...get().settings, baseWPM: clampedWPM };
+    set({ currentWPM: clampedWPM, settings: newSettings });
+    // Persist to storage so WPM is remembered across sessions
+    saveSettings(newSettings);
+  },
 
-  adjustWPM: (delta) =>
-    set((state) => ({
-      currentWPM: Math.max(50, Math.min(1000, state.currentWPM + delta)),
-    })),
+  adjustWPM: (delta) => {
+    const { currentWPM, settings } = get();
+    const clampedWPM = Math.max(50, Math.min(1000, currentWPM + delta));
+    const newSettings = { ...settings, baseWPM: clampedWPM };
+    set({ currentWPM: clampedWPM, settings: newSettings });
+    // Persist to storage so WPM is remembered across sessions
+    saveSettings(newSettings);
+  },
 
   setMode: (mode) => {
     const newSettings = { ...get().settings, activeMode: mode };
