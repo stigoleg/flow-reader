@@ -2,14 +2,16 @@
 
 ![FlowReader Demo](docs/flowreader.png)
 
-A Chrome extension for faster reading with better comprehension. Strips away web clutter and presents content in a clean reader mode with optional pacing aids.
+A Chrome extension for distraction-free reading. Extracts article content from web pages, PDFs, and DOCX files into a clean reader view with optional pacing aids.
 
-## What It Does
+## Features
 
-- **Reader Mode**: Extracts article content from any webpage, PDF, or DOCX file
-- **Bionic Reading**: Bold word beginnings to guide eye movement
-- **Adaptive Speed**: Automatically adjusts pacing based on text difficulty and content type
-- **Multi-language**: Full support for English and Norwegian text analysis
+- **Reader Mode** - Strips clutter from any webpage, PDF, or DOCX
+- **Pacing Mode** - Highlights words/sentences/blocks at your target WPM
+- **Bionic Reading** - Bolds word beginnings to guide eye movement
+- **RSVP Mode** - Rapid serial visual presentation (one word at a time)
+- **Adaptive Speed** - Adjusts timing based on word complexity and punctuation
+- **11 Themes** - Light, dark, sepia, e-ink, high contrast, and more
 
 ## Install
 
@@ -18,128 +20,80 @@ npm install
 npm run build
 ```
 
-Load the `dist` folder as an unpacked extension in Chrome (`chrome://extensions` > Developer mode > Load unpacked).
+Load `dist/` as an unpacked extension in Chrome:
+`chrome://extensions` → Developer mode → Load unpacked
 
 ## Development
 
 ```bash
-npm run dev      # Start dev server with hot reload
-npm run build    # Production build
-npm test         # Run tests in watch mode
-npm run test:run # Run tests once
-npm run typecheck
+npm run dev       # Dev server with hot reload
+npm run build     # Production build
+npm test          # Run tests
+npm run typecheck # Type check
 ```
 
-## How It Works
+## Reading Modes
 
-### Text Analysis Pipeline
+### Pacing
 
-1. **Content Extraction** - Uses Mozilla Readability to pull article content from cluttered pages
-2. **Language Detection** - Identifies English or Norwegian from character patterns and vocabulary
-3. **Readability Scoring** - Calculates Flesch-Kincaid, Gunning Fog, and SMOG indices
-4. **Speed Adjustment** - Combines all factors to suggest optimal reading pace
+Highlights text at your reading pace. Three granularities:
 
-### Adaptive Speed
+| Granularity | Behavior |
+|-------------|----------|
+| Word | Highlights one word at a time |
+| Sentence | Highlights one sentence at a time |
+| Block | Highlights one paragraph at a time |
 
-The reader adjusts word timing based on:
+Options: background/underline/box highlighting, context dimming, reading guide, bold focus letter.
 
-| Factor | Effect |
-|--------|--------|
-| Word frequency | Common words display faster |
-| Word length | Longer words get more time |
-| Syllable count | Complex pronunciation = slower |
-| Punctuation | Pauses at commas, periods, etc. |
+### Bionic
 
-### Content Cleanup & Normalization
+Bolds the first portion of each word. The eye naturally fixates on word beginnings—this reduces saccade effort and can increase reading speed.
 
-FlowReader uses a two-layer post-extraction system to ensure clean article output:
+### RSVP
 
-#### Cleanup Layer (`article-cleanup.ts`)
+Displays words one at a time in a fixed position. Eliminates eye movement entirely. Best for speed reading practice.
 
-Removes non-article modules after Readability extraction:
-
-- **Structural elements**: nav, header, footer, aside, forms
-- **Media elements**: figure, figcaption, video, audio, galleries
-- **Summary boxes**: AI summaries, key takeaways, TL;DR sections
-- **Promotional content**: share buttons, newsletter prompts, related articles
-- **Norwegian equivalents**: oppsummering, kort fortalt, hovedpoenger, sammendrag
-
-**Heuristics applied:**
-
-| Check | Threshold | Description |
-|-------|-----------|-------------|
-| Text density | < 80 chars | Removes blocks with too little visible content |
-| Link density | > 50% | Removes navigation-heavy link blocks |
-| Boilerplate | Pattern match | Removes "Read more", "Related", "Subscribe" patterns |
-
-#### Normalization Layer (`article-normalize.ts`)
-
-Produces minimal, predictable markup:
-
-- **Allowed block tags**: `h2`, `h3`, `p`, `ul`, `ol`, `li`, `blockquote`, `pre`, `code`
-- **Heading conversion**: `h4`-`h6` → `h3`, `h1` removed (title from metadata)
-- **Attribute stripping**: No `style`, `class`, `id` (except `code` for language hints)
-- **Span handling**: Unwraps presentational spans, removes non-content spans (captions, credits, promos)
-- **Whitespace**: Collapses repeated spaces, trims block elements
-
-**Extending patterns:**
-
-To add new cleanup patterns, edit the constants in `src/lib/article-cleanup.ts`:
-
-```typescript
-// Add class/id patterns for promotional content
-PROMO_PATTERNS.push('new-pattern');
-
-// Add heading text patterns (regex) for summary sections
-SUMMARY_HEADING_PATTERNS.push(/^new heading$/i);
-
-// Add "starts with" patterns for boilerplate removal
-BOILERPLATE_PATTERNS.push(/^new boilerplate/i);
-```
-
-### Supported Content Types
-
-- **Web pages** - Any article or blog post
-- **PDF files** - Extracted via pdf.js
-- **DOCX files** - Extracted via mammoth.js
-- **Clipboard paste** - Direct text input
-
-## Project Structure
+## Architecture
 
 ```
 src/
-  background/     # Service worker for extension
-  content/        # Content script injected into pages
-  reader/         # Main reader UI (React + Zustand)
-  lib/            # Core logic
+  background/     # Service worker
+  content/        # Content script (page extraction trigger)
+  reader/         # Reader UI (React + Zustand)
+    modes/        # Pacing, Bionic, RSVP components
+    components/   # UI components
+  lib/
     extraction.ts       # Content extraction orchestration
-    article-cleanup.ts  # Post-extraction cleanup layer
-    article-normalize.ts # Markup normalization layer
-    html-parser.ts      # HTML to block model conversion
-    bionic.ts           # Bionic reading text formatting
-    tokenizer.ts        # Text tokenization and timing
-    readability.ts      # Readability analysis (Flesch-Kincaid, etc.)
-    syllables.ts        # Multi-language syllable counting
-    word-frequency.ts   # Word complexity (language-agnostic)
-    pdf-handler.ts      # PDF parsing
-    docx-handler.ts     # DOCX parsing
-tests/
-  unit/                 # Unit tests
-  fixtures/articles/    # HTML test fixtures for extraction
+    article-cleanup.ts  # Removes nav, promos, related articles
+    article-normalize.ts # Normalizes HTML to clean block structure
+    bionic.ts           # Bionic text processing
+    tokenizer.ts        # Word/sentence tokenization
+    readability.ts      # Flesch-Kincaid, Gunning Fog, SMOG
+    syllables.ts        # Syllable counting (EN/NO)
+    word-frequency.ts   # Word complexity scoring
+    pdf-handler.ts      # PDF extraction (pdf.js)
+    docx-handler.ts     # DOCX extraction (mammoth.js)
 ```
 
-## Configuration
+## Content Pipeline
 
-Reading settings are stored in Chrome sync storage:
+1. **Extract** - Mozilla Readability pulls article content
+2. **Clean** - Removes leftover nav, promos, share buttons, summary boxes
+3. **Normalize** - Converts to minimal HTML (p, h2, h3, ul, ol, blockquote, pre, code)
+4. **Parse** - Converts HTML to block model for rendering
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| WPM | 300 | Words per minute |
-| Font size | 20px | Reader text size |
-| Theme | system | light, dark, sepia, system |
-| Bionic mode | off | Bold word beginnings |
-| Pause on punctuation | on | Extra time at sentence ends |
-| Adaptive speed | off | Adjust per-word timing |
+## Settings
+
+Settings sync across devices via Chrome storage.
+
+| Setting | Default |
+|---------|---------|
+| WPM | 300 |
+| Font size | 20px |
+| Line height | 1.8 |
+| Column width | 680px |
+| Theme | Light |
 
 ## Browser Support
 
@@ -148,7 +102,3 @@ Chrome 88+ (Manifest V3)
 ## License
 
 MIT
-
-## Contributing
-
-Issues and PRs welcome. Run `npm test` before submitting.
