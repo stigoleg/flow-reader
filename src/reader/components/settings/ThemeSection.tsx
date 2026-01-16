@@ -6,29 +6,13 @@ interface ThemeSectionProps {
 }
 
 export function ThemeSection({ onApplyTheme }: ThemeSectionProps) {
-  const standardThemes = THEME_OPTIONS.filter(t => t.category === 'standard');
-  const eyeFriendlyThemes = THEME_OPTIONS.filter(t => t.category === 'eye-friendly');
-
   return (
     <div className="settings-group">
       <h3>Theme</h3>
-      <div className="space-y-3">
-        <div>
-          <p className="text-xs opacity-50 mb-2">Standard</p>
-          <div className="flex gap-2 flex-wrap">
-            {standardThemes.map((theme) => (
-              <ThemeButton key={theme.value} theme={theme.value} label={theme.label} onClick={onApplyTheme} />
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="text-xs opacity-50 mb-2">Eye-Friendly</p>
-          <div className="flex gap-2 flex-wrap">
-            {eyeFriendlyThemes.map((theme) => (
-              <ThemeButton key={theme.value} theme={theme.value} label={theme.label} onClick={onApplyTheme} />
-            ))}
-          </div>
-        </div>
+      <div className="flex gap-2 flex-wrap">
+        {THEME_OPTIONS.map((theme) => (
+          <ThemeButton key={theme.value} theme={theme.value} label={theme.label} onClick={onApplyTheme} />
+        ))}
       </div>
     </div>
   );

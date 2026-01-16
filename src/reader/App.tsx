@@ -108,6 +108,7 @@ export default function App() {
     root.style.setProperty('--reader-text', settings.textColor);
     root.style.setProperty('--reader-link', settings.linkColor);
     root.style.setProperty('--reader-selection', settings.selectionColor);
+    root.style.setProperty('--reader-highlight', settings.highlightColor);
     root.style.setProperty('--font-reader', settings.fontFamily);
     root.style.setProperty('--font-size', `${settings.fontSize}px`);
     root.style.setProperty('--line-height', String(settings.lineHeight));

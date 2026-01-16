@@ -10,18 +10,18 @@ export const FONT_OPTIONS = [
   { value: 'OpenDyslexic, sans-serif', label: 'OpenDyslexic' },
 ] as const;
 
-export const THEME_OPTIONS: { value: ThemePreset; label: string; category: 'standard' | 'eye-friendly' }[] = [
-  { value: 'light', label: 'Light', category: 'standard' },
-  { value: 'sepia', label: 'Sepia', category: 'standard' },
-  { value: 'night', label: 'Night', category: 'standard' },
-  { value: 'eink', label: 'E-Ink', category: 'standard' },
-  { value: 'highContrast', label: 'High Contrast', category: 'standard' },
-  { value: 'warmLight', label: 'Warm Light', category: 'eye-friendly' },
-  { value: 'softFocus', label: 'Soft Focus', category: 'eye-friendly' },
-  { value: 'ocean', label: 'Ocean', category: 'eye-friendly' },
-  { value: 'amoled', label: 'AMOLED', category: 'eye-friendly' },
-  { value: 'amberNight', label: 'Amber Night', category: 'eye-friendly' },
-  { value: 'forest', label: 'Forest', category: 'eye-friendly' },
+export const THEME_OPTIONS: { value: ThemePreset; label: string }[] = [
+  { value: 'light', label: 'Light' },
+  { value: 'sepia', label: 'Sepia' },
+  { value: 'night', label: 'Night' },
+  { value: 'eink', label: 'E-Ink' },
+  { value: 'highContrast', label: 'High Contrast' },
+  { value: 'warmLight', label: 'Warm Light' },
+  { value: 'softFocus', label: 'Soft Focus' },
+  { value: 'ocean', label: 'Ocean' },
+  { value: 'amoled', label: 'AMOLED' },
+  { value: 'amberNight', label: 'Amber Night' },
+  { value: 'forest', label: 'Forest' },
 ];
 
 export const GRANULARITY_OPTIONS: { value: PacingGranularity; label: string; description: string }[] = [
