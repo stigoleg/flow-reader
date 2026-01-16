@@ -251,10 +251,10 @@ export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
   },
   night: {
     backgroundColor: '#1a1a2e',
-    textColor: '#e0e0e0',       // Slightly brighter for better readability
+    textColor: '#e0e0e0',
     linkColor: '#6eb5ff',
     selectionColor: '#3a3a5e',
-    highlightColor: '#3d3d6b',  // Lighter purple that's clearly visible against bg
+    highlightColor: '#4a4a8a',  // Brighter purple - visible against bg, good contrast with light text
   },
   eink: {
     backgroundColor: '#e8e8e8',
@@ -268,7 +268,7 @@ export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
     textColor: '#ffffff',
     linkColor: '#ffff00',
     selectionColor: '#0000ff',
-    highlightColor: '#444444',  // Visible dark gray that doesn't strain eyes
+    highlightColor: '#1a4d1a',  // Dark green - distinct from black bg, white text readable
   },
   warmLight: {
     backgroundColor: '#fdf6e3',
@@ -296,14 +296,14 @@ export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
     textColor: '#e4e4e7',
     linkColor: '#60a5fa',
     selectionColor: '#1e293b',
-    highlightColor: '#1e3a5f',  // Dark blue that's visible on black
+    highlightColor: '#2d4a6f',  // Medium blue - clearly visible on black, light text readable
   },
   amberNight: {
     backgroundColor: '#1a1410',
     textColor: '#e5c9a5',
     linkColor: '#d4a574',
     selectionColor: '#3d2c1e',
-    highlightColor: '#4a3828',  // Warmer brown that's clearly visible
+    highlightColor: '#5c4020',  // Richer amber/brown - distinct from bg, amber text readable
   },
   forest: {
     backgroundColor: '#f0f4e8',
