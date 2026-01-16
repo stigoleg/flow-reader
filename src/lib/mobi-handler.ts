@@ -14,8 +14,7 @@
  */
 
 import type { FlowDocument, Block, BookStructure, Chapter, TocItem } from '@/types';
-import { parseHtmlToBlocks } from './html-parser';
-import { normalizeArticleMarkup } from './article-normalize';
+import { parseEbookHtml } from './html-parser';
 import { getPlainText } from './block-utils';
 import { computeFileHash, countWords } from './file-utils';
 
@@ -79,17 +78,22 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
     const data = new DataView(arrayBuffer);
     const bytes = new Uint8Array(arrayBuffer);
     
+    console.log(`[MOBI] File size: ${bytes.length} bytes`);
+    
     // Parse PDB header
     const pdbHeader = parsePdbHeader(data);
+    console.log(`[MOBI] PDB name: "${pdbHeader.name}", records: ${pdbHeader.numRecords}`);
     
     // Parse record list
     const records = parseRecordList(data, pdbHeader.numRecords);
     
     // Read first record (contains MOBI header)
     const record0 = getRecord(bytes, records, 0);
+    console.log(`[MOBI] Record 0 size: ${record0.length} bytes`);
     
     // Parse PalmDOC header
-    const palmDocHeader = parsePalmDocHeader(new DataView(record0.buffer));
+    const palmDocHeader = parsePalmDocHeader(new DataView(record0.buffer, record0.byteOffset));
+    console.log(`[MOBI] Compression: ${palmDocHeader.compression}, Text length: ${palmDocHeader.textLength}, Records: ${palmDocHeader.recordCount}`);
     
     // Check for DRM
     if (palmDocHeader.encryption !== ENCRYPTION_NONE) {
@@ -100,7 +104,8 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
     }
     
     // Parse MOBI header (follows PalmDOC header)
-    const mobiHeader = parseMobiHeader(new DataView(record0.buffer));
+    const mobiHeader = parseMobiHeader(new DataView(record0.buffer, record0.byteOffset));
+    console.log(`[MOBI] MOBI header length: ${mobiHeader.headerLength}, First image: ${mobiHeader.firstImageIndex}`);
     
     // Parse EXTH header if present
     const exthData = mobiHeader.exthFlags & 0x40 
@@ -116,6 +121,7 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
       language: exthData[EXTH_LANGUAGE],
       date: exthData[EXTH_PUBLISHED_DATE],
     };
+    console.log(`[MOBI] Metadata: ${metadata.title} by ${metadata.author}`);
     
     // Extract and decompress text records
     const textContent = extractTextContent(
@@ -124,9 +130,11 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
       palmDocHeader,
       mobiHeader
     );
+    console.log(`[MOBI] Extracted text: ${textContent.length} characters`);
     
     // Parse HTML content into chapters
     const chapters = parseContentIntoChapters(textContent);
+    console.log(`[MOBI] Parsed ${chapters.length} chapters`);
     
     if (chapters.length === 0) {
       throw new MobiExtractionError(
@@ -134,6 +142,14 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
         'no-content'
       );
     }
+    
+    // Log chapter info
+    let totalWords = 0;
+    for (const ch of chapters) {
+      console.log(`[MOBI] Chapter: "${ch.title}" - ${ch.wordCount} words, ${ch.blocks.length} blocks`);
+      totalWords += ch.wordCount;
+    }
+    console.log(`[MOBI] Total: ${totalWords} words`);
     
     // Compute file hash for position keying
     const fileHash = await computeFileHash(file);
@@ -178,6 +194,7 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
     }
     
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[MOBI] Extraction failed:', error);
     
     throw new MobiExtractionError(
       `Failed to parse MOBI: ${message}`,
@@ -286,8 +303,21 @@ function parseMobiHeader(data: DataView): MobiHeader {
   const headerLength = data.getUint32(20, false);
   const mobiType = data.getUint32(24, false);
   const encoding = data.getUint32(28, false);
-  const firstImageIndex = data.getUint32(108, false);
-  const exthFlags = data.getUint32(128, false);
+  
+  // These might not exist in older MOBI files
+  let firstImageIndex = 0;
+  let exthFlags = 0;
+  
+  try {
+    if (headerLength >= 108) {
+      firstImageIndex = data.getUint32(108, false);
+    }
+    if (headerLength >= 128) {
+      exthFlags = data.getUint32(128, false);
+    }
+  } catch {
+    // Ignore - older MOBI format
+  }
   
   // Try to get full name
   let fullName = '';
@@ -295,7 +325,7 @@ function parseMobiHeader(data: DataView): MobiHeader {
     const fullNameOffset = data.getUint32(84, false);
     const fullNameLength = data.getUint32(88, false);
     if (fullNameOffset > 0 && fullNameLength > 0 && fullNameOffset + fullNameLength < data.byteLength) {
-      const nameBytes = new Uint8Array(data.buffer, fullNameOffset, fullNameLength);
+      const nameBytes = new Uint8Array(data.buffer, data.byteOffset + fullNameOffset, fullNameLength);
       const decoder = encoding === 65001 ? new TextDecoder('utf-8') : new TextDecoder('latin1');
       fullName = decoder.decode(nameBytes);
     }
@@ -311,10 +341,13 @@ function parseMobiHeader(data: DataView): MobiHeader {
 // =============================================================================
 
 function parseExthHeader(record0: Uint8Array, offset: number): Record<number, string> {
-  const data = new DataView(record0.buffer, record0.byteOffset + offset);
   const exthData: Record<number, string> = {};
   
   try {
+    if (offset + 12 > record0.length) return exthData;
+    
+    const data = new DataView(record0.buffer, record0.byteOffset + offset);
+    
     // Check for EXTH magic
     const magic = String.fromCharCode(
       data.getUint8(0), data.getUint8(1),
@@ -340,8 +373,8 @@ function parseExthHeader(record0: Uint8Array, offset: number): Record<number, st
       
       pos += length;
     }
-  } catch {
-    // Ignore EXTH parsing errors
+  } catch (error) {
+    console.warn('[MOBI] Error parsing EXTH header:', error);
   }
   
   return exthData;
@@ -362,13 +395,23 @@ function extractTextContent(
     ? new TextDecoder('utf-8') 
     : new TextDecoder('latin1');
   
-  // Text records start at record 1
-  const endRecord = Math.min(
-    1 + palmDocHeader.recordCount,
-    mobiHeader.firstImageIndex > 0 ? mobiHeader.firstImageIndex : records.length
-  );
+  // Determine which records contain text
+  // Text records start at record 1 and continue until we hit the first image
+  // or until we've read all text records
+  const startRecord = 1;
+  let endRecord = startRecord + palmDocHeader.recordCount;
   
-  for (let i = 1; i < endRecord; i++) {
+  // If firstImageIndex is set, use it as upper bound
+  if (mobiHeader.firstImageIndex > 0 && mobiHeader.firstImageIndex < endRecord) {
+    endRecord = mobiHeader.firstImageIndex;
+  }
+  
+  // Don't go beyond available records
+  endRecord = Math.min(endRecord, records.length);
+  
+  console.log(`[MOBI] Reading text records ${startRecord} to ${endRecord - 1}`);
+  
+  for (let i = startRecord; i < endRecord; i++) {
     try {
       const record = getRecord(bytes, records, i);
       let text: Uint8Array;
@@ -386,19 +429,29 @@ function extractTextContent(
             'unsupported-compression'
           );
         default:
-          throw new MobiExtractionError(
-            `Unsupported compression type: ${palmDocHeader.compression}`,
-            'unsupported-compression'
-          );
+          // Try to read anyway - might be uncompressed
+          console.warn(`[MOBI] Unknown compression ${palmDocHeader.compression}, trying uncompressed`);
+          text = record;
       }
       
-      textParts.push(decoder.decode(text));
+      // Remove trailing multibyte overlap bytes
+      // MOBI records may have extra bytes at the end for multibyte character handling
+      let textLength = text.length;
+      if (textLength > 0 && mobiHeader.encoding === 65001) {
+        // Check for trailing size indicator
+        const trailingByte = text[textLength - 1];
+        if (trailingByte < 4 && trailingByte > 0) {
+          textLength -= trailingByte + 1;
+        }
+      }
+      
+      textParts.push(decoder.decode(text.slice(0, textLength)));
     } catch (error) {
       if (error instanceof MobiExtractionError) {
         throw error;
       }
       // Skip records that fail to decompress
-      console.warn(`Failed to decompress record ${i}:`, error);
+      console.warn(`[MOBI] Failed to decompress record ${i}:`, error);
     }
   }
   
@@ -456,17 +509,21 @@ function decompressPalmDoc(input: Uint8Array): Uint8Array {
  * MOBI files often use <mbp:pagebreak> for chapter breaks
  */
 function parseContentIntoChapters(html: string): Chapter[] {
-  // Clean up the HTML
-  let cleanHtml = html
-    // Remove null bytes
-    .replace(/\x00/g, '')
-    // Remove MOBI-specific tags
+  // Clean up the HTML: remove null bytes and MOBI-specific tags
+  // Use String.prototype.split with charCode to avoid control regex warning
+  const nullByte = String.fromCharCode(0);
+  const cleanHtml = html
+    .split(nullByte).join('')
+    // Remove MOBI-specific tags (but preserve their content)
     .replace(/<mbp:nu>|<\/mbp:nu>/gi, '')
-    .replace(/<mbp:section[^>]*>/gi, '')
-    .replace(/<\/mbp:section>/gi, '');
+    .replace(/<mbp:section[^>]*>/gi, '<div>')
+    .replace(/<\/mbp:section>/gi, '</div>');
   
   // Split on page breaks
-  const sections = cleanHtml.split(/<mbp:pagebreak\s*\/?>/gi);
+  const pageBreakPattern = /<mbp:pagebreak\s*\/?>/gi;
+  const sections = cleanHtml.split(pageBreakPattern);
+  
+  console.log(`[MOBI] Found ${sections.length} sections after splitting on pagebreak`);
   
   const chapters: Chapter[] = [];
   
@@ -474,8 +531,8 @@ function parseContentIntoChapters(html: string): Chapter[] {
     const section = sections[i].trim();
     if (!section) continue;
     
-    // Parse HTML to blocks
-    const blocks = parseSectionHtml(section);
+    // Parse HTML to blocks using ebook parser
+    const blocks = parseEbookHtml(section);
     
     // Skip empty sections
     if (blocks.length === 0) continue;
@@ -484,9 +541,11 @@ function parseContentIntoChapters(html: string): Chapter[] {
     const title = findFirstHeading(blocks) || `Section ${chapters.length + 1}`;
     
     const plainText = getPlainText(blocks);
+    const wordCount = countWords(plainText);
     
     // Skip very short sections (likely navigation or copyright pages)
-    if (plainText.length < 50 && chapters.length > 0) {
+    // But only after we have some chapters, and merge with previous if possible
+    if (wordCount < 50 && chapters.length > 0) {
       // Merge with previous chapter
       const prevChapter = chapters[chapters.length - 1];
       prevChapter.blocks = [...prevChapter.blocks, ...blocks];
@@ -500,12 +559,13 @@ function parseContentIntoChapters(html: string): Chapter[] {
       title,
       blocks,
       plainText,
-      wordCount: countWords(plainText),
+      wordCount,
     });
   }
   
   // If no chapters were created from pagebreaks, try splitting by headings
   if (chapters.length <= 1 && cleanHtml.length > 1000) {
+    console.log('[MOBI] No pagebreaks found, splitting by headings');
     return createChaptersFromHeadings(cleanHtml);
   }
   
@@ -516,16 +576,17 @@ function parseContentIntoChapters(html: string): Chapter[] {
  * Create chapters by splitting on major headings
  */
 function createChaptersFromHeadings(html: string): Chapter[] {
-  const blocks = parseSectionHtml(html);
+  const blocks = parseEbookHtml(html);
   const chapters: Chapter[] = [];
   let currentBlocks: Block[] = [];
   let currentTitle = 'Beginning';
   
   for (const block of blocks) {
+    // Check if this is a chapter-level heading
     if (block.type === 'heading' && block.level <= 2 && currentBlocks.length > 0) {
-      // Save current chapter
+      // Save current chapter if it has substantial content
       const plainText = getPlainText(currentBlocks);
-      if (plainText.length > 50) {
+      if (plainText.length > 100) {
         chapters.push({
           id: `chapter-${chapters.length}`,
           title: currentTitle,
@@ -555,7 +616,7 @@ function createChaptersFromHeadings(html: string): Chapter[] {
     });
   }
   
-  // If we still only have one chapter, return it
+  // If we still only have one chapter (or none), just return all content as one
   if (chapters.length === 0 && blocks.length > 0) {
     const plainText = getPlainText(blocks);
     chapters.push({
@@ -568,32 +629,6 @@ function createChaptersFromHeadings(html: string): Chapter[] {
   }
   
   return chapters;
-}
-
-/**
- * Parse a section of HTML to blocks
- */
-function parseSectionHtml(html: string): Block[] {
-  const parser = new DOMParser();
-  
-  // Wrap in body if needed
-  const wrappedHtml = html.includes('<body') ? html : `<body>${html}</body>`;
-  
-  // Try as XHTML first, then HTML
-  let doc = parser.parseFromString(wrappedHtml, 'application/xhtml+xml');
-  const parseError = doc.querySelector('parsererror');
-  if (parseError) {
-    doc = parser.parseFromString(wrappedHtml, 'text/html');
-  }
-  
-  const body = doc.querySelector('body');
-  if (!body) return [];
-  
-  // Clone and normalize
-  const clone = body.cloneNode(true) as HTMLElement;
-  normalizeArticleMarkup(clone);
-  
-  return parseHtmlToBlocks(clone.innerHTML);
 }
 
 /**

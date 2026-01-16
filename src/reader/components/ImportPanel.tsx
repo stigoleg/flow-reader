@@ -13,15 +13,19 @@ const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.epub', '.mobi', '.azw', '.azw3'
 
 function isSupportedFile(filename: string): boolean {
   const lower = filename.toLowerCase();
-  return SUPPORTED_EXTENSIONS.some(ext => lower.endsWith(ext));
+  // Handle case where browser appends .zip to epub files
+  const normalized = lower.replace(/\.zip$/, '');
+  return SUPPORTED_EXTENSIONS.some(ext => normalized.endsWith(ext));
 }
 
 function getFileType(filename: string): 'pdf' | 'docx' | 'epub' | 'mobi' | null {
   const lower = filename.toLowerCase();
-  if (lower.endsWith('.pdf')) return 'pdf';
-  if (lower.endsWith('.docx')) return 'docx';
-  if (lower.endsWith('.epub')) return 'epub';
-  if (lower.endsWith('.mobi') || lower.endsWith('.azw') || lower.endsWith('.azw3')) return 'mobi';
+  // Handle case where browser appends .zip to epub files
+  const normalized = lower.replace(/\.zip$/, '');
+  if (normalized.endsWith('.pdf')) return 'pdf';
+  if (normalized.endsWith('.docx')) return 'docx';
+  if (normalized.endsWith('.epub')) return 'epub';
+  if (normalized.endsWith('.mobi') || normalized.endsWith('.azw') || normalized.endsWith('.azw3')) return 'mobi';
   return null;
 }
 
@@ -53,6 +57,11 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
     setImportError(null);
 
     try {
+      // Check if it's a supported file type
+      if (!isSupportedFile(file.name)) {
+        throw new Error(`Unsupported file type "${file.name}". Please use PDF, DOCX, EPUB, or MOBI files.`);
+      }
+
       const fileType = getFileType(file.name);
       let doc;
 
@@ -70,7 +79,7 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
           doc = await extractFromMobi(file);
           break;
         default:
-          throw new Error('Unsupported file type. Please use PDF, DOCX, EPUB, or MOBI files.');
+          throw new Error(`Unsupported file type "${file.name}". Please use PDF, DOCX, EPUB, or MOBI files.`);
       }
 
       setDocument(doc);
@@ -109,7 +118,7 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
 
     // Check if it's a supported file type
     if (!isSupportedFile(file.name)) {
-      setImportError('Unsupported file type. Please use PDF, DOCX, EPUB, or MOBI files.');
+      setImportError(`Unsupported file type "${file.name}". Please use PDF, DOCX, EPUB, or MOBI files.`);
       return;
     }
 

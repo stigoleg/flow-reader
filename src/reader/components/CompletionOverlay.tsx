@@ -13,16 +13,50 @@ export default function CompletionOverlay({
   onReadAgain,
   onImportNew,
 }: CompletionOverlayProps) {
-  const { document, accumulatedReadingTime, currentWPM } = useReaderStore();
+  const { 
+    document, 
+    accumulatedReadingTime, 
+    currentWPM, 
+    currentChapterIndex 
+  } = useReaderStore();
+  const nextChapter = useReaderStore(state => state.nextChapter);
 
   if (!isOpen || !document) return null;
+
+  // Book/chapter detection
+  const isBook = !!document.book;
+  const chapters = document.book?.chapters;
+  const hasNextChapter = isBook && chapters && currentChapterIndex < chapters.length - 1;
+  const isBookComplete = isBook && chapters && currentChapterIndex === chapters.length - 1;
+  const currentChapterData = chapters?.[currentChapterIndex];
+  const currentChapterTitle = currentChapterData?.title;
 
   // Calculate reading statistics
   const elapsedMs = accumulatedReadingTime;
   const elapsedMinutes = Math.floor(elapsedMs / 60000);
   const elapsedSeconds = Math.floor((elapsedMs % 60000) / 1000);
   
-  const wordCount = document.plainText.split(/\s+/).length;
+  // For books, show chapter word count; for articles, show total
+  const wordCount = isBook && currentChapterData
+    ? currentChapterData.wordCount
+    : document.plainText.split(/\s+/).length;
+
+  // Determine title and subtitle
+  const title = isBook
+    ? (isBookComplete ? 'Book Complete!' : 'Chapter Complete!')
+    : 'Reading Complete!';
+  
+  const subtitle = isBook
+    ? (isBookComplete 
+        ? `You've finished "${document.metadata.title}"`
+        : `You've finished "${currentChapterTitle}"`)
+    : `You've finished "${document.metadata.title}"`;
+
+  // Handle next chapter
+  const handleNextChapter = () => {
+    onClose();
+    nextChapter();
+  };
 
   return (
     <>
@@ -69,8 +103,15 @@ export default function CompletionOverlay({
           </div>
 
           {/* Title */}
-          <h2 id="completion-title" className="text-2xl font-bold mb-2">Reading Complete!</h2>
-          <p className="opacity-60 mb-6">You've finished "{document.metadata.title}"</p>
+          <h2 id="completion-title" className="text-2xl font-bold mb-2">{title}</h2>
+          <p className="opacity-60 mb-6">{subtitle}</p>
+
+          {/* Progress indicator for books */}
+          {isBook && chapters && !isBookComplete && (
+            <p className="text-sm opacity-50 mb-4">
+              Chapter {currentChapterIndex + 1} of {chapters.length}
+            </p>
+          )}
 
           {/* Stats */}
           <div className="grid grid-cols-3 gap-4 mb-8 py-4 border-y border-current/10" role="group" aria-label="Reading statistics">
@@ -92,16 +133,33 @@ export default function CompletionOverlay({
 
           {/* Actions */}
           <div className="space-y-3">
+            {/* Next Chapter button - primary action when available */}
+            {hasNextChapter && (
+              <button
+                onClick={handleNextChapter}
+                className="w-full py-3 rounded-lg font-medium transition-colors"
+                style={{
+                  backgroundColor: 'var(--reader-link)',
+                  color: '#ffffff',
+                }}
+              >
+                Next Chapter
+              </button>
+            )}
+            
             <button
               onClick={onReadAgain}
               className="w-full py-3 rounded-lg font-medium transition-colors"
               style={{
-                backgroundColor: 'var(--reader-link)',
-                color: '#ffffff',
+                backgroundColor: hasNextChapter 
+                  ? 'rgba(128, 128, 128, 0.15)' 
+                  : 'var(--reader-link)',
+                color: hasNextChapter ? undefined : '#ffffff',
               }}
             >
-              Read Again
+              {isBook ? 'Read Chapter Again' : 'Read Again'}
             </button>
+            
             <button
               onClick={onImportNew}
               className="w-full py-3 rounded-lg font-medium transition-colors"
@@ -111,6 +169,7 @@ export default function CompletionOverlay({
             >
               Import New Content
             </button>
+            
             <button
               onClick={onClose}
               className="w-full py-2 text-sm opacity-60 hover:opacity-100 transition-opacity"

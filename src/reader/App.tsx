@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/shallow';
 import { 
   useReaderStore,
@@ -53,6 +53,10 @@ export default function App() {
   const saveCurrentPosition = useReaderStore(state => state.saveCurrentPosition);
   
   const onboarding = useOnboarding();
+  
+  // Track which document we've restored position for to prevent loops
+  // (setChapter modifies document, which would re-trigger restorePosition)
+  const restoredDocRef = useRef<string | null>(null);
 
   // Load settings from storage on mount
   useEffect(() => {
@@ -91,9 +95,17 @@ export default function App() {
   }, [setDocument, setError, setLoading]);
 
   // Restore reading position when document loads
+  // Only restore once per document to prevent loops (setChapter modifies document)
   useEffect(() => {
     if (document && settingsLoaded) {
-      restorePosition();
+      // Create a unique key for this document
+      const docKey = document.metadata.fileHash || document.metadata.url || `${document.metadata.createdAt}`;
+      
+      // Only restore if we haven't already restored for this document
+      if (restoredDocRef.current !== docKey) {
+        restoredDocRef.current = docKey;
+        restorePosition();
+      }
     }
   }, [document, settingsLoaded, restorePosition]);
 

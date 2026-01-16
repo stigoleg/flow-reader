@@ -17,6 +17,7 @@ export interface ZipLoader {
   loadText(filename: string): Promise<string>;
   loadBlob(filename: string): Promise<Blob>;
   getSize(filename: string): number;
+  listFiles(): string[];
 }
 
 /**
@@ -38,22 +39,41 @@ export async function createZipLoader(source: File | ArrayBuffer): Promise<ZipLo
     data: fileData,
   }));
   
-  // Create lookup map for fast access
+  // Create lookup map for fast access (case-insensitive)
   const entryMap = new Map<string, Uint8Array>();
+  const originalNames = new Map<string, string>(); // lowercase -> original
+  
   for (const entry of entries) {
-    entryMap.set(entry.filename, entry.data);
-    // Also store with normalized path (without leading slash)
     const normalized = entry.filename.replace(/^\//, '');
-    if (normalized !== entry.filename) {
-      entryMap.set(normalized, entry.data);
-    }
+    const lower = normalized.toLowerCase();
+    
+    entryMap.set(normalized, entry.data);
+    entryMap.set(lower, entry.data);
+    originalNames.set(lower, normalized);
+  }
+  
+  function findEntry(filename: string): Uint8Array | undefined {
+    // Try exact match first
+    let data = entryMap.get(filename);
+    if (data) return data;
+    
+    // Try without leading slash
+    const noSlash = filename.replace(/^\//, '');
+    data = entryMap.get(noSlash);
+    if (data) return data;
+    
+    // Try case-insensitive
+    data = entryMap.get(noSlash.toLowerCase());
+    if (data) return data;
+    
+    return undefined;
   }
   
   return {
     entries,
     
     async loadText(filename: string): Promise<string> {
-      const data = entryMap.get(filename) || entryMap.get(filename.replace(/^\//, ''));
+      const data = findEntry(filename);
       if (!data) {
         throw new Error(`File not found in archive: ${filename}`);
       }
@@ -61,7 +81,7 @@ export async function createZipLoader(source: File | ArrayBuffer): Promise<ZipLo
     },
     
     async loadBlob(filename: string): Promise<Blob> {
-      const data = entryMap.get(filename) || entryMap.get(filename.replace(/^\//, ''));
+      const data = findEntry(filename);
       if (!data) {
         throw new Error(`File not found in archive: ${filename}`);
       }
@@ -74,8 +94,12 @@ export async function createZipLoader(source: File | ArrayBuffer): Promise<ZipLo
     },
     
     getSize(filename: string): number {
-      const data = entryMap.get(filename) || entryMap.get(filename.replace(/^\//, ''));
+      const data = findEntry(filename);
       return data?.length ?? 0;
+    },
+    
+    listFiles(): string[] {
+      return entries.map(e => e.filename);
     },
   };
 }

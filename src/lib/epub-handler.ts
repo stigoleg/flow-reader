@@ -7,8 +7,7 @@
 
 import type { FlowDocument, Block, BookStructure, Chapter, TocItem } from '@/types';
 import { createZipLoader, type ZipLoader } from './zip-adapter';
-import { parseHtmlToBlocks } from './html-parser';
-import { normalizeArticleMarkup } from './article-normalize';
+import { parseEbookHtml } from './html-parser';
 import { getPlainText } from './block-utils';
 import { computeFileHash, countWords } from './file-utils';
 
@@ -71,22 +70,31 @@ export async function extractFromEpub(file: File): Promise<FlowDocument> {
     // Create zip loader
     const loader = await createZipLoader(file);
     
+    // Log files for debugging
+    const files = loader.listFiles();
+    console.log(`[EPUB] Archive contains ${files.length} files`);
+    
     // Check for DRM
     await checkForDrm(loader);
     
     // Parse container.xml to find content.opf
     const opfPath = await findOpfPath(loader);
     const opfDir = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
+    console.log(`[EPUB] OPF path: ${opfPath}, directory: ${opfDir}`);
     
     // Parse content.opf
     const opfContent = await loader.loadText(opfPath);
     const { metadata, manifest, spine } = parseOpf(opfContent);
+    console.log(`[EPUB] Metadata: ${metadata.title} by ${metadata.author}`);
+    console.log(`[EPUB] Spine has ${spine.length} items`);
     
     // Parse TOC (NCX for EPUB2, nav for EPUB3)
     const toc = await parseToc(loader, manifest, opfDir);
+    console.log(`[EPUB] TOC has ${toc.length} entries`);
     
     // Extract chapters from spine
     const chapters = await extractChapters(loader, spine, manifest, opfDir, toc);
+    console.log(`[EPUB] Extracted ${chapters.length} chapters`);
     
     if (chapters.length === 0) {
       throw new EpubExtractionError(
@@ -94,6 +102,14 @@ export async function extractFromEpub(file: File): Promise<FlowDocument> {
         'no-content'
       );
     }
+    
+    // Log chapter info
+    let totalWords = 0;
+    for (const ch of chapters) {
+      console.log(`[EPUB] Chapter: "${ch.title}" - ${ch.wordCount} words, ${ch.blocks.length} blocks`);
+      totalWords += ch.wordCount;
+    }
+    console.log(`[EPUB] Total: ${totalWords} words`);
     
     // Compute file hash for position keying
     const fileHash = await computeFileHash(file);
@@ -130,6 +146,7 @@ export async function extractFromEpub(file: File): Promise<FlowDocument> {
     }
     
     const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[EPUB] Extraction failed:', error);
     
     if (message.includes('Invalid ZIP') || message.includes('not a valid')) {
       throw new EpubExtractionError(
@@ -187,21 +204,37 @@ async function checkForDrm(loader: ZipLoader): Promise<void> {
  * Find the path to content.opf from container.xml
  */
 async function findOpfPath(loader: ZipLoader): Promise<string> {
-  const containerXml = await loader.loadText('META-INF/container.xml');
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(containerXml, 'application/xml');
-  
-  const rootfile = doc.querySelector('rootfile');
-  const opfPath = rootfile?.getAttribute('full-path');
-  
-  if (!opfPath) {
-    throw new EpubExtractionError(
-      'Invalid EPUB: Cannot find content.opf path.',
-      'invalid-epub'
-    );
+  try {
+    const containerXml = await loader.loadText('META-INF/container.xml');
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(containerXml, 'application/xml');
+    
+    const rootfile = doc.querySelector('rootfile');
+    const opfPath = rootfile?.getAttribute('full-path');
+    
+    if (opfPath) {
+      return opfPath;
+    }
+  } catch (error) {
+    console.warn('[EPUB] Could not parse container.xml:', error);
   }
   
-  return opfPath;
+  // Fallback: search for .opf file directly
+  const files = loader.listFiles();
+  const opfFile = files.find(f => f.toLowerCase().endsWith('.opf'));
+  
+  if (opfFile) {
+    console.log('[EPUB] Found OPF file by search:', opfFile);
+    return opfFile;
+  }
+  
+  // Log available files for debugging
+  console.error('[EPUB] Files in archive:', files.slice(0, 30));
+  
+  throw new EpubExtractionError(
+    'Invalid EPUB: Cannot find META-INF/container.xml or any .opf file.',
+    'invalid-epub'
+  );
 }
 
 /**
@@ -215,14 +248,14 @@ function parseOpf(opfContent: string): {
   const parser = new DOMParser();
   const doc = parser.parseFromString(opfContent, 'application/xml');
   
-  // Extract metadata
+  // Extract metadata - try multiple selector patterns for compatibility
   const metadata: EpubMetadata = {
-    title: getTextContent(doc, 'dc\\:title, title') || '',
-    author: getTextContent(doc, 'dc\\:creator, creator'),
-    language: getTextContent(doc, 'dc\\:language, language'),
-    publisher: getTextContent(doc, 'dc\\:publisher, publisher'),
-    description: getTextContent(doc, 'dc\\:description, description'),
-    date: getTextContent(doc, 'dc\\:date, date'),
+    title: getTextContent(doc, 'dc\\:title, title, metadata > title') || '',
+    author: getTextContent(doc, 'dc\\:creator, creator, metadata > creator'),
+    language: getTextContent(doc, 'dc\\:language, language, metadata > language'),
+    publisher: getTextContent(doc, 'dc\\:publisher, publisher, metadata > publisher'),
+    description: getTextContent(doc, 'dc\\:description, description, metadata > description'),
+    date: getTextContent(doc, 'dc\\:date, date, metadata > date'),
   };
   
   // Build manifest map
@@ -267,21 +300,37 @@ async function parseToc(
       try {
         const ncxPath = resolvePath(opfDir, item.href);
         const ncxContent = await loader.loadText(ncxPath);
-        return parseNcx(ncxContent);
-      } catch {
-        // Continue to try nav
+        const toc = parseNcx(ncxContent);
+        if (toc.length > 0) return toc;
+      } catch (error) {
+        console.warn('[EPUB] Failed to parse NCX:', error);
       }
     }
   }
   
   // Try nav document (EPUB3)
   for (const [, item] of manifest) {
+    if (item.mediaType === 'application/xhtml+xml' && item.href.includes('nav')) {
+      try {
+        const navPath = resolvePath(opfDir, item.href);
+        const navContent = await loader.loadText(navPath);
+        const toc = parseNav(navContent);
+        if (toc.length > 0) return toc;
+      } catch (error) {
+        console.warn('[EPUB] Failed to parse nav document:', error);
+      }
+    }
+  }
+  
+  // Try any XHTML file that might contain TOC
+  for (const [, item] of manifest) {
     if (item.mediaType === 'application/xhtml+xml') {
       try {
         const navPath = resolvePath(opfDir, item.href);
         const navContent = await loader.loadText(navPath);
-        if (navContent.includes('nav') && navContent.includes('epub:type="toc"')) {
-          return parseNav(navContent);
+        if (navContent.includes('epub:type="toc"') || navContent.includes('role="doc-toc"')) {
+          const toc = parseNav(navContent);
+          if (toc.length > 0) return toc;
         }
       } catch {
         // Continue
@@ -308,7 +357,9 @@ function parseNcx(ncxContent: string): NavPoint[] {
       const href = np.querySelector('content')?.getAttribute('src') || '';
       const children = parseNavPoints(np);
       
-      navPoints.push({ id, label, href, children });
+      if (label && href) {
+        navPoints.push({ id, label, href, children });
+      }
     });
     
     return navPoints;
@@ -323,13 +374,18 @@ function parseNcx(ncxContent: string): NavPoint[] {
  */
 function parseNav(navContent: string): NavPoint[] {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(navContent, 'application/xhtml+xml');
+  
+  // Try as XHTML first
+  let doc = parser.parseFromString(navContent, 'application/xhtml+xml');
+  if (doc.querySelector('parsererror')) {
+    doc = parser.parseFromString(navContent, 'text/html');
+  }
   
   function parseList(ol: Element): NavPoint[] {
     const navPoints: NavPoint[] = [];
     
     ol.querySelectorAll(':scope > li').forEach((li, index) => {
-      const a = li.querySelector(':scope > a');
+      const a = li.querySelector(':scope > a, :scope > span > a');
       if (a) {
         const id = `nav-${index}`;
         const label = a.textContent?.trim() || '';
@@ -338,15 +394,17 @@ function parseNav(navContent: string): NavPoint[] {
         const nestedOl = li.querySelector(':scope > ol');
         const children = nestedOl ? parseList(nestedOl) : [];
         
-        navPoints.push({ id, label, href, children });
+        if (label && href) {
+          navPoints.push({ id, label, href, children });
+        }
       }
     });
     
     return navPoints;
   }
   
-  // Find the TOC nav element
-  const tocNav = doc.querySelector('nav[epub\\:type="toc"], nav[*|type="toc"]');
+  // Find the TOC nav element - try multiple patterns
+  const tocNav = doc.querySelector('nav[epub\\:type="toc"], nav[*|type="toc"], nav.toc, nav#toc');
   const ol = tocNav?.querySelector('ol');
   
   return ol ? parseList(ol) : [];
@@ -368,18 +426,24 @@ async function extractChapters(
   for (let i = 0; i < spine.length; i++) {
     const spineItem = spine[i];
     
-    // Skip non-linear items
-    if (!spineItem.linear) continue;
+    // Skip non-linear items (but log for debugging)
+    if (!spineItem.linear) {
+      console.log(`[EPUB] Skipping non-linear item: ${spineItem.href}`);
+      continue;
+    }
     
     try {
       const itemPath = resolvePath(opfDir, spineItem.href);
       const html = await loader.loadText(itemPath);
       
-      // Parse and normalize HTML
+      // Parse HTML using ebook-specific parser
       const blocks = parseChapterHtml(html);
       
       // Skip empty chapters
-      if (blocks.length === 0) continue;
+      if (blocks.length === 0) {
+        console.log(`[EPUB] Skipping empty chapter: ${spineItem.href}`);
+        continue;
+      }
       
       // Find chapter title from TOC or first heading
       const baseHref = spineItem.href.split('#')[0];
@@ -387,17 +451,25 @@ async function extractChapters(
       const title = tocEntry?.label || findFirstHeading(blocks) || `Chapter ${chapters.length + 1}`;
       
       const plainText = getPlainText(blocks);
+      const wordCount = countWords(plainText);
+      
+      // Skip very short "chapters" that are likely cover pages, copyright, etc.
+      // But only if we already have some chapters
+      if (wordCount < 20 && chapters.length > 0) {
+        console.log(`[EPUB] Skipping short section (${wordCount} words): ${spineItem.href}`);
+        continue;
+      }
       
       chapters.push({
         id: spineItem.id,
         title,
         blocks,
         plainText,
-        wordCount: countWords(plainText),
+        wordCount,
       });
     } catch (error) {
-      // Skip chapters that fail to load
-      console.warn(`Failed to load chapter ${spineItem.href}:`, error);
+      // Log but don't skip - might be important content
+      console.warn(`[EPUB] Failed to load chapter ${spineItem.href}:`, error);
     }
   }
   
@@ -408,36 +480,8 @@ async function extractChapters(
  * Parse chapter HTML and convert to blocks
  */
 function parseChapterHtml(html: string): Block[] {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'application/xhtml+xml');
-  
-  // Check for parse errors
-  const parseError = doc.querySelector('parsererror');
-  if (parseError) {
-    // Try as text/html instead
-    const doc2 = new DOMParser().parseFromString(html, 'text/html');
-    return normalizeAndParse(doc2.body);
-  }
-  
-  // Get body content
-  const body = doc.querySelector('body');
-  if (!body) return [];
-  
-  return normalizeAndParse(body);
-}
-
-/**
- * Normalize and parse HTML body to blocks
- */
-function normalizeAndParse(body: HTMLElement): Block[] {
-  // Clone to avoid mutating original
-  const clone = body.cloneNode(true) as HTMLElement;
-  
-  // Apply FlowReader's normalization
-  normalizeArticleMarkup(clone);
-  
-  // Parse to blocks
-  return parseHtmlToBlocks(clone.innerHTML);
+  // Use the ebook-specific parser which is more permissive
+  return parseEbookHtml(html);
 }
 
 /**
@@ -448,9 +492,14 @@ function buildTocMap(toc: NavPoint[]): Map<string, NavPoint> {
   
   function addToMap(navPoints: NavPoint[]) {
     for (const np of navPoints) {
+      // Get base href without fragment
       const baseHref = np.href.split('#')[0];
       if (!map.has(baseHref)) {
         map.set(baseHref, np);
+      }
+      // Also add the full href
+      if (!map.has(np.href)) {
+        map.set(np.href, np);
       }
       addToMap(np.children);
     }
@@ -465,32 +514,36 @@ function buildTocMap(toc: NavPoint[]): Map<string, NavPoint> {
  */
 function buildFlatToc(toc: NavPoint[], chapters: Chapter[]): TocItem[] {
   const items: TocItem[] = [];
-  const chapterIdToIndex = new Map<string, number>();
   
+  // Build a map from href patterns to chapter index
+  const chapterHrefMap = new Map<string, number>();
   chapters.forEach((ch, idx) => {
-    chapterIdToIndex.set(ch.id, idx);
+    chapterHrefMap.set(ch.id, idx);
   });
   
   function addItems(navPoints: NavPoint[], depth: number) {
     for (const np of navPoints) {
-      // Find matching chapter
       const baseHref = np.href.split('#')[0];
+      
+      // Try to find matching chapter
       let chapterIndex = -1;
       
-      // Try to match by href
-      for (const [idx, chapter] of chapters.entries()) {
-        if (chapter.id.includes(baseHref) || baseHref.includes(chapter.id)) {
-          chapterIndex = idx;
-          break;
+      // Match by ID
+      if (chapterHrefMap.has(np.id)) {
+        chapterIndex = chapterHrefMap.get(np.id)!;
+      }
+      
+      // Match by href
+      if (chapterIndex === -1) {
+        for (const [idx, chapter] of chapters.entries()) {
+          if (chapter.id.includes(baseHref) || baseHref.includes(chapter.id)) {
+            chapterIndex = idx;
+            break;
+          }
         }
       }
       
-      // If not found by href, try position-based matching
-      if (chapterIndex === -1 && items.length < chapters.length) {
-        chapterIndex = items.length;
-      }
-      
-      if (chapterIndex >= 0 && chapterIndex < chapters.length) {
+      if (chapterIndex >= 0) {
         items.push({
           id: np.id,
           label: np.label,
@@ -505,8 +558,9 @@ function buildFlatToc(toc: NavPoint[], chapters: Chapter[]): TocItem[] {
   
   addItems(toc, 0);
   
-  // If TOC is empty, generate from chapters
-  if (items.length === 0) {
+  // If TOC is empty or incomplete, generate from chapters
+  if (items.length === 0 || items.length < chapters.length / 2) {
+    items.length = 0;
     chapters.forEach((chapter, index) => {
       items.push({
         id: chapter.id,
@@ -548,9 +602,13 @@ function getTextContent(doc: Document, selector: string): string | undefined {
  * Resolve relative path against base directory
  */
 function resolvePath(basePath: string, relativePath: string): string {
+  // Handle absolute paths
   if (relativePath.startsWith('/')) {
     return relativePath.slice(1);
   }
+  
+  // Handle URL-encoded paths
+  relativePath = decodeURIComponent(relativePath);
   
   // Handle ../ and other relative paths
   const parts = (basePath + relativePath).split('/');
