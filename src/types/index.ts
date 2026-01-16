@@ -261,7 +261,7 @@ export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
     textColor: '#2a2a2a',
     linkColor: '#444444',
     selectionColor: '#c0c0c0',
-    highlightColor: '#c8c8c8',  // Slightly darker than bg for subtle highlight
+    highlightColor: '#b8b8b8',  // Noticeably darker than bg for clear highlight
   },
   highContrast: {
     backgroundColor: '#000000',
