@@ -163,7 +163,7 @@ const SYLLABLE_EXCEPTIONS: Record<string, Record<string, number>> = {
 };
 
 // Extended dictionary loaded from external source (populated at runtime)
-let extendedDictionary: Record<string, Record<string, number>> = {
+const extendedDictionary: Record<string, Record<string, number>> = {
   en: {},
   no: {},
 };

@@ -67,7 +67,7 @@ export default function App() {
           // No document - show import panel
           setImportOpen(true);
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load document. Please try again.');
       }
     }

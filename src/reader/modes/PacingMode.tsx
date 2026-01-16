@@ -164,10 +164,11 @@ export default function PacingMode({
           return calculateSentenceDuration(currentSentence, effectiveWPM, pacingPauseOnPunctuation);
         }
         return 1000; // Fallback: 1 second
-      default: // block
+      default: { // block
         const wordCount = currentBlock ? getBlockWordCount(currentBlock) : 1;
         const duration = (wordCount / effectiveWPM) * 60 * 1000;
         return Math.max(500, duration); // Minimum 500ms per block
+      }
     }
   }, [pacingGranularity, currentWord, currentSentence, currentBlock, effectiveWPM, pacingPauseOnPunctuation, pacingAdaptiveSpeed]);
 

@@ -211,7 +211,7 @@ function isUIText(text: string, strict: boolean = true): boolean {
     }
   }
 
-  if (/^[a-z↑↓←→]+$/i.test(trimmed) || /^[+\-=\/\\?!]+$/.test(trimmed)) {
+  if (/^[a-z↑↓←→]+$/i.test(trimmed) || /^[+\-=/\\?!]+$/.test(trimmed)) {
     return true;
   }
 

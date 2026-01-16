@@ -121,7 +121,7 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
         } else {
           setImportError('Failed to reload content. Try visiting the original page.');
         }
-      } catch (err) {
+      } catch {
         setImportError('Failed to reload content. Try visiting the original page.');
       } finally {
         setIsImporting(false);

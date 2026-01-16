@@ -148,7 +148,7 @@ async function sendMessageToContentScript(
   try {
     const response = await chrome.tabs.sendMessage(tabId, message);
     return response;
-  } catch (error) {
+  } catch {
     // Content script not ready - this is common for tabs opened before extension install
     console.log('FlowReader: Content script not responding, attempting injection...');
   }
@@ -166,7 +166,7 @@ async function sendMessageToContentScript(
   try {
     const response = await chrome.tabs.sendMessage(tabId, message);
     return response;
-  } catch (error) {
+  } catch {
     console.error('FlowReader: Content script still not responding after injection. Please refresh the page.');
     return null;
   }
