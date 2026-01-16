@@ -232,84 +232,85 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 };
 
 // Theme presets
+// Note: highlightColor is used for active word background in pacing mode.
+// It must provide good contrast with textColor while being visually distinct from backgroundColor.
 export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
   light: {
     backgroundColor: '#ffffff',
     textColor: '#1a1a1a',
     linkColor: '#0066cc',
     selectionColor: '#b4d5fe',
-    highlightColor: '#fff3cd',
+    highlightColor: '#fff3cd',  // Warm yellow - good contrast with dark text
   },
   sepia: {
     backgroundColor: '#f4ecd8',
     textColor: '#5c4b37',
     linkColor: '#8b5a2b',
     selectionColor: '#d4c4a8',
-    highlightColor: '#e6d9b8',
+    highlightColor: '#ffeeba',  // Brighter warm yellow for better visibility
   },
   night: {
     backgroundColor: '#1a1a2e',
-    textColor: '#c9c9c9',
+    textColor: '#e0e0e0',       // Slightly brighter for better readability
     linkColor: '#6eb5ff',
     selectionColor: '#3a3a5e',
-    highlightColor: '#2a2a4e',
+    highlightColor: '#3d3d6b',  // Lighter purple that's clearly visible against bg
   },
   eink: {
     backgroundColor: '#e8e8e8',
     textColor: '#2a2a2a',
     linkColor: '#444444',
     selectionColor: '#c0c0c0',
-    highlightColor: '#d0d0d0',
+    highlightColor: '#c8c8c8',  // Slightly darker than bg for subtle highlight
   },
   highContrast: {
     backgroundColor: '#000000',
     textColor: '#ffffff',
     linkColor: '#ffff00',
     selectionColor: '#0000ff',
-    highlightColor: '#333333',
+    highlightColor: '#444444',  // Visible dark gray that doesn't strain eyes
   },
-  // NEW: Eye-friendly themes
   warmLight: {
-    backgroundColor: '#fdf6e3',  // Warm cream (Solarized-inspired)
-    textColor: '#4a4235',        // Warm dark brown
-    linkColor: '#b58900',        // Amber/gold
-    selectionColor: '#eee8d5',   // Lighter cream
-    highlightColor: '#f5e6c8',   // Soft warm highlight
+    backgroundColor: '#fdf6e3',
+    textColor: '#4a4235',
+    linkColor: '#b58900',
+    selectionColor: '#eee8d5',
+    highlightColor: '#f5e0a0',  // Warmer, more saturated yellow
   },
   softFocus: {
-    backgroundColor: '#f5f5f0',  // Off-white with slight warmth
-    textColor: '#404040',        // Medium gray (not pure black)
-    linkColor: '#4a7c59',        // Muted sage green
-    selectionColor: '#d4e5d8',   // Soft green tint
-    highlightColor: '#e8e8dc',   // Neutral light
+    backgroundColor: '#f5f5f0',
+    textColor: '#404040',
+    linkColor: '#4a7c59',
+    selectionColor: '#d4e5d8',
+    highlightColor: '#d4e8c8',  // Soft green tint, more visible than neutral
   },
   ocean: {
-    backgroundColor: '#fffbeb',  // Pale cream/yellow (dyslexia-friendly)
-    textColor: '#1e3a5f',        // Navy blue (preferred over black)
-    linkColor: '#2d6a4f',        // Dark teal
-    selectionColor: '#fde68a',   // Light yellow
-    highlightColor: '#dbeafe',   // Pale blue
+    backgroundColor: '#fffbeb',
+    textColor: '#1e3a5f',
+    linkColor: '#2d6a4f',
+    selectionColor: '#fde68a',
+    highlightColor: '#bfdbfe',  // Clearer blue that complements navy text
   },
   amoled: {
-    backgroundColor: '#000000',  // True black (pixel-off on OLED)
-    textColor: '#e4e4e7',        // Light gray (not pure white)
-    linkColor: '#60a5fa',        // Soft sky blue
-    selectionColor: '#1e293b',   // Dark slate
-    highlightColor: '#1c1c1e',   // Near black
+    backgroundColor: '#000000',
+    textColor: '#e4e4e7',
+    linkColor: '#60a5fa',
+    selectionColor: '#1e293b',
+    highlightColor: '#1e3a5f',  // Dark blue that's visible on black
   },
   amberNight: {
-    backgroundColor: '#1a1410',  // Very dark warm brown
-    textColor: '#e5c9a5',        // Warm amber text
-    linkColor: '#d4a574',        // Copper/bronze
-    selectionColor: '#3d2c1e',   // Dark amber
-    highlightColor: '#2a1f16',   // Slightly lighter than bg
+    backgroundColor: '#1a1410',
+    textColor: '#e5c9a5',
+    linkColor: '#d4a574',
+    selectionColor: '#3d2c1e',
+    highlightColor: '#4a3828',  // Warmer brown that's clearly visible
   },
   forest: {
-    backgroundColor: '#f0f4e8',  // Very pale sage
-    textColor: '#2d3b2d',        // Dark forest green
-    linkColor: '#4a7c59',        // Medium green
-    selectionColor: '#c8dcc0',   // Light sage
-    highlightColor: '#d8e8d0',   // Pale green
+    backgroundColor: '#f0f4e8',
+    textColor: '#2d3b2d',
+    linkColor: '#4a7c59',
+    selectionColor: '#c8dcc0',
+    highlightColor: '#c0dab0',  // Slightly more saturated green
   },
   custom: {
     backgroundColor: '#ffffff',
