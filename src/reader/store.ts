@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { FlowDocument, ReaderSettings, ReadingMode } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
-import { getSettings, saveSettings, savePosition, getPosition, addRecentDocument, isExitConfirmationDismissed, dismissExitConfirmation } from '@/lib/storage';
+import { getSettings, saveSettings, savePosition, getPosition, addRecentDocument, isExitConfirmationDismissed, dismissExitConfirmation, saveCurrentDocument } from '@/lib/storage';
 
 interface ReaderState {
   // Document
@@ -36,7 +36,10 @@ interface ReaderState {
   isCompletionOpen: boolean;
   isExitConfirmOpen: boolean;
   exitConfirmationDismissed: boolean;
-  readingStartTime: number | null;
+  
+  // Reading time tracking
+  accumulatedReadingTime: number;  // Total ms spent reading (persisted)
+  playStartTime: number | null;     // When current play session started
 
   // Actions
   setDocument: (doc: FlowDocument | null) => void;
@@ -108,7 +111,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   isCompletionOpen: false,
   isExitConfirmOpen: false,
   exitConfirmationDismissed: false,
-  readingStartTime: null,
+  accumulatedReadingTime: 0,
+  playStartTime: null,
 
   // Actions
   setDocument: (doc) => {
@@ -121,7 +125,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       currentRsvpIndex: 0,
     });
     
-    // Add to recent documents
+    // Add to recent documents and save as current document for refresh persistence
     if (doc) {
       const preview = doc.plainText.slice(0, 150).trim() + (doc.plainText.length > 150 ? '...' : '');
       // For non-web sources, cache the full document so it can be reopened
@@ -136,6 +140,9 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         url: doc.metadata.url,
         cachedDocument: shouldCache ? doc : undefined,
       });
+      
+      // Save current document to storage so it survives page refresh
+      saveCurrentDocument(doc);
     }
   },
 
@@ -149,11 +156,45 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       currentCharOffset: charOffset,
       currentSentenceIndex: 0,
       currentWordIndex: 0,
+      currentRsvpIndex: 0,
+      // Reset reading time when position is explicitly set (e.g., "Read Again")
+      accumulatedReadingTime: 0,
+      playStartTime: null,
     }),
 
-  togglePlay: () => set((state) => ({ isPlaying: !state.isPlaying })),
+  togglePlay: () => set((state) => {
+    if (state.isPlaying) {
+      // Pausing: accumulate the time from this session
+      const sessionTime = state.playStartTime ? Date.now() - state.playStartTime : 0;
+      return {
+        isPlaying: false,
+        playStartTime: null,
+        accumulatedReadingTime: state.accumulatedReadingTime + sessionTime,
+      };
+    } else {
+      // Starting: record when this play session started
+      return {
+        isPlaying: true,
+        playStartTime: Date.now(),
+      };
+    }
+  }),
 
-  setPlaying: (playing) => set({ isPlaying: playing }),
+  setPlaying: (playing) => set((state) => {
+    if (playing && !state.isPlaying) {
+      // Starting playback
+      return { isPlaying: true, playStartTime: Date.now() };
+    } else if (!playing && state.isPlaying) {
+      // Stopping playback - accumulate time
+      const sessionTime = state.playStartTime ? Date.now() - state.playStartTime : 0;
+      return {
+        isPlaying: false,
+        playStartTime: null,
+        accumulatedReadingTime: state.accumulatedReadingTime + sessionTime,
+      };
+    }
+    return { isPlaying: playing };
+  }),
 
   setWPM: (wpm) => {
     const clampedWPM = Math.max(50, Math.min(1000, wpm));
@@ -232,19 +273,45 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     window.close();
   },
 
-  startReading: () => set({ readingStartTime: Date.now() }),
+  startReading: () => {
+    // Start tracking time if not already playing
+    const { playStartTime } = get();
+    if (!playStartTime) {
+      set({ playStartTime: Date.now() });
+    }
+  },
 
-  showCompletion: () => set({ isCompletionOpen: true, isPlaying: false }),
+  showCompletion: () => {
+    // Accumulate any remaining time and show completion
+    const { playStartTime, accumulatedReadingTime } = get();
+    const sessionTime = playStartTime ? Date.now() - playStartTime : 0;
+    set({
+      isCompletionOpen: true,
+      isPlaying: false,
+      playStartTime: null,
+      accumulatedReadingTime: accumulatedReadingTime + sessionTime,
+    });
+  },
 
   // Position persistence
   saveCurrentPosition: async () => {
-    const { document, currentBlockIndex, currentCharOffset } = get();
+    const { document, currentBlockIndex, currentCharOffset, currentWordIndex, currentSentenceIndex, currentRsvpIndex, settings, accumulatedReadingTime, playStartTime } = get();
     if (!document?.metadata.url) return;
+    
+    // Calculate total reading time including current session if playing
+    const sessionTime = playStartTime ? Date.now() - playStartTime : 0;
+    const totalReadingTime = accumulatedReadingTime + sessionTime;
     
     await savePosition(document.metadata.url, {
       blockIndex: currentBlockIndex,
       charOffset: currentCharOffset,
       timestamp: Date.now(),
+      // Extended position for precise restoration
+      wordIndex: currentWordIndex,
+      sentenceIndex: currentSentenceIndex,
+      rsvpIndex: currentRsvpIndex,
+      activeMode: settings.activeMode,
+      accumulatedReadingTime: totalReadingTime,
     });
   },
 
@@ -257,8 +324,11 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       set({
         currentBlockIndex: position.blockIndex,
         currentCharOffset: position.charOffset,
-        currentSentenceIndex: 0,
-        currentWordIndex: 0,
+        // Restore extended position fields (defaults for backwards compatibility)
+        currentSentenceIndex: position.sentenceIndex ?? 0,
+        currentWordIndex: position.wordIndex ?? 0,
+        currentRsvpIndex: position.rsvpIndex ?? 0,
+        accumulatedReadingTime: position.accumulatedReadingTime ?? 0,
       });
     }
   },

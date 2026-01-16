@@ -16,6 +16,7 @@ import ImportPanel from './components/ImportPanel';
 import HelpOverlay from './components/HelpOverlay';
 import CompletionOverlay from './components/CompletionOverlay';
 import Onboarding, { useOnboarding } from './components/Onboarding';
+import { getCurrentDocument } from '@/lib/storage';
 import type { FlowDocument } from '@/types';
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
   // Actions are stable references in Zustand, select individually
   const setDocument = useReaderStore(state => state.setDocument);
   const setError = useReaderStore(state => state.setError);
+  const setLoading = useReaderStore(state => state.setLoading);
   const setImportOpen = useReaderStore(state => state.setImportOpen);
   const setHelpOpen = useReaderStore(state => state.setHelpOpen);
   const setCompletionOpen = useReaderStore(state => state.setCompletionOpen);
@@ -60,20 +62,32 @@ export default function App() {
   useEffect(() => {
     async function loadDocument() {
       try {
+        // First, try to get pending document from background script
         const response = await chrome.runtime.sendMessage({ type: 'GET_PENDING_DOCUMENT' });
         if (response) {
           setDocument(response as FlowDocument);
-        } else {
-          // No document - show import panel
-          setImportOpen(true);
+          return;
         }
+        
+        // No pending document - this is likely a page refresh
+        // Try to load the previously-open document from storage
+        const savedDoc = await getCurrentDocument();
+        if (savedDoc) {
+          setDocument(savedDoc);
+          return;
+        }
+        
+        // No document anywhere - show import panel
+        // Must set loading to false so the UI doesn't get stuck
+        setLoading(false);
+        setImportOpen(true);
       } catch {
         setError('Failed to load document. Please try again.');
       }
     }
 
     loadDocument();
-  }, [setDocument, setError]);
+  }, [setDocument, setError, setLoading]);
 
   // Restore reading position when document loads
   useEffect(() => {

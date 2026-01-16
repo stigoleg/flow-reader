@@ -13,12 +13,12 @@ export default function CompletionOverlay({
   onReadAgain,
   onImportNew,
 }: CompletionOverlayProps) {
-  const { document, readingStartTime, currentWPM } = useReaderStore();
+  const { document, accumulatedReadingTime, currentWPM } = useReaderStore();
 
   if (!isOpen || !document) return null;
 
   // Calculate reading statistics
-  const elapsedMs = readingStartTime ? Date.now() - readingStartTime : 0;
+  const elapsedMs = accumulatedReadingTime;
   const elapsedMinutes = Math.floor(elapsedMs / 60000);
   const elapsedSeconds = Math.floor((elapsedMs % 60000) / 1000);
   

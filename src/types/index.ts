@@ -59,6 +59,12 @@ export interface ReadingPosition {
   blockIndex: number;
   charOffset: number;
   timestamp: number;
+  // Extended fields for complete position restoration on refresh
+  wordIndex?: number;
+  sentenceIndex?: number;
+  rsvpIndex?: number;
+  activeMode?: ReadingMode;
+  accumulatedReadingTime?: number;  // Total ms spent reading
 }
 
 // Settings types

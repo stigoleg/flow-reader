@@ -1,4 +1,4 @@
-import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument, CustomTheme } from '@/types';
+import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument, CustomTheme, FlowDocument } from '@/types';
 import { DEFAULT_SETTINGS as defaultSettings } from '@/types';
 
 const STORAGE_VERSION = 1;
@@ -295,6 +295,65 @@ export async function deleteCustomTheme(name: string): Promise<void> {
     chrome.storage.local.set({ customThemes }, () => {
       try {
         checkLastError('deleteCustomTheme');
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+// =============================================================================
+// CURRENT DOCUMENT (for refresh persistence)
+// =============================================================================
+
+const CURRENT_DOCUMENT_KEY = 'currentDocument';
+
+/**
+ * Save the current document to storage so it survives page refresh.
+ * This is separate from recentDocuments - it's specifically for the 
+ * currently-open document in the reader tab.
+ */
+export async function saveCurrentDocument(doc: FlowDocument): Promise<void> {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [CURRENT_DOCUMENT_KEY]: doc }, () => {
+      try {
+        checkLastError('saveCurrentDocument');
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+/**
+ * Get the current document from storage (if any).
+ * Used to restore state after a page refresh.
+ */
+export async function getCurrentDocument(): Promise<FlowDocument | null> {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.get(CURRENT_DOCUMENT_KEY, (result) => {
+      try {
+        checkLastError('getCurrentDocument');
+        const doc = result[CURRENT_DOCUMENT_KEY] as FlowDocument | undefined;
+        resolve(doc || null);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+/**
+ * Clear the current document from storage.
+ * Called when the user closes the reader or imports a new document.
+ */
+export async function clearCurrentDocument(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.remove(CURRENT_DOCUMENT_KEY, () => {
+      try {
+        checkLastError('clearCurrentDocument');
         resolve();
       } catch (error) {
         reject(error);
