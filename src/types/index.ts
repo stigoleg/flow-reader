@@ -148,6 +148,17 @@ export interface ThemeColors {
   highlightColor: string;
 }
 
+/** Custom theme with name and colors */
+export interface CustomTheme extends ThemeColors {
+  name: string;
+}
+
+/** Theme export format for import/export */
+export interface ThemeExport {
+  version: 1;
+  theme: CustomTheme;
+}
+
 // Storage schema
 export interface StorageSchema {
   version: number;
@@ -155,6 +166,7 @@ export interface StorageSchema {
   presets: Record<string, Partial<ReaderSettings>>;
   positions: Record<string, ReadingPosition>;
   recentDocuments: RecentDocument[];
+  customThemes: CustomTheme[];
   onboardingCompleted: boolean;
   exitConfirmationDismissed: boolean;
 }
@@ -261,7 +273,7 @@ export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
     textColor: '#2a2a2a',
     linkColor: '#444444',
     selectionColor: '#c0c0c0',
-    highlightColor: '#b8b8b8',  // Noticeably darker than bg for clear highlight
+    highlightColor: '#fff3cd99',  // Warm yellow with transparency, same as light theme
   },
   highContrast: {
     backgroundColor: '#000000',

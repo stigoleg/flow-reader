@@ -1,4 +1,4 @@
-import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument } from '@/types';
+import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument, CustomTheme } from '@/types';
 import { DEFAULT_SETTINGS as defaultSettings } from '@/types';
 
 const STORAGE_VERSION = 1;
@@ -38,6 +38,7 @@ export async function getStorage(): Promise<StorageSchema> {
           presets: {},
           positions: {},
           recentDocuments: [],
+          customThemes: [],
           onboardingCompleted: false,
           exitConfirmationDismissed: false,
         };
@@ -60,6 +61,7 @@ export async function getStorage(): Promise<StorageSchema> {
           presets: (data.presets || {}) as Record<string, Partial<ReaderSettings>>,
           positions: (data.positions || {}) as Record<string, ReadingPosition>,
           recentDocuments: (data.recentDocuments || []) as RecentDocument[],
+          customThemes: (data.customThemes || []) as CustomTheme[],
           onboardingCompleted: (data.onboardingCompleted || false) as boolean,
           exitConfirmationDismissed: (data.exitConfirmationDismissed || false) as boolean,
         });
@@ -249,4 +251,54 @@ function getUrlKey(url: string): string {
   // Truncate to reasonable length (chrome.storage keys can be long, but let's be safe)
   // 200 chars is plenty for uniqueness while staying well under limits
   return `pos_${encoded.slice(0, 200)}`;
+}
+
+// =============================================================================
+// CUSTOM THEMES
+// =============================================================================
+
+export async function getCustomThemes(): Promise<CustomTheme[]> {
+  const storage = await getStorage();
+  return storage.customThemes;
+}
+
+export async function saveCustomTheme(theme: CustomTheme): Promise<void> {
+  const storage = await getStorage();
+  // Update existing or add new
+  const existingIndex = storage.customThemes.findIndex(t => t.name === theme.name);
+  let customThemes: CustomTheme[];
+  
+  if (existingIndex >= 0) {
+    customThemes = [...storage.customThemes];
+    customThemes[existingIndex] = theme;
+  } else {
+    customThemes = [...storage.customThemes, theme];
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ customThemes }, () => {
+      try {
+        checkLastError('saveCustomTheme');
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+}
+
+export async function deleteCustomTheme(name: string): Promise<void> {
+  const storage = await getStorage();
+  const customThemes = storage.customThemes.filter(t => t.name !== name);
+
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ customThemes }, () => {
+      try {
+        checkLastError('deleteCustomTheme');
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
 }

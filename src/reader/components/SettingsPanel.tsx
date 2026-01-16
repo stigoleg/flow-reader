@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useReaderStore } from '../store';
-import { THEME_PRESETS, type ThemePreset, type ReaderSettings } from '@/types';
+import { THEME_PRESETS, type ThemePreset, type ReaderSettings, type ThemeColors } from '@/types';
 import { getPresets, savePreset, deletePreset } from '@/lib/storage';
 import { useToast } from './Toast';
 import {
@@ -34,6 +34,24 @@ export default function SettingsPanel() {
       selectionColor: colors.selectionColor,
       highlightColor: colors.highlightColor,
     });
+  };
+
+  const applyCustomTheme = (colors: ThemeColors) => {
+    updateSettings({
+      backgroundColor: colors.backgroundColor,
+      textColor: colors.textColor,
+      linkColor: colors.linkColor,
+      selectionColor: colors.selectionColor,
+      highlightColor: colors.highlightColor,
+    });
+  };
+
+  const currentColors: ThemeColors = {
+    backgroundColor: settings.backgroundColor,
+    textColor: settings.textColor,
+    linkColor: settings.linkColor,
+    selectionColor: settings.selectionColor,
+    highlightColor: settings.highlightColor,
   };
 
   const handleSavePreset = async (name: string) => {
@@ -89,7 +107,11 @@ export default function SettingsPanel() {
           </button>
         </div>
 
-        <ThemeSection onApplyTheme={applyTheme} />
+        <ThemeSection 
+          currentColors={currentColors}
+          onApplyTheme={applyTheme} 
+          onApplyCustomTheme={applyCustomTheme}
+        />
         <PresetSection
           presets={presets}
           onSave={handleSavePreset}
