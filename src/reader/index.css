@@ -182,9 +182,19 @@ body {
   /* Default: no special styling, just marks the position */
 }
 
-/* Bold the ORP letter when enabled */
+/* Word part spans - ensure consistent rendering */
+.pacing-word-before,
+.pacing-word-after {
+  /* These spans ensure consistent DOM structure for all words */
+  /* No special styling needed - they just hold the text */
+}
+
+/* Bold the ORP letter when enabled - use synthetic bold to prevent layout shifts */
 .pacing-orp-bold {
-  font-weight: 700;
+  /* Use text-shadow instead of font-weight to prevent layout shifts */
+  /* This keeps the letter width constant while still appearing bold */
+  font-weight: inherit;
+  text-shadow: 0.5px 0 0 currentColor;
   color: var(--reader-link);
 }
 
@@ -200,9 +210,12 @@ body {
 /* Sentence-level pacing */
 .pacing-sentence {
   display: inline;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
   border-radius: 3px;
-  padding: 2px 0;
+  /* Apply consistent padding to ALL sentences so layout doesn't shift */
+  /* This matches the approach used for word-level pacing */
+  padding: 2px 4px;
+  margin: 0 1px;
 }
 
 .pacing-sentence-active {
@@ -212,7 +225,7 @@ body {
 /* Sentence highlight styles */
 .pacing-sentence-active.pacing-style-background {
   background-color: var(--reader-highlight, rgba(255, 243, 205, 0.5));
-  box-shadow: 0 0 0 3px var(--reader-highlight, rgba(255, 243, 205, 0.5));
+  /* Removed box-shadow - padding is already applied to all sentences for consistency */
 }
 
 .pacing-sentence-active.pacing-style-underline {
@@ -237,9 +250,12 @@ body {
   opacity: 0.7;
 }
 
-/* Bionic text */
+/* Bionic text - use synthetic bold to prevent layout shifts */
 .bionic-bold {
-  font-weight: var(--bionic-weight, 700);
+  /* Use text-shadow instead of font-weight to create bold appearance without changing text width */
+  /* This prevents layout shifts when toggling bionic mode or changing intensity */
+  font-weight: inherit;
+  text-shadow: var(--bionic-text-shadow, 0.4px 0 0 currentColor);
 }
 
 /* RSVP display */

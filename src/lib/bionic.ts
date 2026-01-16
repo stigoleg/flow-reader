@@ -106,9 +106,26 @@ export function adaptiveBionicText(text: string, baseProportion: number = 0.4): 
 
 /**
  * Calculate font weight for bionic bold portion
+ * @deprecated Use bionicTextShadow instead to prevent layout shifts
  */
 export function bionicFontWeight(intensity: number): number {
   return Math.round(600 + intensity * 200);
+}
+
+/**
+ * Calculate text-shadow for synthetic bold effect
+ * This creates the appearance of bold text without changing the text width,
+ * which prevents layout shifts when toggling bionic mode or changing intensity
+ */
+export function bionicTextShadow(intensity: number): string {
+  // Scale from 0.2px to 0.6px based on intensity (0-1)
+  const shadowOffset = 0.2 + intensity * 0.4;
+  // Use a subtle double shadow for smoother appearance at higher intensities
+  if (intensity > 0.5) {
+    const secondOffset = shadowOffset * 0.5;
+    return `${shadowOffset}px 0 0 currentColor, ${secondOffset}px 0 0 currentColor`;
+  }
+  return `${shadowOffset}px 0 0 currentColor`;
 }
 
 /**

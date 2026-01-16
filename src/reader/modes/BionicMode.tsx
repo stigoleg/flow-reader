@@ -1,4 +1,4 @@
-import { bionicText, bionicFontWeight } from '@/lib/bionic';
+import { bionicText, bionicTextShadow } from '@/lib/bionic';
 
 interface BionicModeProps {
   text: string;
@@ -8,14 +8,16 @@ interface BionicModeProps {
 
 export default function BionicMode({ text, intensity, proportion }: BionicModeProps) {
   const words = bionicText(text, proportion);
-  const fontWeight = bionicFontWeight(intensity);
+  // Use text-shadow instead of font-weight to create bold appearance
+  // This prevents layout shifts when toggling bionic mode
+  const textShadow = bionicTextShadow(intensity);
 
   return (
     <>
       {words.map((word, index) => (
         <span key={index}>
           {word.bold && (
-            <span className="bionic-bold" style={{ fontWeight }}>
+            <span className="bionic-bold" style={{ textShadow }}>
               {word.bold}
             </span>
           )}

@@ -50,40 +50,43 @@ export default function PacingContent({
           }
 
           const space = idx < words.length - 1 ? ' ' : '';
+          
+          // Always calculate ORP for consistent DOM structure
           const orpIndex = findORP(word.text);
+          const beforeORP = word.text.slice(0, orpIndex);
+          const orpLetter = word.text[orpIndex] || '';
+          const afterORP = word.text.slice(orpIndex + 1);
+          
+          // Calculate ORP position for guide indicator
+          const orpPercent = word.text.length > 0 
+            ? ((orpIndex + 0.5) / word.text.length) * 100 
+            : 50;
 
           const handleClick = (e: React.MouseEvent) => {
             e.stopPropagation();
             onItemClick(globalIdx);
           };
 
-          if (isCurrent && (pacingShowGuide || pacingBoldFocusLetter)) {
-            const beforeORP = word.text.slice(0, orpIndex);
-            const orpLetter = word.text[orpIndex] || '';
-            const afterORP = word.text.slice(orpIndex + 1);
-            const orpPercent = word.text.length > 0 
-              ? ((orpIndex + 0.5) / word.text.length) * 100 
-              : 50;
+          // Determine if ORP letter should be styled
+          // Only apply bold styling when this word is current and pacingBoldFocusLetter is enabled
+          const orpLetterClass = isCurrent && pacingBoldFocusLetter 
+            ? 'pacing-orp-letter pacing-orp-bold' 
+            : 'pacing-orp-letter';
 
-            return (
-              <span
-                key={idx}
-                className={className}
-                style={{ '--orp-position': `${orpPercent}%` } as React.CSSProperties}
-                onClick={handleClick}
-              >
-                {beforeORP}
-                <span className={`pacing-orp-letter ${pacingBoldFocusLetter ? 'pacing-orp-bold' : ''}`}>
-                  {orpLetter}
-                </span>
-                {afterORP}{space}
-              </span>
-            );
-          }
-
+          // Always render with consistent 3-span structure to prevent layout shifts
+          // The structure is: beforeORP + orpLetter + afterORP
+          // This ensures DOM consistency whether word is active or not
           return (
-            <span key={idx} className={className} onClick={handleClick}>
-              {word.text}{space}
+            <span
+              key={idx}
+              className={className}
+              style={{ '--orp-position': `${orpPercent}%` } as React.CSSProperties}
+              onClick={handleClick}
+            >
+              <span className="pacing-word-before">{beforeORP}</span>
+              <span className={orpLetterClass}>{orpLetter}</span>
+              <span className="pacing-word-after">{afterORP}</span>
+              {space}
             </span>
           );
         })}
