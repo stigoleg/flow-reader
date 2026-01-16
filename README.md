@@ -2,11 +2,12 @@
 
 ![FlowReader Demo](docs/flowreader.png)
 
-A Chrome extension for distraction-free reading. Extracts article content from web pages, PDFs, and DOCX files into a clean reader view with optional pacing aids.
+A Chrome extension for distraction-free reading. Extracts content from web pages, PDFs, DOCX, EPUB, and MOBI files into a clean reader view with optional pacing aids.
 
 ## Features
 
-- **Reader Mode** - Strips clutter from any webpage, PDF, or DOCX
+- **Reader Mode** - Strips clutter from any webpage, PDF, DOCX, or ebook
+- **Ebook Support** - Read EPUB and MOBI/AZW files with chapter navigation
 - **Pacing Mode** - Highlights words/sentences/blocks at your target WPM
 - **Bionic Reading** - Bolds word beginnings to guide eye movement
 - **RSVP Mode** - Rapid serial visual presentation (one word at a time)
@@ -32,6 +33,18 @@ npm test          # Run tests
 npm run typecheck # Type check
 ```
 
+## Supported Formats
+
+| Format | Notes |
+|--------|-------|
+| Web pages | Uses Mozilla Readability |
+| PDF | Text extraction via pdf.js |
+| DOCX | Via mammoth.js |
+| EPUB | EPUB2 and EPUB3, with TOC |
+| MOBI/AZW/AZW3 | Basic support, no DRM |
+
+DRM-protected ebooks are detected and rejected with a clear error message.
+
 ## Reading Modes
 
 ### Pacing
@@ -54,6 +67,21 @@ Bolds the first portion of each word. The eye naturally fixates on word beginnin
 
 Displays words one at a time in a fixed position. Eliminates eye movement entirely. Best for speed reading practice.
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Space | Play/pause |
+| ←/→ or J/K | Previous/next word/sentence/block |
+| ↑/↓ | Adjust WPM |
+| M | Cycle reading mode |
+| B | Toggle bionic mode |
+| G | Cycle granularity |
+| [ / ] | Previous/next chapter (books) |
+| T | Toggle table of contents (books) |
+| ? | Show help |
+| Esc | Close overlay/reader |
+
 ## Architecture
 
 ```
@@ -70,15 +98,15 @@ src/
     bionic.ts           # Bionic text processing
     tokenizer.ts        # Word/sentence tokenization
     readability.ts      # Flesch-Kincaid, Gunning Fog, SMOG
-    syllables.ts        # Syllable counting (EN/NO)
-    word-frequency.ts   # Word complexity scoring
     pdf-handler.ts      # PDF extraction (pdf.js)
     docx-handler.ts     # DOCX extraction (mammoth.js)
+    epub-handler.ts     # EPUB extraction (fflate)
+    mobi-handler.ts     # MOBI/AZW extraction
 ```
 
 ## Content Pipeline
 
-1. **Extract** - Mozilla Readability pulls article content
+1. **Extract** - Mozilla Readability pulls article content (or file-specific parser)
 2. **Clean** - Removes leftover nav, promos, share buttons, summary boxes
 3. **Normalize** - Converts to minimal HTML (p, h2, h3, ul, ol, blockquote, pre, code)
 4. **Parse** - Converts HTML to block model for rendering

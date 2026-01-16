@@ -3,15 +3,67 @@ export interface FlowDocument {
   metadata: DocumentMetadata;
   blocks: Block[];
   plainText: string;
+  /** Book structure for multi-chapter documents (epub, mobi) */
+  book?: BookStructure;
 }
 
 export interface DocumentMetadata {
   title: string;
   author?: string;
   publishedAt?: string;
-  source: 'web' | 'paste' | 'pdf' | 'docx' | 'selection';
+  source: 'web' | 'paste' | 'pdf' | 'docx' | 'selection' | 'epub' | 'mobi';
   url?: string;
   createdAt: number;
+  /** Language code (e.g., 'en', 'no') */
+  language?: string;
+  /** Publisher name */
+  publisher?: string;
+  /** Original filename for imported files */
+  fileName?: string;
+  /** File size in bytes */
+  fileSize?: number;
+  /** SHA-256 hash of file for stable position keying */
+  fileHash?: string;
+}
+
+// =============================================================================
+// BOOK STRUCTURE (for EPUB and MOBI)
+// =============================================================================
+
+/** Book structure for multi-chapter documents */
+export interface BookStructure {
+  /** Table of contents */
+  toc: TocItem[];
+  /** All chapters in reading order */
+  chapters: Chapter[];
+}
+
+/** Table of contents entry */
+export interface TocItem {
+  /** Unique ID for this TOC entry */
+  id: string;
+  /** Display label */
+  label: string;
+  /** Index into chapters array */
+  chapterIndex: number;
+  /** Nesting depth (0 = top level) */
+  depth: number;
+  /** Child items for hierarchical TOC */
+  children?: TocItem[];
+}
+
+/** A single chapter in a book */
+export interface Chapter {
+  /** Unique ID for this chapter */
+  id: string;
+  /** Chapter title (from TOC or first heading) */
+  title: string;
+  /** Content blocks */
+  blocks: Block[];
+  /** Plain text content for search/stats */
+  plainText: string;
+  /** Word count for progress calculation */
+  wordCount: number;
 }
 
 export type Block =
@@ -65,6 +117,8 @@ export interface ReadingPosition {
   rsvpIndex?: number;
   activeMode?: ReadingMode;
   accumulatedReadingTime?: number;  // Total ms spent reading
+  /** Chapter index for book documents */
+  chapterIndex?: number;
 }
 
 // Settings types

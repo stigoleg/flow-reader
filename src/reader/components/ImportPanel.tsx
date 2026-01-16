@@ -1,10 +1,29 @@
 import { useState, useRef, useEffect } from 'react';
 import { extractFromPdf } from '@/lib/pdf-handler';
 import { extractFromDocx } from '@/lib/docx-handler';
+import { extractFromEpub, EpubExtractionError } from '@/lib/epub-handler';
+import { extractFromMobi, MobiExtractionError } from '@/lib/mobi-handler';
 import { extractFromPaste } from '@/lib/extraction';
 import { getRecentDocuments } from '@/lib/storage';
 import { useReaderStore } from '../store';
 import type { RecentDocument } from '@/types';
+
+// Supported file extensions
+const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.epub', '.mobi', '.azw', '.azw3'];
+
+function isSupportedFile(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return SUPPORTED_EXTENSIONS.some(ext => lower.endsWith(ext));
+}
+
+function getFileType(filename: string): 'pdf' | 'docx' | 'epub' | 'mobi' | null {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'pdf';
+  if (lower.endsWith('.docx')) return 'docx';
+  if (lower.endsWith('.epub')) return 'epub';
+  if (lower.endsWith('.mobi') || lower.endsWith('.azw') || lower.endsWith('.azw3')) return 'mobi';
+  return null;
+}
 
 interface ImportPanelProps {
   isOpen: boolean;
@@ -34,20 +53,39 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
     setImportError(null);
 
     try {
+      const fileType = getFileType(file.name);
       let doc;
 
-      if (file.name.endsWith('.pdf')) {
-        doc = await extractFromPdf(file);
-      } else if (file.name.endsWith('.docx')) {
-        doc = await extractFromDocx(file);
-      } else {
-        throw new Error('Unsupported file type. Please use PDF or DOCX files.');
+      switch (fileType) {
+        case 'pdf':
+          doc = await extractFromPdf(file);
+          break;
+        case 'docx':
+          doc = await extractFromDocx(file);
+          break;
+        case 'epub':
+          doc = await extractFromEpub(file);
+          break;
+        case 'mobi':
+          doc = await extractFromMobi(file);
+          break;
+        default:
+          throw new Error('Unsupported file type. Please use PDF, DOCX, EPUB, or MOBI files.');
       }
 
       setDocument(doc);
       onClose();
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Failed to import file');
+      // Handle specific error types with better messages
+      if (err instanceof EpubExtractionError || err instanceof MobiExtractionError) {
+        if (err.errorType === 'drm-protected') {
+          setImportError('This file is DRM-protected. FlowReader only supports DRM-free e-books. Please use a DRM-free version of this book.');
+        } else {
+          setImportError(err.message);
+        }
+      } else {
+        setImportError(err instanceof Error ? err.message : 'Failed to import file');
+      }
     } finally {
       setIsImporting(false);
       // Reset input
@@ -70,8 +108,8 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
     if (!file) return;
 
     // Check if it's a supported file type
-    if (!file.name.endsWith('.pdf') && !file.name.endsWith('.docx')) {
-      setImportError('Unsupported file type. Please use PDF or DOCX files.');
+    if (!isSupportedFile(file.name)) {
+      setImportError('Unsupported file type. Please use PDF, DOCX, EPUB, or MOBI files.');
       return;
     }
 
@@ -79,16 +117,39 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
     setImportError(null);
 
     try {
+      const fileType = getFileType(file.name);
       let doc;
-      if (file.name.endsWith('.pdf')) {
-        doc = await extractFromPdf(file);
-      } else {
-        doc = await extractFromDocx(file);
+
+      switch (fileType) {
+        case 'pdf':
+          doc = await extractFromPdf(file);
+          break;
+        case 'docx':
+          doc = await extractFromDocx(file);
+          break;
+        case 'epub':
+          doc = await extractFromEpub(file);
+          break;
+        case 'mobi':
+          doc = await extractFromMobi(file);
+          break;
+        default:
+          throw new Error('Unsupported file type');
       }
+
       setDocument(doc);
       onClose();
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : 'Failed to import file');
+      // Handle specific error types with better messages
+      if (err instanceof EpubExtractionError || err instanceof MobiExtractionError) {
+        if (err.errorType === 'drm-protected') {
+          setImportError('This file is DRM-protected. FlowReader only supports DRM-free e-books.');
+        } else {
+          setImportError(err.message);
+        }
+      } else {
+        setImportError(err instanceof Error ? err.message : 'Failed to import file');
+      }
     } finally {
       setIsImporting(false);
     }
@@ -215,7 +276,7 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.docx"
+                accept=".pdf,.docx,.epub,.mobi,.azw,.azw3"
                 onChange={handleFileSelect}
                 className="hidden"
                 aria-label="Select file to upload"
@@ -231,12 +292,12 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                   <p className="font-medium">Click to upload or drag and drop</p>
-                  <p className="text-sm opacity-60 mt-1">PDF or DOCX files</p>
+                  <p className="text-sm opacity-60 mt-1">PDF, DOCX, EPUB, or MOBI files</p>
                 </>
               )}
             </div>
             <p className="text-xs opacity-50 mt-2">
-              Note: Scanned PDFs without a text layer cannot be imported. OCR is not supported.
+              Scanned PDFs without a text layer and DRM-protected e-books are not supported.
             </p>
           </div>
 
@@ -308,6 +369,11 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
                         ) : doc.source === 'pdf' ? (
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                        ) : doc.source === 'epub' || doc.source === 'mobi' ? (
+                          // Book icon for e-books
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                           </svg>
                         ) : (
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

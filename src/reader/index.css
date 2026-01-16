@@ -398,6 +398,122 @@ input[type="checkbox"] {
   margin-bottom: 1.5rem;
 }
 
+/* TOC panel - slides in from left */
+.toc-panel {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  background: var(--reader-bg);
+  border-right: none;
+  padding: 1rem;
+  padding-bottom: 2rem;
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.2s ease;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  .toc-panel {
+    width: 320px;
+    border-right: 1px solid rgba(128, 128, 128, 0.2);
+    padding: 1.5rem;
+  }
+}
+
+.toc-panel.open {
+  transform: translateX(0);
+}
+
+.toc-book-info {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.toc-book-title {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.toc-book-author {
+  opacity: 0.7;
+  font-size: 0.875rem;
+  margin-bottom: 0.25rem;
+}
+
+.toc-book-stats {
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.toc-list {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 -0.5rem;
+}
+
+.toc-entry {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  transition: background-color 0.1s;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+.toc-entry:hover {
+  background: rgba(128, 128, 128, 0.1);
+}
+
+.toc-entry.active {
+  background: var(--reader-highlight);
+  font-weight: 500;
+}
+
+.toc-entry-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toc-progress {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.toc-progress-label {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  margin-bottom: 0.5rem;
+}
+
+.toc-progress-bar {
+  height: 4px;
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.toc-progress-fill {
+  height: 100%;
+  background: var(--reader-link);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
 /* Progress bar */
 .progress-bar {
   position: fixed;
@@ -445,6 +561,7 @@ input[type="checkbox"] {
   .pacing-highlight,
   .pacing-ruler,
   .settings-panel,
+  .toc-panel,
   .progress-bar-fill {
     transition: none;
   }

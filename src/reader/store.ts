@@ -20,6 +20,10 @@ interface ReaderState {
   // RSVP mode position tracking
   currentRsvpIndex: number;
   rsvpTokenCount: number;
+  
+  // Chapter navigation (for books)
+  currentChapterIndex: number;
+  isTocOpen: boolean;
 
   // Playback
   isPlaying: boolean;
@@ -88,6 +92,13 @@ interface ReaderState {
   setRsvpTokenCount: (count: number) => void;
   rsvpAdvance: () => void;
   rsvpRetreat: () => void;
+  
+  // Chapter navigation (for books)
+  setChapter: (chapterIndex: number) => void;
+  nextChapter: () => void;
+  prevChapter: () => void;
+  setTocOpen: (open: boolean) => void;
+  toggleToc: () => void;
 }
 
 export const useReaderStore = create<ReaderState>((set, get) => ({
@@ -101,6 +112,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   currentWordIndex: 0,
   currentRsvpIndex: 0,
   rsvpTokenCount: 0,
+  currentChapterIndex: 0,
+  isTocOpen: false,
   isPlaying: false,
   currentWPM: DEFAULT_SETTINGS.baseWPM,
   settings: DEFAULT_SETTINGS,
@@ -116,10 +129,22 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   // Actions
   setDocument: (doc) => {
+    // For books, ensure blocks point to the first chapter
+    let finalDoc = doc;
+    if (doc?.book && doc.book.chapters.length > 0) {
+      const firstChapter = doc.book.chapters[0];
+      finalDoc = {
+        ...doc,
+        blocks: firstChapter.blocks,
+        plainText: firstChapter.plainText,
+      };
+    }
+    
     set({ 
-      document: doc, 
+      document: finalDoc, 
       isLoading: false,
       currentBlockIndex: 0,
+      currentChapterIndex: 0,
       currentSentenceIndex: 0,
       currentWordIndex: 0,
       currentRsvpIndex: 0,
@@ -295,14 +320,14 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   // Position persistence
   saveCurrentPosition: async () => {
-    const { document, currentBlockIndex, currentCharOffset, currentWordIndex, currentSentenceIndex, currentRsvpIndex, settings, accumulatedReadingTime, playStartTime } = get();
-    if (!document?.metadata.url) return;
+    const { document, currentBlockIndex, currentCharOffset, currentWordIndex, currentSentenceIndex, currentRsvpIndex, currentChapterIndex, settings, accumulatedReadingTime, playStartTime } = get();
+    if (!document) return;
     
     // Calculate total reading time including current session if playing
     const sessionTime = playStartTime ? Date.now() - playStartTime : 0;
     const totalReadingTime = accumulatedReadingTime + sessionTime;
     
-    await savePosition(document.metadata.url, {
+    await savePosition(document.metadata, {
       blockIndex: currentBlockIndex,
       charOffset: currentCharOffset,
       timestamp: Date.now(),
@@ -310,26 +335,35 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       wordIndex: currentWordIndex,
       sentenceIndex: currentSentenceIndex,
       rsvpIndex: currentRsvpIndex,
+      chapterIndex: currentChapterIndex,
       activeMode: settings.activeMode,
       accumulatedReadingTime: totalReadingTime,
     });
   },
 
   restorePosition: async () => {
-    const { document } = get();
-    if (!document?.metadata.url) return;
+    const { document, setChapter } = get();
+    if (!document) return;
     
-    const position = await getPosition(document.metadata.url);
-    if (position && position.blockIndex < document.blocks.length) {
-      set({
-        currentBlockIndex: position.blockIndex,
-        currentCharOffset: position.charOffset,
-        // Restore extended position fields (defaults for backwards compatibility)
-        currentSentenceIndex: position.sentenceIndex ?? 0,
-        currentWordIndex: position.wordIndex ?? 0,
-        currentRsvpIndex: position.rsvpIndex ?? 0,
-        accumulatedReadingTime: position.accumulatedReadingTime ?? 0,
-      });
+    const position = await getPosition(document.metadata);
+    if (position) {
+      // Restore chapter first if this is a book
+      if (document.book && position.chapterIndex !== undefined && position.chapterIndex > 0) {
+        setChapter(position.chapterIndex);
+      }
+      
+      // Then restore block position within the chapter
+      if (position.blockIndex < document.blocks.length) {
+        set({
+          currentBlockIndex: position.blockIndex,
+          currentCharOffset: position.charOffset,
+          // Restore extended position fields (defaults for backwards compatibility)
+          currentSentenceIndex: position.sentenceIndex ?? 0,
+          currentWordIndex: position.wordIndex ?? 0,
+          currentRsvpIndex: position.rsvpIndex ?? 0,
+          accumulatedReadingTime: position.accumulatedReadingTime ?? 0,
+        });
+      }
     }
   },
 
@@ -410,6 +444,55 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       set({ currentRsvpIndex: currentRsvpIndex - 1 });
     }
   },
+
+  // Chapter navigation (for books)
+  setChapter: (chapterIndex: number) => {
+    const { document, saveCurrentPosition } = get();
+    if (!document?.book) return;
+    
+    const chapters = document.book.chapters;
+    if (chapterIndex < 0 || chapterIndex >= chapters.length) return;
+    
+    // Save position before switching
+    saveCurrentPosition();
+    
+    // Update document blocks to show the new chapter's content
+    const chapter = chapters[chapterIndex];
+    set({
+      currentChapterIndex: chapterIndex,
+      currentBlockIndex: 0,
+      currentCharOffset: 0,
+      currentSentenceIndex: 0,
+      currentWordIndex: 0,
+      currentRsvpIndex: 0,
+      // Update the document's blocks to the current chapter
+      document: {
+        ...document,
+        blocks: chapter.blocks,
+        plainText: chapter.plainText,
+      },
+    });
+  },
+
+  nextChapter: () => {
+    const { document, currentChapterIndex, setChapter } = get();
+    if (!document?.book) return;
+    
+    if (currentChapterIndex < document.book.chapters.length - 1) {
+      setChapter(currentChapterIndex + 1);
+    }
+  },
+
+  prevChapter: () => {
+    const { currentChapterIndex, setChapter } = get();
+    if (currentChapterIndex > 0) {
+      setChapter(currentChapterIndex - 1);
+    }
+  },
+
+  setTocOpen: (open: boolean) => set({ isTocOpen: open }),
+  
+  toggleToc: () => set((state) => ({ isTocOpen: !state.isTocOpen })),
 }));
 
 // =============================================================================
@@ -433,3 +516,7 @@ export const selectIsImportOpen = (state: ReaderState) => state.isImportOpen;
 export const selectIsHelpOpen = (state: ReaderState) => state.isHelpOpen;
 export const selectIsCompletionOpen = (state: ReaderState) => state.isCompletionOpen;
 export const selectIsExitConfirmOpen = (state: ReaderState) => state.isExitConfirmOpen;
+
+/** Select chapter navigation state (for book documents) */
+export const selectCurrentChapterIndex = (state: ReaderState) => state.currentChapterIndex;
+export const selectIsTocOpen = (state: ReaderState) => state.isTocOpen;

@@ -21,6 +21,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "fflate": "^0.8.2",
     "mammoth": "^1.11.0",
     "pdfjs-dist": "^5.4.530",
     "react": "^19.2.3",

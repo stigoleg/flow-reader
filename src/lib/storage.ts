@@ -1,4 +1,4 @@
-import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument, CustomTheme, FlowDocument } from '@/types';
+import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument, CustomTheme, FlowDocument, DocumentMetadata } from '@/types';
 import { DEFAULT_SETTINGS as defaultSettings } from '@/types';
 
 const STORAGE_VERSION = 1;
@@ -94,9 +94,11 @@ export async function getSettings(): Promise<ReaderSettings> {
   return storage.settings;
 }
 
-export async function savePosition(url: string, position: ReadingPosition): Promise<void> {
+export async function savePosition(urlOrMetadata: string | DocumentMetadata, position: ReadingPosition): Promise<void> {
   const storage = await getStorage();
-  const key = getUrlKey(url);
+  const key = typeof urlOrMetadata === 'string' 
+    ? getUrlKey(urlOrMetadata) 
+    : getUrlKey(getDocumentKey(urlOrMetadata));
   const positions = { ...storage.positions, [key]: position };
 
   return new Promise((resolve, reject) => {
@@ -111,9 +113,11 @@ export async function savePosition(url: string, position: ReadingPosition): Prom
   });
 }
 
-export async function getPosition(url: string): Promise<ReadingPosition | null> {
+export async function getPosition(urlOrMetadata: string | DocumentMetadata): Promise<ReadingPosition | null> {
   const storage = await getStorage();
-  const key = getUrlKey(url);
+  const key = typeof urlOrMetadata === 'string' 
+    ? getUrlKey(urlOrMetadata) 
+    : getUrlKey(getDocumentKey(urlOrMetadata));
   return storage.positions[key] || null;
 }
 
@@ -251,6 +255,24 @@ function getUrlKey(url: string): string {
   // Truncate to reasonable length (chrome.storage keys can be long, but let's be safe)
   // 200 chars is plenty for uniqueness while staying well under limits
   return `pos_${encoded.slice(0, 200)}`;
+}
+
+/**
+ * Generate a stable storage key for a document.
+ * - For web/selection sources: uses the URL
+ * - For file-based sources (epub, mobi, pdf, docx): uses source + file hash
+ * 
+ * This ensures that re-importing the same file resumes from the saved position,
+ * even if the file is opened from a different location.
+ */
+export function getDocumentKey(metadata: DocumentMetadata): string {
+  // File-based sources use hash for stable identification
+  if (metadata.fileHash && (metadata.source === 'epub' || metadata.source === 'mobi' || metadata.source === 'pdf' || metadata.source === 'docx')) {
+    return `file_${metadata.source}_${metadata.fileHash}`;
+  }
+  
+  // Web/selection sources use URL
+  return metadata.url || `doc_${metadata.createdAt}`;
 }
 
 // =============================================================================

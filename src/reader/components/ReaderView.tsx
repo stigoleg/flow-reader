@@ -44,6 +44,12 @@ export default function ReaderView() {
     // RSVP navigation
     rsvpAdvance,
     rsvpRetreat,
+    // Chapter navigation (for books)
+    nextChapter,
+    prevChapter,
+    isTocOpen,
+    setTocOpen,
+    toggleToc,
     // Exit confirmation
     isExitConfirmOpen,
     setExitConfirmOpen,
@@ -67,6 +73,9 @@ export default function ReaderView() {
     updateSettings,
     rsvpAdvance,
     rsvpRetreat,
+    nextChapter,
+    prevChapter,
+    toggleToc,
     overlays: {
       isSettingsOpen,
       closeSettings: toggleSettings,
@@ -75,6 +84,8 @@ export default function ReaderView() {
       isHelpOpen,
       openHelp: () => setHelpOpen(true),
       closeHelp: () => setHelpOpen(false),
+      isTocOpen,
+      closeToc: () => setTocOpen(false),
       closeReader,
     },
   });

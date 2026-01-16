@@ -16,6 +16,10 @@ interface KeyboardShortcutsOptions {
   // RSVP navigation
   rsvpAdvance?: () => void;
   rsvpRetreat?: () => void;
+  // Chapter navigation (for books)
+  nextChapter?: () => void;
+  prevChapter?: () => void;
+  toggleToc?: () => void;
   // Overlay state for Escape key handling
   overlays?: {
     isSettingsOpen: boolean;
@@ -25,6 +29,8 @@ interface KeyboardShortcutsOptions {
     isHelpOpen: boolean;
     openHelp: () => void;
     closeHelp: () => void;
+    isTocOpen?: boolean;
+    closeToc?: () => void;
     closeReader: () => void;
   };
 }
@@ -87,7 +93,7 @@ const ACTIONS: Record<string, ActionHandler> = {
     }
   },
   'Escape': (_, { overlays }) => {
-    // Close overlays in priority order: help > import > settings
+    // Close overlays in priority order: help > import > settings > toc
     // Only close reader if no overlays are open
     if (overlays?.isHelpOpen) {
       overlays.closeHelp();
@@ -95,6 +101,8 @@ const ACTIONS: Record<string, ActionHandler> = {
       overlays.closeImport();
     } else if (overlays?.isSettingsOpen) {
       overlays.closeSettings();
+    } else if (overlays?.isTocOpen) {
+      overlays.closeToc?.();
     } else {
       overlays?.closeReader();
     }
@@ -107,6 +115,11 @@ const ACTIONS: Record<string, ActionHandler> = {
       overlays?.openHelp();
     }
   },
+  // Chapter navigation
+  '[': (_, { prevChapter }) => prevChapter?.(),
+  ']': (_, { nextChapter }) => nextChapter?.(),
+  't': (_, { toggleToc }) => toggleToc?.(),
+  'T': (_, { toggleToc }) => toggleToc?.(),
 };
 
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {

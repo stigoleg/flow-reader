@@ -13,12 +13,16 @@ export default function TopBar({ onImportClick }: TopBarProps) {
     isPlaying,
     currentWPM,
     currentBlockIndex,
+    currentChapterIndex,
     settings,
     togglePlay,
     setWPM,
     adjustWPM,
     setMode,
     toggleSettings,
+    toggleToc,
+    nextChapter,
+    prevChapter,
   } = useReaderStore();
 
   const handleExit = () => {
@@ -26,6 +30,11 @@ export default function TopBar({ onImportClick }: TopBarProps) {
   };
 
   const isBionic = settings.activeMode === 'bionic';
+  const isBook = !!document?.book;
+  const chapters = document?.book?.chapters;
+  const canGoPrev = isBook && currentChapterIndex > 0;
+  const canGoNext = isBook && chapters && currentChapterIndex < chapters.length - 1;
+  const currentChapterTitle = chapters?.[currentChapterIndex]?.title;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-40 px-2 pt-2 md:px-4 md:pt-3" role="banner">
@@ -38,11 +47,61 @@ export default function TopBar({ onImportClick }: TopBarProps) {
       >
         {/* Row 1: Main controls */}
         <div className="flex items-center justify-between gap-2 md:gap-4">
-          {/* Left section: Title (hidden on mobile) */}
-          <div className="hidden md:block flex-1 min-w-0">
-            <h1 className="text-sm font-medium truncate opacity-80">
-              {document?.metadata.title || 'FlowReader'}
-            </h1>
+          {/* Left section: Title and chapter nav */}
+          <div className="hidden md:flex items-center gap-2 flex-1 min-w-0">
+            {isBook ? (
+              <>
+                {/* TOC Button */}
+                <button
+                  onClick={toggleToc}
+                  className="flex items-center justify-center w-8 h-8 rounded opacity-60 hover:opacity-100"
+                  title="Table of Contents (T)"
+                  aria-label="Open table of contents"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+                  </svg>
+                </button>
+                
+                {/* Chapter navigation */}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={prevChapter}
+                    disabled={!canGoPrev}
+                    className="w-6 h-6 flex items-center justify-center rounded opacity-60 hover:opacity-100 disabled:opacity-20"
+                    title="Previous Chapter ([)"
+                    aria-label="Previous chapter"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <span className="text-xs opacity-60 min-w-[3rem] text-center">
+                    {currentChapterIndex + 1}/{chapters?.length || 0}
+                  </span>
+                  <button
+                    onClick={nextChapter}
+                    disabled={!canGoNext}
+                    className="w-6 h-6 flex items-center justify-center rounded opacity-60 hover:opacity-100 disabled:opacity-20"
+                    title="Next Chapter (])"
+                    aria-label="Next chapter"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+                
+                {/* Chapter title */}
+                <h1 className="text-sm font-medium truncate opacity-80 flex-1">
+                  {currentChapterTitle || document?.metadata.title || 'FlowReader'}
+                </h1>
+              </>
+            ) : (
+              <h1 className="text-sm font-medium truncate opacity-80">
+                {document?.metadata.title || 'FlowReader'}
+              </h1>
+            )}
           </div>
 
           {/* Mode Selector */}
@@ -80,6 +139,8 @@ export default function TopBar({ onImportClick }: TopBarProps) {
                 currentBlockIndex={currentBlockIndex}
                 blocks={document.blocks}
                 wpm={currentWPM}
+                book={document.book}
+                currentChapterIndex={currentChapterIndex}
               />
             )}
           </div>
@@ -165,7 +226,49 @@ export default function TopBar({ onImportClick }: TopBarProps) {
           </div>
         </div>
 
-        {/* Row 2: Speed Control - mobile only, hidden in bionic mode */}
+        {/* Row 2: Chapter navigation - mobile only, for books */}
+        {isBook && (
+          <div className="flex md:hidden items-center justify-between gap-2 mt-2 pt-2 border-t border-current/10">
+            <button
+              onClick={toggleToc}
+              className="flex items-center gap-1 px-2 py-1 rounded bg-black/5 text-xs"
+              aria-label="Open table of contents"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h7" />
+              </svg>
+              <span className="truncate max-w-[120px]">{currentChapterTitle || 'Contents'}</span>
+            </button>
+            
+            <div className="flex items-center gap-1">
+              <button
+                onClick={prevChapter}
+                disabled={!canGoPrev}
+                className="w-8 h-8 flex items-center justify-center rounded bg-black/5 disabled:opacity-20"
+                aria-label="Previous chapter"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <span className="text-xs opacity-60 min-w-[3rem] text-center">
+                {currentChapterIndex + 1}/{chapters?.length || 0}
+              </span>
+              <button
+                onClick={nextChapter}
+                disabled={!canGoNext}
+                className="w-8 h-8 flex items-center justify-center rounded bg-black/5 disabled:opacity-20"
+                aria-label="Next chapter"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Row 3: Speed Control - mobile only, hidden in bionic mode */}
         {!isBionic && (
           <div className="flex md:hidden items-center justify-center gap-3 mt-2 pt-2 border-t border-current/10">
             <WPMInput
@@ -179,6 +282,8 @@ export default function TopBar({ onImportClick }: TopBarProps) {
                 currentBlockIndex={currentBlockIndex}
                 blocks={document.blocks}
                 wpm={currentWPM}
+                book={document.book}
+                currentChapterIndex={currentChapterIndex}
               />
             )}
           </div>

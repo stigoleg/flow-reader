@@ -11,6 +11,7 @@ import {
 import TopBar from './components/TopBar';
 import ReaderView from './components/ReaderView';
 import SettingsPanel from './components/SettingsPanel';
+import TocPanel from './components/TocPanel';
 import ProgressBar from './components/ProgressBar';
 import ImportPanel from './components/ImportPanel';
 import HelpOverlay from './components/HelpOverlay';
@@ -168,6 +169,7 @@ export default function App() {
       <TopBar onImportClick={() => setImportOpen(true)} />
       <ReaderView />
       <SettingsPanel />
+      <TocPanel />
       <ImportPanel isOpen={isImportOpen} onClose={() => setImportOpen(false)} />
       <HelpOverlay isOpen={isHelpOpen} onClose={() => setHelpOpen(false)} />
       <CompletionOverlay 

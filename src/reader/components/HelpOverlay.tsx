@@ -16,6 +16,9 @@ const SHORTCUTS = [
   { keys: ['M'], description: 'Cycle reading mode' },
   { keys: ['B'], description: 'Toggle Bionic mode' },
   { keys: ['G'], description: 'Cycle granularity (Pacing mode)' },
+  { keys: ['['], description: 'Previous chapter (books)' },
+  { keys: [']'], description: 'Next chapter (books)' },
+  { keys: ['T'], description: 'Toggle table of contents (books)' },
   { keys: ['?'], description: 'Show this help' },
   { keys: ['Esc'], description: 'Close reader / overlay' },
 ];
