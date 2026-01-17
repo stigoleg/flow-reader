@@ -232,6 +232,8 @@ export interface StorageSchema {
   customThemes: CustomTheme[];
   onboardingCompleted: boolean;
   exitConfirmationDismissed: boolean;
+  /** Deleted items tombstones for sync - maps identifier to deletion timestamp */
+  deletedItems?: Record<string, number>;
 }
 
 export interface RecentDocument {

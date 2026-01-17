@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { useShallow } from 'zustand/shallow';
-import { useArchiveStore, selectFilteredItems } from './store';
+import { useArchiveStore, selectFilteredItems, selectSearchFilteredItems } from './store';
 import ArchiveHeader from './components/ArchiveHeader';
 import FilterChips from './components/FilterChips';
 import ArchiveList from './components/ArchiveList';
@@ -66,6 +66,12 @@ export default function Archive() {
     [items, searchQuery, activeFilter]
   );
   
+  // Get search-filtered items (for filter chip counts - filtered by search but not by type)
+  const searchFilteredItems = useMemo(
+    () => selectSearchFilteredItems({ items, searchQuery, activeFilter } as ReturnType<typeof useArchiveStore.getState>),
+    [items, searchQuery, activeFilter]
+  );
+  
   // Load items and settings on mount
   useEffect(() => {
     loadItems();
@@ -82,6 +88,22 @@ export default function Archive() {
       document.body.style.backgroundColor = loadedSettings.backgroundColor;
       document.body.style.color = loadedSettings.textColor;
     });
+  }, [loadItems]);
+  
+  // Listen for storage changes to refresh archive list
+  // This handles cases where items are added/updated from other contexts (reader, sync)
+  useEffect(() => {
+    const handleStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      if (areaName === 'local' && changes.archiveItems) {
+        loadItems();
+      }
+    };
+    
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange);
   }, [loadItems]);
   
   // Listen for focus search event (from shortcut when already on archive)
@@ -320,7 +342,7 @@ export default function Archive() {
         <FilterChips
           activeFilter={activeFilter}
           onFilterChange={setActiveFilter}
-          items={items}
+          items={searchFilteredItems}
           onClearHistory={() => setClearDialogOpen(true)}
         />
         

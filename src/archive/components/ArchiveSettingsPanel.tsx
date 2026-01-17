@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { THEME_PRESETS, type ThemePreset, type ReaderSettings, type ThemeColors } from '@/types';
 import { getPresets, savePreset, deletePreset, saveSettings } from '@/lib/storage';
 import { ThemeSection, PresetSection } from '@/reader/components/settings';
+import { SyncSettingsSection } from './SyncSettingsSection';
 
 interface ArchiveSettingsPanelProps {
   isOpen: boolean;
@@ -102,8 +103,8 @@ export default function ArchiveSettingsPanel({
         className={`settings-panel ${isOpen ? 'open' : ''}`}
         role="dialog"
         aria-label="Settings"
-        aria-modal="true"
-        aria-hidden={!isOpen}
+        aria-modal={isOpen}
+        inert={!isOpen ? true : undefined}
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold" id="settings-title">Settings</h2>
@@ -129,6 +130,7 @@ export default function ArchiveSettingsPanel({
           onLoad={handleLoadPreset}
           onDelete={handleDeletePreset}
         />
+        <SyncSettingsSection />
 
         {/* About section */}
         <div className="settings-group mt-8">

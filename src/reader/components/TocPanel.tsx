@@ -73,8 +73,8 @@ export default function TocPanel() {
         className={`toc-panel ${isTocOpen ? 'open' : ''}`}
         role="dialog"
         aria-label="Table of Contents"
-        aria-modal="true"
-        aria-hidden={!isTocOpen}
+        aria-modal={isTocOpen}
+        inert={!isTocOpen ? true : undefined}
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">Contents</h2>

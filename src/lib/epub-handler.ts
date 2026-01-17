@@ -216,7 +216,10 @@ async function findOpfPath(loader: ZipLoader): Promise<string> {
       return opfPath;
     }
   } catch (error) {
-    console.warn('[EPUB] Could not parse container.xml:', error);
+    // Non-standard EPUB - container.xml is missing, will try fallback
+    if (import.meta.env.DEV) {
+      console.warn('[EPUB] Could not parse container.xml:', error);
+    }
   }
   
   // Fallback: search for .opf file directly

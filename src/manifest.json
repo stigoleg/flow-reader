@@ -25,10 +25,17 @@
     "scripting",
     "storage",
     "contextMenus",
-    "tabs"
+    "tabs",
+    "alarms",
+    "identity"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://api.dropboxapi.com/*",
+    "https://content.dropboxapi.com/*",
+    "https://www.dropbox.com/*",
+    "https://login.microsoftonline.com/*",
+    "https://graph.microsoft.com/*"
   ],
   "commands": {
     "open-archive": {

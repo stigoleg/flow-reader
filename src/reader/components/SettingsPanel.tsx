@@ -91,8 +91,8 @@ export default function SettingsPanel() {
         className={`settings-panel ${isSettingsOpen ? 'open' : ''}`}
         role="dialog"
         aria-label="Settings"
-        aria-modal="true"
-        aria-hidden={!isSettingsOpen}
+        aria-modal={isSettingsOpen}
+        inert={!isSettingsOpen ? true : undefined}
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold" id="settings-title">Settings</h2>

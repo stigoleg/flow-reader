@@ -1,4 +1,6 @@
 import type { FlowDocument, MessageType } from '@/types';
+import { runMigrations, initializeDefaultStorage } from '@/lib/migrations';
+import { syncScheduler, setupSyncAlarmListener } from '@/lib/sync/sync-scheduler';
 
 /**
  * Service worker for FlowReader extension
@@ -8,8 +10,23 @@ import type { FlowDocument, MessageType } from '@/types';
 // Store extracted document temporarily for passing to reader page
 let pendingDocument: FlowDocument | null = null;
 
-// Create context menu on install
-chrome.runtime.onInstalled.addListener(() => {
+// Set up sync alarm listener
+setupSyncAlarmListener();
+
+// Initialize sync scheduler on service worker startup
+// This ensures sync works even after browser restart (not just install/update)
+(async () => {
+  try {
+    await syncScheduler.initialize();
+    console.log('FlowReader: Sync scheduler initialized on startup');
+  } catch (error) {
+    console.error('FlowReader: Failed to initialize sync scheduler on startup:', error);
+  }
+})();
+
+// Handle extension install and update events
+chrome.runtime.onInstalled.addListener(async (details) => {
+  // Create context menu on every install/update
   chrome.contextMenus.create({
     id: 'open-in-flowreader',
     title: 'Open in FlowReader',
@@ -26,6 +43,24 @@ chrome.runtime.onInstalled.addListener(() => {
       }
     }
   });
+
+  // Handle installation and updates
+  try {
+    if (details.reason === 'install') {
+      // First install: initialize with defaults
+      console.log('FlowReader: First install - initializing storage');
+      await initializeDefaultStorage();
+    } else if (details.reason === 'update') {
+      // Extension update: run migrations to update schema
+      console.log(`FlowReader: Updated from ${details.previousVersion} - running migrations`);
+      await runMigrations();
+    }
+    
+    // Initialize sync scheduler (for both install and update)
+    await syncScheduler.initialize();
+  } catch (error) {
+    console.error('FlowReader: Error during install/update handling:', error);
+  }
 });
 
 // Listen for context menu clicks
@@ -43,6 +78,7 @@ chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse
       if (message.document) {
         pendingDocument = message.document;
         openReaderPage();
+        sendResponse({ success: true });
       } else if (sender.tab?.id) {
         // If no document but sent from a content script, extract from that tab
         extractAndOpenReader(sender.tab.id).then(() => {
@@ -51,13 +87,15 @@ chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse
           sendResponse({ error: error.message });
         });
         return true; // Keep channel open for async response
+      } else {
+        sendResponse({ success: false, error: 'No document or tab' });
       }
-      break;
+      return false; // Synchronous response already sent
 
     case 'GET_PENDING_DOCUMENT':
       sendResponse(pendingDocument);
       pendingDocument = null; // Clear after retrieval
-      break;
+      return false; // Synchronous response
     
     case 'EXTRACT_FROM_URL':
       // Re-extract content from a URL (for reopening web documents)
@@ -89,9 +127,11 @@ chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse
         sendResponse({ error: error.message });
       });
       return true; // Keep channel open for async response
+    
+    default:
+      // Unknown message type - don't keep channel open
+      return false;
   }
-
-  return true;
 });
 
 // Listen for keyboard shortcut

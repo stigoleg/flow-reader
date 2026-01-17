@@ -1,7 +1,8 @@
 import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument, CustomTheme, FlowDocument, DocumentMetadata, ArchiveItem } from '@/types';
 import { DEFAULT_SETTINGS as defaultSettings } from '@/types';
+import { CURRENT_STORAGE_VERSION } from './migrations';
 
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = CURRENT_STORAGE_VERSION;
 const MAX_RECENT_DOCUMENTS = 20;
 
 /** Storage operation error */

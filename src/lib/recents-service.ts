@@ -6,6 +6,10 @@
  */
 
 import type { ArchiveItem, ArchiveItemType, ArchiveProgress, ReadingPosition, DocumentMetadata, RecentDocument, FlowDocument } from '@/types';
+import { CURRENT_STORAGE_VERSION } from './migrations';
+import { syncService } from './sync/sync-service';
+import { storageFacade } from './storage-facade';
+import { computeTextHash } from './file-utils';
 
 // =============================================================================
 // CONFIGURATION
@@ -20,8 +24,8 @@ export const MAX_PASTE_CONTENT_SIZE = 100_000;
 /** Debounce delay for storage writes (ms) */
 const DEBOUNCE_DELAY = 300;
 
-/** Current storage version */
-const STORAGE_VERSION = 2;
+/** Current storage version - use centralized constant */
+const STORAGE_VERSION = CURRENT_STORAGE_VERSION;
 
 // =============================================================================
 // TYPES
@@ -161,6 +165,188 @@ async function flushArchiveItems(items: ArchiveItem[]): Promise<void> {
 }
 
 // =============================================================================
+// DEDUPLICATION
+// =============================================================================
+
+/**
+ * Compare two positions and return true if posA is further in the document
+ */
+function isPositionFurther(
+  posA: ReadingPosition | undefined,
+  posB: ReadingPosition | undefined
+): boolean {
+  if (!posA) return false;
+  if (!posB) return true;
+  
+  const aChapter = posA.chapterIndex ?? 0;
+  const bChapter = posB.chapterIndex ?? 0;
+  
+  if (aChapter > bChapter) return true;
+  if (aChapter < bChapter) return false;
+  
+  return posA.blockIndex > posB.blockIndex;
+}
+
+/**
+ * Merge two archive items, keeping the best data from each.
+ * - Uses furthest reading position
+ * - Uses highest progress percentage
+ * - Prefers newer metadata
+ * - Keeps the ID from the item with furthest progress
+ */
+function mergeArchiveItemPair(
+  item1: ArchiveItem,
+  item2: ArchiveItem
+): ArchiveItem {
+  const item1Further = isPositionFurther(item1.lastPosition, item2.lastPosition);
+  const item2Further = isPositionFurther(item2.lastPosition, item1.lastPosition);
+  
+  const item1Percent = item1.progress?.percent ?? 0;
+  const item2Percent = item2.progress?.percent ?? 0;
+  
+  let primary: ArchiveItem;
+  let secondary: ArchiveItem;
+  
+  if (item1Further || (!item2Further && item1Percent >= item2Percent)) {
+    primary = item1;
+    secondary = item2;
+  } else {
+    primary = item2;
+    secondary = item1;
+  }
+  
+  const newerMetadata = primary.lastOpenedAt >= secondary.lastOpenedAt ? primary : secondary;
+  
+  // Get the better position
+  const mergedPosition = item1Further ? item1.lastPosition 
+    : item2Further ? item2.lastPosition 
+    : (item1.lastPosition?.timestamp ?? 0) >= (item2.lastPosition?.timestamp ?? 0) ? item1.lastPosition : item2.lastPosition;
+  
+  // Get the better progress
+  const mergedProgress = item1Percent >= item2Percent ? item1.progress : item2.progress;
+  
+  return {
+    ...newerMetadata,
+    id: primary.id,
+    createdAt: Math.min(primary.createdAt, secondary.createdAt),
+    lastPosition: mergedPosition,
+    progress: mergedProgress,
+    fileHash: primary.fileHash || secondary.fileHash,
+    url: primary.url || secondary.url,
+    // Prefer the cached document that exists
+    cachedDocument: primary.cachedDocument || secondary.cachedDocument,
+    pasteContent: primary.pasteContent || secondary.pasteContent,
+  };
+}
+
+/**
+ * Deduplicate archive items by fileHash and URL.
+ * Returns a new array with duplicates merged (furthest progress wins).
+ */
+function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
+  const byFileHash = new Map<string, ArchiveItem[]>();
+  const byNormalizedUrl = new Map<string, ArchiveItem[]>();
+  
+  // Build indexes
+  for (const item of items) {
+    if (item.fileHash) {
+      const existing = byFileHash.get(item.fileHash) || [];
+      existing.push(item);
+      byFileHash.set(item.fileHash, existing);
+    }
+    
+    if (item.url) {
+      const normalizedItemUrl = normalizeUrl(item.url);
+      const existing = byNormalizedUrl.get(normalizedItemUrl) || [];
+      existing.push(item);
+      byNormalizedUrl.set(normalizedItemUrl, existing);
+    }
+  }
+  
+  const processedIds = new Set<string>();
+  const merged = new Map<string, ArchiveItem>();
+  
+  // First pass: merge by fileHash
+  for (const [, duplicates] of byFileHash) {
+    if (duplicates.length === 1) {
+      if (!processedIds.has(duplicates[0].id)) {
+        merged.set(duplicates[0].id, duplicates[0]);
+        processedIds.add(duplicates[0].id);
+      }
+    } else {
+      let mergedItem = duplicates[0];
+      for (let i = 1; i < duplicates.length; i++) {
+        console.log(`Deduplicating: "${duplicates[i].title}" (same fileHash as "${mergedItem.title}")`);
+        mergedItem = mergeArchiveItemPair(mergedItem, duplicates[i]);
+        processedIds.add(duplicates[i].id);
+      }
+      
+      for (const item of duplicates) {
+        merged.delete(item.id);
+      }
+      merged.set(mergedItem.id, mergedItem);
+      processedIds.add(mergedItem.id);
+    }
+  }
+  
+  // Second pass: merge by URL
+  for (const [, duplicates] of byNormalizedUrl) {
+    const unprocessed = duplicates.filter(item => !processedIds.has(item.id));
+    
+    if (unprocessed.length === 0) continue;
+    
+    if (unprocessed.length === 1) {
+      merged.set(unprocessed[0].id, unprocessed[0]);
+      processedIds.add(unprocessed[0].id);
+    } else {
+      let mergedItem = unprocessed[0];
+      for (let i = 1; i < unprocessed.length; i++) {
+        console.log(`Deduplicating: "${unprocessed[i].title}" (same URL as "${mergedItem.title}")`);
+        mergedItem = mergeArchiveItemPair(mergedItem, unprocessed[i]);
+        processedIds.add(unprocessed[i].id);
+      }
+      
+      for (const item of unprocessed) {
+        merged.delete(item.id);
+      }
+      merged.set(mergedItem.id, mergedItem);
+      processedIds.add(mergedItem.id);
+    }
+  }
+  
+  // Third pass: add any remaining items
+  for (const item of items) {
+    if (!processedIds.has(item.id)) {
+      merged.set(item.id, item);
+      processedIds.add(item.id);
+    }
+  }
+  
+  // Sort by lastOpenedAt descending
+  return Array.from(merged.values())
+    .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
+}
+
+/**
+ * Deduplicate archive items in storage.
+ * Call this on startup or when duplicates are suspected.
+ */
+export async function deduplicateArchive(): Promise<{ removed: number }> {
+  const items = await getArchiveItems();
+  const originalCount = items.length;
+  
+  const deduped = deduplicateItems(items);
+  const removedCount = originalCount - deduped.length;
+  
+  if (removedCount > 0) {
+    console.log(`Deduplicated archive: removed ${removedCount} duplicate(s) from ${originalCount} items`);
+    await flushArchiveItems(deduped);
+  }
+  
+  return { removed: removedCount };
+}
+
+// =============================================================================
 // MIGRATION
 // =============================================================================
 
@@ -243,11 +429,72 @@ export function generateItemId(metadata: DocumentMetadata): string {
   // For web sources, use the URL
   if (metadata.url) {
     // Create a simple hash of the URL
-    return `web_${hashString(metadata.url)}`;
+    return `web_${hashString(normalizeUrl(metadata.url))}`;
   }
   
   // For paste and other sources, use timestamp + random
   return `${metadata.source}_${metadata.createdAt}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Generate a stable ID for an AddRecentInput
+ * Uses fileHash for files, normalized URL for web content, computed hash for paste
+ */
+function generateStableId(input: AddRecentInput): string {
+  const now = Date.now();
+  
+  // For file-based documents, use the file hash (most reliable)
+  if (input.fileHash) {
+    return `file_${input.type}_${input.fileHash}`;
+  }
+  
+  // For web sources, use normalized URL hash
+  if (input.url) {
+    return `web_${hashString(normalizeUrl(input.url))}`;
+  }
+  
+  // For paste content, compute hash for stable ID
+  if (input.pasteContent) {
+    const textHash = computeTextHash(input.pasteContent);
+    return `paste_${textHash}`;
+  }
+  
+  // For other sources without identifiable content, use timestamp + random
+  return `${input.type}_${now}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Normalize a URL for consistent comparison
+ * - Removes trailing slashes
+ * - Removes www. prefix
+ * - Removes common tracking parameters
+ * - Lowercases the domain
+ */
+function normalizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    
+    // Lowercase the hostname and remove www.
+    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    
+    // Remove trailing slash from pathname
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+    
+    // Remove common tracking parameters
+    const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'ref'];
+    trackingParams.forEach(param => parsed.searchParams.delete(param));
+    
+    // Sort remaining search params for consistency
+    parsed.searchParams.sort();
+    
+    // Remove hash (fragment)
+    parsed.hash = '';
+    
+    return parsed.toString();
+  } catch {
+    // If URL parsing fails, return as-is but lowercase
+    return url.toLowerCase();
+  }
 }
 
 /**
@@ -302,14 +549,27 @@ export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
   const now = Date.now();
   
   // Check for existing item with same characteristics
+  const normalizedInputUrl = input.url ? normalizeUrl(input.url) : null;
+  
+  // For paste items without fileHash, compute hash from pasteContent for matching
+  const inputFileHash = input.fileHash || (input.pasteContent ? computeTextHash(input.pasteContent) : undefined);
+  
   const existingIndex = items.findIndex(item => {
-    // Match by file hash for file-based documents
-    if (input.fileHash && item.fileHash === input.fileHash) {
+    // Match by file hash for file-based documents (most reliable)
+    if (inputFileHash && item.fileHash === inputFileHash) {
       return true;
     }
-    // Match by URL for web documents
-    if (input.url && item.url === input.url) {
+    // Match by normalized URL for web documents
+    if (normalizedInputUrl && item.url && normalizeUrl(item.url) === normalizedInputUrl) {
       return true;
+    }
+    // Match paste items by computing hash from their stored pasteContent
+    // This handles legacy paste items that don't have fileHash stored
+    if (inputFileHash && item.type === 'paste' && item.pasteContent && !item.fileHash) {
+      const existingHash = computeTextHash(item.pasteContent);
+      if (existingHash === inputFileHash) {
+        return true;
+      }
     }
     return false;
   });
@@ -326,21 +586,30 @@ export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
   if (existingIndex >= 0) {
     // Update existing item and move to top
     const existing = items[existingIndex];
+    
+    // Preserve existing pasteContent and cachedDocument if not provided in input
+    const finalPasteContent = pasteContent ?? existing.pasteContent;
+    const finalCachedDocument = input.cachedDocument ?? existing.cachedDocument;
+    
     item = {
       ...existing,
       ...input,
-      pasteContent,
+      pasteContent: finalPasteContent,
+      cachedDocument: finalCachedDocument,
       id: existing.id,
       createdAt: existing.createdAt,
       lastOpenedAt: now,
+      // Ensure fileHash is set for paste items (migrates legacy items)
+      fileHash: input.fileHash || existing.fileHash || inputFileHash,
     };
     items.splice(existingIndex, 1);
   } else {
-    // Create new item
+    // Create new item with stable ID based on content hash or URL
+    const stableId = generateStableId(input);
     item = {
       ...input,
       pasteContent,
-      id: `${input.type}_${now}_${Math.random().toString(36).slice(2, 9)}`,
+      id: stableId,
       createdAt: now,
       lastOpenedAt: now,
     };
@@ -399,10 +668,32 @@ export async function updateLastOpened(
  */
 export async function removeRecent(id: string): Promise<void> {
   const items = await getArchiveItems();
+  const itemToRemove = items.find(item => item.id === id);
   const filtered = items.filter(item => item.id !== id);
   
   if (filtered.length !== items.length) {
     await flushArchiveItems(filtered);
+    
+    // Add tombstone and delete synced content if item was found
+    if (itemToRemove) {
+      // Add tombstone to prevent item from being re-synced
+      storageFacade.addDeletedItemTombstone({
+        id: itemToRemove.id,
+        fileHash: itemToRemove.fileHash,
+        url: itemToRemove.url,
+      }).catch(error => {
+        console.error('Failed to add deleted item tombstone:', error);
+      });
+      
+      // Delete content from sync provider if sync is enabled
+      syncService.deleteItemContent({
+        id: itemToRemove.id,
+        fileHash: itemToRemove.fileHash,
+        url: itemToRemove.url,
+      }).catch(error => {
+        console.error('Failed to delete synced content:', error);
+      });
+    }
   }
 }
 
@@ -410,7 +701,31 @@ export async function removeRecent(id: string): Promise<void> {
  * Clear all items from the archive
  */
 export async function clearRecents(): Promise<void> {
+  // Get items before clearing to delete their synced content
+  const items = await getArchiveItems();
+  
   await flushArchiveItems([]);
+  
+  // Add tombstones and delete content from sync provider for all items
+  for (const item of items) {
+    // Add tombstone to prevent item from being re-synced
+    storageFacade.addDeletedItemTombstone({
+      id: item.id,
+      fileHash: item.fileHash,
+      url: item.url,
+    }).catch(error => {
+      console.error('Failed to add deleted item tombstone:', error);
+    });
+    
+    // Delete content from sync provider
+    syncService.deleteItemContent({
+      id: item.id,
+      fileHash: item.fileHash,
+      url: item.url,
+    }).catch(error => {
+      console.error('Failed to delete synced content:', error);
+    });
+  }
 }
 
 /**

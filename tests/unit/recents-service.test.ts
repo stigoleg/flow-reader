@@ -250,8 +250,10 @@ describe('Recents Service', () => {
       
       expect(chrome.storage.local.set).toHaveBeenCalled();
       const calls = vi.mocked(chrome.storage.local.set).mock.calls;
-      const lastCall = calls[calls.length - 1];
-      const savedItems = (lastCall[0] as { archiveItems: ArchiveItem[] }).archiveItems;
+      // Find the call that contains archiveItems (there may be other calls for tombstones)
+      const archiveCall = calls.find(call => 'archiveItems' in (call[0] as object));
+      expect(archiveCall).toBeDefined();
+      const savedItems = (archiveCall![0] as { archiveItems: ArchiveItem[] }).archiveItems;
       expect(savedItems.length).toBe(1);
       expect(savedItems[0].id).toBe('item-2');
     });

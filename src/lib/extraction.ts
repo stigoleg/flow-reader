@@ -5,6 +5,7 @@ import { getBlockText, createDocument } from './block-utils';
 import { cleanArticleDocument, setCleanupDebug } from './article-cleanup';
 import { normalizeArticleMarkup, setNormalizeDebug } from './article-normalize';
 import { isFlowCasePage, extractFlowCaseContent } from './site-extractors/flowcase';
+import { computeTextHash } from './file-utils';
 
 /**
  * Enable debug logging for extraction pipeline.
@@ -381,10 +382,14 @@ export function extractFromSelection(selection: string, url: string): FlowDocume
 
 export function extractFromPaste(text: string): FlowDocument {
   const blocks = filterUIBlocks(textToParagraphBlocks(text), false);
+  
+  // Generate a stable hash from the paste content for deduplication
+  const textHash = computeTextHash(text);
 
   return createDocument(blocks, {
     title: 'Pasted Text',
     source: 'paste',
+    fileHash: textHash,
   });
 }
 

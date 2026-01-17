@@ -87,3 +87,29 @@ export function isMobiFile(filename: string): boolean {
   const ext = getFileExtension(filename);
   return ['mobi', 'azw', 'azw3'].includes(ext);
 }
+
+/**
+ * Compute a hash from a text string for stable identification.
+ * Uses a simple but effective hash algorithm (djb2 variant).
+ * Returns a 16-character hex string for consistency with file hashes.
+ * 
+ * This is synchronous and suitable for paste content deduplication.
+ */
+export function computeTextHash(text: string): string {
+  // Use djb2 hash algorithm - fast and good distribution
+  let hash1 = 5381;
+  let hash2 = 52711;
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text.charCodeAt(i);
+    hash1 = ((hash1 << 5) + hash1) ^ char;
+    hash2 = ((hash2 << 5) + hash2) ^ char;
+  }
+  
+  // Combine the two hashes and convert to hex
+  // Using two hashes reduces collision probability
+  const combined = (Math.abs(hash1) * 4096 + Math.abs(hash2)).toString(16);
+  
+  // Pad to ensure consistent length and take first 16 chars
+  return combined.padStart(16, '0').slice(0, 16);
+}

@@ -13,12 +13,15 @@ import {
   addRecent,
   mapSourceToType,
   getSourceLabel,
+  deduplicateArchive,
+  getRecent,
 } from '@/lib/recents-service';
 import { extractFromPdf } from '@/lib/pdf-handler';
 import { extractFromDocx } from '@/lib/docx-handler';
 import { extractFromEpub } from '@/lib/epub-handler';
 import { extractFromMobi } from '@/lib/mobi-handler';
 import { extractFromPaste } from '@/lib/extraction';
+import { syncService } from '@/lib/sync/sync-service';
 
 // =============================================================================
 // TYPES
@@ -31,6 +34,9 @@ export interface ArchiveState {
   items: ArchiveItem[];
   isLoading: boolean;
   error: string | null;
+  
+  // Sync state
+  syncEnabled: boolean;
   
   // UI state
   searchQuery: string;
@@ -99,6 +105,7 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   items: [],
   isLoading: true,
   error: null,
+  syncEnabled: false,
   searchQuery: '',
   activeFilter: 'all',
   focusedItemIndex: 0,
@@ -113,8 +120,20 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   loadItems: async () => {
     set({ isLoading: true, error: null });
     try {
-      const items = await queryRecents();
-      set({ items, isLoading: false });
+      // First, run deduplication to clean up any duplicates from previous syncs
+      await deduplicateArchive();
+      
+      // Load items and sync config in parallel
+      const [items, syncConfig] = await Promise.all([
+        queryRecents(),
+        syncService.getConfig(),
+      ]);
+      
+      set({ 
+        items, 
+        syncEnabled: syncConfig?.enabled ?? false,
+        isLoading: false,
+      });
     } catch (error) {
       set({ 
         error: error instanceof Error ? error.message : 'Failed to load items',
@@ -137,15 +156,18 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   
   openItem: async (item: ArchiveItem) => {
     try {
-      if (item.cachedDocument) {
+      // Re-fetch from storage to get latest data (may have been updated by content sync)
+      const freshItem = await getRecent(item.id) || item;
+      
+      if (freshItem.cachedDocument) {
         // Open reader with cached document
-        await chrome.runtime.sendMessage({ type: 'OPEN_READER', document: item.cachedDocument });
-      } else if (item.type === 'web' && item.url) {
+        await chrome.runtime.sendMessage({ type: 'OPEN_READER', document: freshItem.cachedDocument });
+      } else if (freshItem.type === 'web' && freshItem.url) {
         // Re-extract from URL
-        await chrome.runtime.sendMessage({ type: 'EXTRACT_FROM_URL_AND_OPEN', url: item.url });
-      } else if (item.type === 'paste' && item.pasteContent) {
+        await chrome.runtime.sendMessage({ type: 'EXTRACT_FROM_URL_AND_OPEN', url: freshItem.url });
+      } else if (freshItem.type === 'paste' && freshItem.pasteContent) {
         // Recreate paste document
-        const doc = extractFromPaste(item.pasteContent);
+        const doc = extractFromPaste(freshItem.pasteContent);
         await chrome.runtime.sendMessage({ type: 'OPEN_READER', document: doc });
       } else {
         throw new Error('This item cannot be reopened. Please import it again.');
@@ -232,13 +254,14 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
     try {
       const doc = extractFromPaste(text);
       
-      // Add to archive
+      // Add to archive with fileHash for deduplication
       await addRecent({
         type: 'paste',
         title: doc.metadata.title,
         sourceLabel: 'Pasted text',
         pasteContent: text,
         cachedDocument: doc,
+        fileHash: doc.metadata.fileHash,
       });
       
       // Open in reader
@@ -285,6 +308,29 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
 // =============================================================================
 
 /**
+ * Get items filtered only by search query (for filter chip counts)
+ */
+export function selectSearchFilteredItems(state: ArchiveState): ArchiveItem[] {
+  let items = state.items;
+  
+  // Apply search filter only (not type filter)
+  if (state.searchQuery.trim()) {
+    const query = state.searchQuery.toLowerCase().trim();
+    items = items.filter(item => {
+      const title = item.title.toLowerCase();
+      const author = item.author?.toLowerCase() || '';
+      const sourceLabel = item.sourceLabel.toLowerCase();
+      
+      return title.includes(query) || 
+             author.includes(query) || 
+             sourceLabel.includes(query);
+    });
+  }
+  
+  return items;
+}
+
+/**
  * Get filtered items based on search query and active filter
  */
 export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
@@ -314,4 +360,39 @@ export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
   }
   
   return items;
+}
+
+// =============================================================================
+// SYNC STATUS HELPERS
+// =============================================================================
+
+export type ItemSyncStatus = 'synced' | 'not-synced' | 'not-applicable';
+
+/**
+ * Determine the sync status of an archive item.
+ * 
+ * - File types (PDF, EPUB, MOBI, DOCX): Synced if cachedDocument exists
+ * - Web types: Always synced (can re-extract from URL)
+ * - Paste types: Synced if pasteContent exists (included in state sync)
+ */
+export function getItemSyncStatus(item: ArchiveItem): ItemSyncStatus {
+  switch (item.type) {
+    case 'pdf':
+    case 'epub':
+    case 'mobi':
+    case 'docx':
+      // File types need cachedDocument to be available on other devices
+      return item.cachedDocument ? 'synced' : 'not-synced';
+    
+    case 'web':
+      // Web content can always be re-extracted from URL
+      return item.url ? 'synced' : 'not-synced';
+    
+    case 'paste':
+      // Paste content is included in state sync
+      return item.pasteContent ? 'synced' : 'not-synced';
+    
+    default:
+      return 'not-applicable';
+  }
 }

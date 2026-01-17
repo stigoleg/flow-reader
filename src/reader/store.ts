@@ -4,6 +4,19 @@ import { DEFAULT_SETTINGS } from '@/types';
 import { getSettings, saveSettings, savePosition, getPosition, isExitConfirmationDismissed, dismissExitConfirmation, saveCurrentDocument } from '@/lib/storage';
 import { addRecent, mapSourceToType, getSourceLabel, shouldCacheDocument, calculateProgress, updateLastOpened } from '@/lib/recents-service';
 
+// =============================================================================
+// DEBOUNCE CONFIG FOR POSITION SAVING
+// =============================================================================
+
+/** Debounce delay for position saves (1 second) */
+const POSITION_SAVE_DEBOUNCE_MS = 1000;
+
+/** Module-level debounce timer for position saving */
+let positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** The actual position save function that will be called after debounce */
+let pendingSavePosition: (() => Promise<void>) | null = null;
+
 interface ReaderState {
   // Document
   document: FlowDocument | null;
@@ -326,47 +339,70 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     });
   },
 
-  // Position persistence
+  // Position persistence (debounced to prevent excessive writes during reading)
   saveCurrentPosition: async () => {
-    const { document, currentBlockIndex, currentCharOffset, currentWordIndex, currentSentenceIndex, currentRsvpIndex, currentChapterIndex, settings, accumulatedReadingTime, playStartTime, archiveItemId } = get();
+    const { document } = get();
     if (!document) return;
     
-    // Calculate total reading time including current session if playing
-    const sessionTime = playStartTime ? Date.now() - playStartTime : 0;
-    const totalReadingTime = accumulatedReadingTime + sessionTime;
-    
-    const position = {
-      blockIndex: currentBlockIndex,
-      charOffset: currentCharOffset,
-      timestamp: Date.now(),
-      // Extended position for precise restoration
-      wordIndex: currentWordIndex,
-      sentenceIndex: currentSentenceIndex,
-      rsvpIndex: currentRsvpIndex,
-      chapterIndex: currentChapterIndex,
-      activeMode: settings.activeMode,
-      accumulatedReadingTime: totalReadingTime,
+    // Create the save function with current state captured
+    const doSave = async () => {
+      // Re-get fresh state at save time for most accurate reading time
+      const freshState = get();
+      const freshSessionTime = freshState.playStartTime ? Date.now() - freshState.playStartTime : 0;
+      const freshTotalReadingTime = freshState.accumulatedReadingTime + freshSessionTime;
+      
+      const position = {
+        blockIndex: freshState.currentBlockIndex,
+        charOffset: freshState.currentCharOffset,
+        timestamp: Date.now(),
+        // Extended position for precise restoration
+        wordIndex: freshState.currentWordIndex,
+        sentenceIndex: freshState.currentSentenceIndex,
+        rsvpIndex: freshState.currentRsvpIndex,
+        chapterIndex: freshState.currentChapterIndex,
+        activeMode: freshState.settings.activeMode,
+        accumulatedReadingTime: freshTotalReadingTime,
+      };
+      
+      if (freshState.document) {
+        await savePosition(freshState.document.metadata, position);
+        
+        // Also update the archive item with progress
+        if (freshState.archiveItemId) {
+          const chapterInfo = freshState.document.book ? {
+            currentChapter: freshState.currentChapterIndex,
+            totalChapters: freshState.document.book.chapters.length,
+          } : undefined;
+          
+          const progress = calculateProgress(
+            freshState.currentBlockIndex,
+            freshState.document.blocks.length,
+            chapterInfo
+          );
+          
+          updateLastOpened(freshState.archiveItemId, position, progress).catch((err) => {
+            console.error('Failed to update archive progress:', err);
+          });
+        }
+      }
     };
     
-    await savePosition(document.metadata, position);
-    
-    // Also update the archive item with progress
-    if (archiveItemId) {
-      const chapterInfo = document.book ? {
-        currentChapter: currentChapterIndex,
-        totalChapters: document.book.chapters.length,
-      } : undefined;
-      
-      const progress = calculateProgress(
-        currentBlockIndex,
-        document.blocks.length,
-        chapterInfo
-      );
-      
-      updateLastOpened(archiveItemId, position, progress).catch((err) => {
-        console.error('Failed to update archive progress:', err);
-      });
+    // Clear any pending save timer
+    if (positionSaveTimer) {
+      clearTimeout(positionSaveTimer);
     }
+    
+    // Store the pending save function
+    pendingSavePosition = doSave;
+    
+    // Schedule the debounced save
+    positionSaveTimer = setTimeout(async () => {
+      if (pendingSavePosition) {
+        await pendingSavePosition();
+        pendingSavePosition = null;
+      }
+      positionSaveTimer = null;
+    }, POSITION_SAVE_DEBOUNCE_MS);
   },
 
   restorePosition: async () => {
@@ -397,7 +433,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   // Block navigation
   nextBlock: () => {
-    const { document, currentBlockIndex } = get();
+    const { document, currentBlockIndex, saveCurrentPosition } = get();
     if (document && currentBlockIndex < document.blocks.length - 1) {
       set({ 
         currentBlockIndex: currentBlockIndex + 1, 
@@ -405,6 +441,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         currentSentenceIndex: 0,
         currentWordIndex: 0,
       });
+      // Save position for sync (will be debounced)
+      saveCurrentPosition();
     }
   },
 

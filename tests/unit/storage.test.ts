@@ -46,7 +46,7 @@ describe('Storage', () => {
       
       const storage = await getStorage();
       
-      expect(storage.version).toBe(2);
+      expect(storage.version).toBe(3);
       expect(storage.settings).toEqual(DEFAULT_SETTINGS);
       expect(storage.presets).toEqual({});
       expect(storage.positions).toEqual({});
