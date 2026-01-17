@@ -230,7 +230,22 @@ export function SyncSettingsSection() {
       }
 
       await adapter.completeAuth(code);
-      setShowPassphraseModal(true);
+      
+      // Check if there's an existing encrypted file
+      const remoteState = await syncService.checkRemoteState(adapter);
+      
+      if (remoteState.exists && remoteState.encrypted) {
+        // Existing encrypted file - need passphrase
+        syncService.setProvider(adapter);
+        setIsExistingEncryptedFile(true);
+        setShowPassphraseModal(true);
+      } else {
+        // No existing file or unencrypted - configure without encryption (like folder sync)
+        syncService.setProvider(adapter);
+        await syncService.configureWithoutEncryption(adapter);
+        await syncService.syncNow();
+        setPendingProvider(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect');
       setPendingProvider(null);
@@ -472,8 +487,8 @@ export function SyncSettingsSection() {
       )}
 
       <div className="mt-4 text-xs opacity-50 space-y-1">
-        <p>Local folder sync stores data unencrypted for automatic syncing.</p>
-        <p>Cloud sync encrypts data with your passphrase for security.</p>
+        <p>Sync stores data unencrypted for seamless automatic syncing.</p>
+        <p>If an existing encrypted sync file is found, you'll need to enter your passphrase.</p>
       </div>
     </div>
   );

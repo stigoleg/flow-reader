@@ -10,6 +10,9 @@
 
 import { syncService } from './sync-service';
 import { storageFacade } from '../storage-facade';
+import { folderAdapter } from './providers/folder-adapter';
+import { dropboxAdapter } from './providers/dropbox-adapter';
+import { oneDriveAdapter } from './providers/onedrive-adapter';
 
 
 const ALARM_NAME = 'sync-periodic';
@@ -43,6 +46,9 @@ class SyncSchedulerImpl {
       return;
     }
 
+    // Restore the provider based on config
+    await this.restoreProvider(config.provider);
+
     // Set up periodic alarm
     await this.setupPeriodicAlarm();
 
@@ -61,6 +67,37 @@ class SyncSchedulerImpl {
     });
 
     if (import.meta.env.DEV) console.log('SyncScheduler: Initialized');
+  }
+
+  /**
+   * Restore the sync provider based on stored config
+   */
+  private async restoreProvider(providerType: string | null): Promise<void> {
+    if (!providerType) return;
+
+    try {
+      if (providerType === 'folder') {
+        const restored = await folderAdapter.restoreHandle();
+        if (restored) {
+          syncService.setProvider(folderAdapter);
+          if (import.meta.env.DEV) console.log('SyncScheduler: Restored folder provider');
+        }
+      } else if (providerType === 'dropbox') {
+        const connected = await dropboxAdapter.isConnected();
+        if (connected) {
+          syncService.setProvider(dropboxAdapter);
+          if (import.meta.env.DEV) console.log('SyncScheduler: Restored Dropbox provider');
+        }
+      } else if (providerType === 'onedrive') {
+        const connected = await oneDriveAdapter.isConnected();
+        if (connected) {
+          syncService.setProvider(oneDriveAdapter);
+          if (import.meta.env.DEV) console.log('SyncScheduler: Restored OneDrive provider');
+        }
+      }
+    } catch (error) {
+      console.warn('SyncScheduler: Failed to restore provider:', error);
+    }
   }
 
   /**
