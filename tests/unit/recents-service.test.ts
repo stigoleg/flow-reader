@@ -538,34 +538,33 @@ describe('Recents Service', () => {
   });
 
   describe('migration', () => {
-    it('migrates old recentDocuments format', async () => {
+    it('returns empty array when no archiveItems exist (migration happens in migrations.ts)', async () => {
+      // Note: Migration from recentDocuments to archiveItems is handled by 
+      // migrations.ts during extension install/update, not at query time.
+      // This test verifies that recents-service correctly returns empty
+      // when no archiveItems are present (before migration runs).
       vi.useRealTimers();
       
-      const oldDocs = [
-        {
-          id: 'doc-1',
-          title: 'Old Document',
-          source: 'web',
-          timestamp: 1000,
-          preview: 'Preview text',
-          url: 'https://example.com/article',
-        },
-      ];
-      
       setMockStorage({
-        recentDocuments: oldDocs,
+        recentDocuments: [
+          {
+            id: 'doc-1',
+            title: 'Old Document',
+            source: 'web',
+            timestamp: 1000,
+            preview: 'Preview text',
+            url: 'https://example.com/article',
+          },
+        ],
         version: 1,
+        archiveItems: [], // No archiveItems - migration hasn't run yet
       });
       
       const items = await queryRecents();
       
-      // Wait for migration save
-      await new Promise(resolve => setTimeout(resolve, 350));
-      
-      expect(items.length).toBe(1);
-      expect(items[0].type).toBe('web');
-      expect(items[0].title).toBe('Old Document');
-      expect(items[0].url).toBe('https://example.com/article');
+      // Since archiveItems is empty and migration is handled elsewhere,
+      // we expect an empty array
+      expect(items.length).toBe(0);
     });
   });
 });

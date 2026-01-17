@@ -345,7 +345,7 @@ describe('Storage', () => {
       await completeOnboarding();
       
       expect(chrome.storage.local.set).toHaveBeenCalledWith(
-        { onboardingCompleted: true },
+        expect.objectContaining({ onboardingCompleted: true }),
         expect.any(Function)
       );
     });
@@ -353,10 +353,14 @@ describe('Storage', () => {
 
   describe('resetSettings', () => {
     it('resets to default settings', async () => {
+      setMockStorage({ version: 1, settings: { ...DEFAULT_SETTINGS, baseWPM: 500 } });
+      
       await resetSettings();
       
       expect(chrome.storage.local.set).toHaveBeenCalledWith(
-        { settings: DEFAULT_SETTINGS },
+        expect.objectContaining({
+          settings: expect.objectContaining(DEFAULT_SETTINGS),
+        }),
         expect.any(Function)
       );
     });

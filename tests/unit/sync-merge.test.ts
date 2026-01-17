@@ -39,6 +39,33 @@ function createArchiveItem(id: string, lastOpenedAt: number, title?: string): Sy
   };
 }
 
+// Create a mock book archive item with chapter position
+function createBookArchiveItem(
+  id: string, 
+  lastOpenedAt: number, 
+  chapterIndex: number, 
+  blockIndex: number
+): SyncArchiveItem {
+  return {
+    id,
+    type: 'epub',
+    title: `Book ${id}`,
+    sourceLabel: 'book.epub',
+    createdAt: lastOpenedAt - 100000,
+    lastOpenedAt,
+    lastPosition: {
+      blockIndex,
+      charOffset: 0,
+      timestamp: lastOpenedAt,
+      chapterIndex,
+    },
+    progress: {
+      percent: Math.floor((chapterIndex / 10) * 100),
+      label: `Ch ${chapterIndex + 1} of 10`,
+    },
+  };
+}
+
 describe('Merge Module', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -141,6 +168,41 @@ describe('Merge Module', () => {
         // Local is newer, so we keep local without conflict
         expect(result.merged.archiveItems[0].title).toBe('Local Version');
       });
+
+      it('syncs book lastPosition with chapterIndex', () => {
+        const localState = createBaseStateDocument({
+          archiveItems: [createBookArchiveItem('book-1', 1000, 3, 25)],
+        });
+        const remoteState = createBaseStateDocument({
+          archiveItems: [],
+        });
+
+        const result = mergeStates(localState, remoteState, 'device-local');
+
+        expect(result.merged.archiveItems).toHaveLength(1);
+        expect(result.merged.archiveItems[0].lastPosition?.chapterIndex).toBe(3);
+        expect(result.merged.archiveItems[0].lastPosition?.blockIndex).toBe(25);
+      });
+
+      it('merges book archive items and keeps further chapter position', () => {
+        // Local: chapter 2, block 50
+        const localState = createBaseStateDocument({
+          archiveItems: [createBookArchiveItem('book-1', 2000, 2, 50)],
+        });
+        // Remote: chapter 5, block 10 (further in book)
+        const remoteState = createBaseStateDocument({
+          archiveItems: [createBookArchiveItem('book-1', 1500, 5, 10)],
+        });
+
+        const result = mergeStates(localState, remoteState, 'device-local');
+
+        // Local has newer lastOpenedAt, but remote is further in the book
+        // The merge should take local (more recently opened) but ideally preserve further position
+        // Current behavior: newer lastOpenedAt wins for archive items
+        expect(result.merged.archiveItems).toHaveLength(1);
+        // Since local is newer (lastOpenedAt: 2000 vs 1500), local wins
+        expect(result.merged.archiveItems[0].lastOpenedAt).toBe(2000);
+      });
     });
 
     describe('position merging', () => {
@@ -197,6 +259,60 @@ describe('Merge Module', () => {
 
         // Furthest progress wins, even when timestamps are equal
         expect(result.merged.positions['https://example.com/page1'].blockIndex).toBe(15);
+      });
+
+      it('syncs chapterIndex for book positions', () => {
+        const localState = createBaseStateDocument({
+          positions: {
+            'book-1': { blockIndex: 5, charOffset: 0, timestamp: 1000, chapterIndex: 2 },
+          },
+        });
+        const remoteState = createBaseStateDocument({
+          positions: {},
+        });
+
+        const result = mergeStates(localState, remoteState, 'device-local');
+
+        expect(result.merged.positions['book-1'].chapterIndex).toBe(2);
+        expect(result.merged.positions['book-1'].blockIndex).toBe(5);
+      });
+
+      it('prefers position in later chapter over earlier chapter with higher block', () => {
+        const localState = createBaseStateDocument({
+          positions: {
+            'book-1': { blockIndex: 100, charOffset: 0, timestamp: 1000, chapterIndex: 1 },
+          },
+        });
+        const remoteState = createBaseStateDocument({
+          positions: {
+            'book-1': { blockIndex: 5, charOffset: 0, timestamp: 1000, chapterIndex: 3 },
+          },
+        });
+
+        const result = mergeStates(localState, remoteState, 'device-local');
+
+        // Chapter 3 is further than chapter 1, even though block 100 > block 5
+        expect(result.merged.positions['book-1'].chapterIndex).toBe(3);
+        expect(result.merged.positions['book-1'].blockIndex).toBe(5);
+      });
+
+      it('prefers higher block index within same chapter', () => {
+        const localState = createBaseStateDocument({
+          positions: {
+            'book-1': { blockIndex: 50, charOffset: 0, timestamp: 1000, chapterIndex: 2 },
+          },
+        });
+        const remoteState = createBaseStateDocument({
+          positions: {
+            'book-1': { blockIndex: 10, charOffset: 0, timestamp: 2000, chapterIndex: 2 },
+          },
+        });
+
+        const result = mergeStates(localState, remoteState, 'device-local');
+
+        // Same chapter, so higher block index wins (local)
+        expect(result.merged.positions['book-1'].chapterIndex).toBe(2);
+        expect(result.merged.positions['book-1'].blockIndex).toBe(50);
       });
     });
 

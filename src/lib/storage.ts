@@ -55,7 +55,7 @@ export async function getSettings(): Promise<ReaderSettings> {
 }
 
 export async function resetSettings(): Promise<void> {
-  await chromeStorage.set({ settings: defaultSettings });
+  await storageFacade.updateSettings(defaultSettings);
 }
 
 // =============================================================================
@@ -63,12 +63,10 @@ export async function resetSettings(): Promise<void> {
 // =============================================================================
 
 export async function savePosition(urlOrMetadata: string | DocumentMetadata, position: ReadingPosition): Promise<void> {
-  const state = await storageFacade.getState();
   const key = typeof urlOrMetadata === 'string' 
     ? getUrlKey(urlOrMetadata) 
     : getUrlKey(getDocumentKey(urlOrMetadata));
-  const positions = { ...state.positions, [key]: position };
-  await chromeStorage.set({ positions });
+  await storageFacade.updatePositions({ [key]: position });
 }
 
 export async function getPosition(urlOrMetadata: string | DocumentMetadata): Promise<ReadingPosition | null> {
@@ -161,7 +159,7 @@ export async function isOnboardingCompleted(): Promise<boolean> {
 }
 
 export async function completeOnboarding(): Promise<void> {
-  await chromeStorage.set({ onboardingCompleted: true });
+  await storageFacade.updateFlags({ onboardingCompleted: true });
 }
 
 export async function isExitConfirmationDismissed(): Promise<boolean> {
@@ -170,7 +168,7 @@ export async function isExitConfirmationDismissed(): Promise<boolean> {
 }
 
 export async function dismissExitConfirmation(): Promise<void> {
-  await chromeStorage.set({ exitConfirmationDismissed: true });
+  await storageFacade.updateFlags({ exitConfirmationDismissed: true });
 }
 
 // =============================================================================

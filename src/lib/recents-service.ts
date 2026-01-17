@@ -5,14 +5,12 @@
  * Provides CRUD operations, search, and filtering for the Archive page.
  */
 
-import type { ArchiveItem, ArchiveItemType, ArchiveProgress, ReadingPosition, DocumentMetadata, RecentDocument, FlowDocument } from '@/types';
-import { CURRENT_STORAGE_VERSION } from './migrations';
+import type { ArchiveItem, ArchiveItemType, ArchiveProgress, ReadingPosition, DocumentMetadata, FlowDocument } from '@/types';
 import { syncService } from './sync/sync-service';
 import { storageFacade } from './storage-facade';
 import { computeTextHash } from './file-utils';
 import { normalizeUrl, hashString } from './url-utils';
 import { mergeFullArchiveItems } from './archive-utils';
-import * as chromeStorage from './chrome-storage';
 
 // =============================================================================
 // CONFIGURATION
@@ -26,9 +24,6 @@ export const MAX_PASTE_CONTENT_SIZE = 100_000;
 
 /** Debounce delay for storage writes (ms) */
 const DEBOUNCE_DELAY = 300;
-
-/** Current storage version - use centralized constant */
-const STORAGE_VERSION = CURRENT_STORAGE_VERSION;
 
 // =============================================================================
 // TYPES
@@ -77,29 +72,8 @@ let pendingItems: ArchiveItem[] | null = null;
  * Get archive items from storage
  */
 async function getArchiveItems(): Promise<ArchiveItem[]> {
-  const result = await chromeStorage.get<{
-    archiveItems?: ArchiveItem[];
-    recentDocuments?: RecentDocument[];
-    version?: number;
-  }>(['archiveItems', 'recentDocuments', 'version']);
-  
-  const { version, archiveItems, recentDocuments } = result;
-  
-  // If we have archive items and version >= 2, use them directly
-  if (archiveItems && version && version >= STORAGE_VERSION) {
-    return archiveItems;
-  }
-  
-  // If we only have old recentDocuments, migrate them
-  if (recentDocuments && recentDocuments.length > 0 && !archiveItems) {
-    const migrated = migrateRecentDocuments(recentDocuments);
-    // Save the migrated items
-    await saveArchiveItems(migrated);
-    return migrated;
-  }
-  
-  // No items yet
-  return archiveItems || [];
+  const state = await storageFacade.getState();
+  return state.archiveItems;
 }
 
 /**
@@ -124,10 +98,7 @@ async function saveArchiveItems(items: ArchiveItem[]): Promise<void> {
       }
       
       try {
-        await chromeStorage.set({ 
-          archiveItems: itemsToSave,
-          version: STORAGE_VERSION,
-        });
+        await storageFacade.updateArchiveItems(itemsToSave);
         resolve();
       } catch (error) {
         reject(error);
@@ -146,10 +117,7 @@ async function flushArchiveItems(items: ArchiveItem[]): Promise<void> {
   }
   pendingItems = null;
   
-  await chromeStorage.set({ 
-    archiveItems: items,
-    version: STORAGE_VERSION,
-  });
+  await storageFacade.updateArchiveItems(items);
 }
 
 // =============================================================================
@@ -277,28 +245,8 @@ export async function deduplicateArchive(): Promise<{ removed: number }> {
 }
 
 // =============================================================================
-// MIGRATION
+// TYPE MAPPING
 // =============================================================================
-
-/**
- * Migrate old RecentDocument format to ArchiveItem
- */
-function migrateRecentDocuments(docs: RecentDocument[]): ArchiveItem[] {
-  return docs.map((doc): ArchiveItem => {
-    const type = mapSourceToType(doc.source);
-    return {
-      id: doc.id,
-      type,
-      title: doc.title,
-      sourceLabel: extractSourceLabel(doc),
-      url: doc.url,
-      createdAt: doc.timestamp,
-      lastOpenedAt: doc.timestamp,
-      cachedDocument: doc.cachedDocument,
-      fileHash: doc.cachedDocument?.metadata.fileHash,
-    };
-  });
-}
 
 /**
  * Map document source to archive item type
@@ -321,26 +269,6 @@ export function mapSourceToType(source: string): ArchiveItemType {
     default:
       return 'web';
   }
-}
-
-/**
- * Extract source label from a recent document
- */
-function extractSourceLabel(doc: RecentDocument): string {
-  if (doc.url) {
-    try {
-      const url = new URL(doc.url);
-      return url.hostname;
-    } catch {
-      return doc.url;
-    }
-  }
-  
-  if (doc.cachedDocument?.metadata.fileName) {
-    return doc.cachedDocument.metadata.fileName;
-  }
-  
-  return doc.source;
 }
 
 // =============================================================================

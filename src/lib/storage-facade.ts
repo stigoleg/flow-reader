@@ -263,6 +263,16 @@ class StorageFacadeImpl {
   }
 
   /**
+   * Update UI flags (onboardingCompleted, exitConfirmationDismissed)
+   */
+  async updateFlags(flags: {
+    onboardingCompleted?: boolean;
+    exitConfirmationDismissed?: boolean;
+  }): Promise<void> {
+    return this.setValues(flags);
+  }
+
+  /**
    * Update sync configuration
    */
   async updateSyncConfig(config: {
