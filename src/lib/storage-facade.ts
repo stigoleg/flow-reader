@@ -30,6 +30,7 @@ import * as chromeStorage from './chrome-storage';
 
 /** Extended storage schema with sync-related fields */
 export interface ExtendedStorageSchema extends StorageSchema {
+  dataUpdatedAt: number;
   deviceId: string;
   syncEnabled: boolean;
   syncProvider: SyncProviderType | null;
@@ -114,6 +115,7 @@ class StorageFacadeImpl {
     if (!data || !data.version) {
       const initial: ExtendedStorageSchema = {
         version: CURRENT_STORAGE_VERSION,
+        dataUpdatedAt: 0, // Fresh install = no user data yet, remote will win on first sync
         settings: DEFAULT_SETTINGS,
         presets: {},
         positions: {},
@@ -139,6 +141,7 @@ class StorageFacadeImpl {
 
     return {
       version: data.version as number,
+      dataUpdatedAt: (data.dataUpdatedAt || 0) as number,
       settings: mergedSettings,
       presets: (data.presets || {}) as Record<string, Partial<ReaderSettings>>,
       positions: (data.positions || {}) as Record<string, ReadingPosition>,
@@ -310,7 +313,7 @@ class StorageFacadeImpl {
 
     return {
       schemaVersion: CURRENT_STORAGE_VERSION,
-      updatedAt: Date.now(),
+      updatedAt: state.dataUpdatedAt, // Use stored timestamp, not Date.now()
       deviceId,
       settings: state.settings,
       presets: state.presets,
@@ -347,7 +350,9 @@ class StorageFacadeImpl {
     }
 
     await this.setValues({
+      _fromRemoteSync: true, // Flag to prevent setValues from overwriting dataUpdatedAt
       version: CURRENT_STORAGE_VERSION,
+      dataUpdatedAt: remote.updatedAt, // Preserve remote timestamp for future conflict resolution
       settings: remote.settings,
       presets: remote.presets,
       customThemes: remote.customThemes,
@@ -427,7 +432,24 @@ class StorageFacadeImpl {
   // PRIVATE METHODS
   // =============================================================================
 
+  /** Keys that represent user data (should update dataUpdatedAt when modified) */
+  private static readonly SYNC_RELEVANT_KEYS: readonly string[] = [
+    'settings', 'presets', 'customThemes', 'archiveItems', 'positions', 'deletedItems'
+  ];
+
   private async setValues(values: Record<string, unknown>): Promise<void> {
+    // Check if any sync-relevant data is being modified
+    const hasDataChange = StorageFacadeImpl.SYNC_RELEVANT_KEYS.some(key => key in values);
+    
+    // If this is a data change and not from remote sync, update dataUpdatedAt
+    // The _fromRemoteSync flag prevents updating timestamp when applying remote state
+    if (hasDataChange && !values._fromRemoteSync) {
+      values.dataUpdatedAt = Date.now();
+    }
+    
+    // Remove internal flag before saving (it's not part of the schema)
+    delete values._fromRemoteSync;
+    
     await chromeStorage.set(values);
   }
 

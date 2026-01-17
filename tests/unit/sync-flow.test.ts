@@ -196,6 +196,7 @@ describe('Sync Flow Integration', () => {
     it('getStateForSync returns all syncable data', async () => {
       setMockStorage({
         version: 3,
+        dataUpdatedAt: 1700000000000,
         settings: { ...DEFAULT_SETTINGS, baseWPM: 300 },
         presets: { 'Fast': { baseWPM: 500 } },
         positions: { 'pos_test': { blockIndex: 10, charOffset: 0, timestamp: 1000 } },

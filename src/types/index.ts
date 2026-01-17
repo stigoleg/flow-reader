@@ -222,6 +222,8 @@ export interface ThemeExport {
 // Storage schema
 export interface StorageSchema {
   version: number;
+  /** Timestamp of last user data modification (for sync conflict resolution) */
+  dataUpdatedAt?: number;
   settings: ReaderSettings;
   presets: Record<string, Partial<ReaderSettings>>;
   positions: Record<string, ReadingPosition>;
