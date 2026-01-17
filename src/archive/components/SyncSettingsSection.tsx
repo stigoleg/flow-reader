@@ -114,8 +114,14 @@ export function SyncSettingsSection() {
       changes: { [key: string]: chrome.storage.StorageChange },
       areaName: string
     ) => {
-      // Only trigger on archiveItems or positions changes
-      if (areaName !== 'local' || (!changes.archiveItems && !changes.positions)) {
+      // Only trigger on relevant storage changes
+      if (areaName !== 'local') return;
+      
+      // Keys that should trigger a sync
+      const syncTriggerKeys = ['archiveItems', 'positions', 'settings', 'customThemes', 'presets'];
+      const hasRelevantChange = syncTriggerKeys.some(key => key in changes);
+      
+      if (!hasRelevantChange) {
         return;
       }
       

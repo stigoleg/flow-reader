@@ -20,6 +20,20 @@ import ArchiveSettingsPanel from './components/ArchiveSettingsPanel';
 import { getSettings } from '@/lib/storage';
 import { DEFAULT_SETTINGS, type ReaderSettings } from '@/types';
 
+/**
+ * Apply theme settings to the document (CSS variables and body styles)
+ */
+function applyThemeToDocument(settings: ReaderSettings) {
+  const root = document.documentElement;
+  root.style.setProperty('--reader-bg', settings.backgroundColor);
+  root.style.setProperty('--reader-text', settings.textColor);
+  root.style.setProperty('--reader-link', settings.linkColor);
+  root.style.setProperty('--reader-selection', settings.selectionColor);
+  root.style.setProperty('--reader-highlight', settings.highlightColor);
+  document.body.style.backgroundColor = settings.backgroundColor;
+  document.body.style.color = settings.textColor;
+}
+
 export default function Archive() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,14 +94,7 @@ export default function Archive() {
     // Apply theme settings
     getSettings().then(loadedSettings => {
       setSettings(loadedSettings);
-      const root = document.documentElement;
-      root.style.setProperty('--reader-bg', loadedSettings.backgroundColor);
-      root.style.setProperty('--reader-text', loadedSettings.textColor);
-      root.style.setProperty('--reader-link', loadedSettings.linkColor);
-      root.style.setProperty('--reader-selection', loadedSettings.selectionColor);
-      root.style.setProperty('--reader-highlight', loadedSettings.highlightColor);
-      document.body.style.backgroundColor = loadedSettings.backgroundColor;
-      document.body.style.color = loadedSettings.textColor;
+      applyThemeToDocument(loadedSettings);
     });
   }, [loadItems]);
   
@@ -106,6 +113,25 @@ export default function Archive() {
     chrome.storage.onChanged.addListener(handleStorageChange);
     return () => chrome.storage.onChanged.removeListener(handleStorageChange);
   }, [loadItems]);
+  
+  // Listen for settings changes from sync to update the theme
+  useEffect(() => {
+    const handleStorageChange = (
+      changes: { [key: string]: chrome.storage.StorageChange },
+      areaName: string
+    ) => {
+      if (areaName === 'local' && changes.settings) {
+        // Reload and apply settings when they change (e.g., from sync)
+        getSettings().then(loadedSettings => {
+          setSettings(loadedSettings);
+          applyThemeToDocument(loadedSettings);
+        });
+      }
+    };
+    
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange);
+  }, []);
   
   // Listen for focus search event (from shortcut when already on archive)
   useEffect(() => {
