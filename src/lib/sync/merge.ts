@@ -6,13 +6,20 @@
  * and "last writer wins" for other settings.
  */
 
-import type { ReadingPosition, ArchiveProgress } from '@/types';
+import type { ReadingPosition } from '@/types';
 import type { 
   SyncStateDocument, 
   SyncArchiveItem, 
   MergeResult, 
   ConflictInfo 
 } from './types';
+import { normalizeUrl } from '../url-utils';
+import { 
+  isPositionFurther, 
+  furtherPosition, 
+  furtherProgress,
+  mergeArchiveItemPair as mergeArchiveItemPairBase,
+} from '../archive-utils';
 
 // =============================================================================
 // MAIN MERGE FUNCTION
@@ -184,23 +191,10 @@ interface ArchiveMergeResult {
 }
 
 /**
- * Normalize a URL for consistent comparison during deduplication
+ * Normalize a URL for consistent comparison during deduplication.
+ * Re-exported from url-utils for testing exports.
  */
-function normalizeUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
-    parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
-    // Remove tracking parameters
-    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'ref']
-      .forEach(param => parsed.searchParams.delete(param));
-    parsed.searchParams.sort();
-    parsed.hash = '';
-    return parsed.toString();
-  } catch {
-    return url.toLowerCase();
-  }
-}
+// normalizeUrl imported from ../url-utils
 
 /**
  * Merge two archive items, keeping the best data from each.
@@ -213,44 +207,7 @@ function mergeArchiveItemPair(
   item1: SyncArchiveItem,
   item2: SyncArchiveItem
 ): SyncArchiveItem {
-  // Determine which item has furthest progress
-  // Handle undefined positions: an item with a position is further than one without
-  const item1Further = item1.lastPosition && item2.lastPosition 
-    ? isPositionFurther(item1.lastPosition, item2.lastPosition)
-    : !!item1.lastPosition && !item2.lastPosition;
-  const item2Further = item1.lastPosition && item2.lastPosition 
-    ? isPositionFurther(item2.lastPosition, item1.lastPosition)
-    : !!item2.lastPosition && !item1.lastPosition;
-  
-  // Also check percentage progress
-  const item1Percent = item1.progress?.percent ?? 0;
-  const item2Percent = item2.progress?.percent ?? 0;
-  
-  // The "primary" item is the one with more progress (we keep its ID)
-  let primary: SyncArchiveItem;
-  let secondary: SyncArchiveItem;
-  
-  if (item1Further || (!item2Further && item1Percent >= item2Percent)) {
-    primary = item1;
-    secondary = item2;
-  } else {
-    primary = item2;
-    secondary = item1;
-  }
-  
-  // Merge: use primary's ID and progress, but take newer metadata
-  const newerMetadata = primary.lastOpenedAt >= secondary.lastOpenedAt ? primary : secondary;
-  
-  return {
-    ...newerMetadata,
-    id: primary.id, // Keep the ID from the item with most progress
-    createdAt: Math.min(primary.createdAt, secondary.createdAt), // Keep earliest creation
-    lastPosition: furtherPosition(primary.lastPosition, secondary.lastPosition),
-    progress: furtherProgress(primary.progress, secondary.progress),
-    // Ensure we have fileHash and url if available
-    fileHash: primary.fileHash || secondary.fileHash,
-    url: primary.url || secondary.url,
-  };
+  return mergeArchiveItemPairBase(item1, item2);
 }
 
 /**
@@ -511,57 +468,7 @@ function mergeCustomThemes(
 // HELPER FUNCTIONS
 // =============================================================================
 
-/**
- * Check if position A is further in the document than position B.
- * Compares chapter index first (for books), then block index.
- */
-function isPositionFurther(a: ReadingPosition, b: ReadingPosition): boolean {
-  // For books, compare chapter index first
-  const aChapter = a.chapterIndex ?? 0;
-  const bChapter = b.chapterIndex ?? 0;
-  
-  if (aChapter > bChapter) return true;
-  if (aChapter < bChapter) return false;
-  
-  // Same chapter (or no chapters) - compare block index
-  return a.blockIndex > b.blockIndex;
-}
-
-/**
- * Get the further of two positions (for archive item last position)
- * Uses furthest progress wins strategy
- */
-function furtherPosition(
-  a: ReadingPosition | undefined,
-  b: ReadingPosition | undefined
-): ReadingPosition | undefined {
-  if (!a) return b;
-  if (!b) return a;
-  
-  if (isPositionFurther(a, b)) return a;
-  if (isPositionFurther(b, a)) return b;
-  
-  // Same position - return the one with newer timestamp
-  return a.timestamp > b.timestamp ? a : b;
-}
-
-/**
- * Get the further of two progress values (higher percentage wins)
- * For archive items, we always want to show the furthest reading progress
- */
-function furtherProgress(
-  a: ArchiveProgress | undefined,
-  b: ArchiveProgress | undefined
-): ArchiveProgress | undefined {
-  if (!a) return b;
-  if (!b) return a;
-  
-  // Compare overall progress percentage
-  const aProgress = a.percent ?? 0;
-  const bProgress = b.percent ?? 0;
-  
-  return aProgress >= bProgress ? a : b;
-}
+// Note: isPositionFurther, furtherPosition, and furtherProgress are imported from archive-utils.ts
 
 /**
  * Get the newer of two positions based on timestamp

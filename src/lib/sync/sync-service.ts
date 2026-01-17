@@ -9,9 +9,17 @@
  */
 
 import { storageFacade } from '../storage-facade';
+import { SyncError } from '../errors';
 import { encrypt, decrypt, generateSalt, getSaltFromBlob } from './encryption';
 import { mergeStates } from './merge';
 import { contentSyncManager } from './content-sync';
+import { 
+  arrayBufferToBase64, 
+  base64ToUint8Array, 
+  unicodeToBase64, 
+  base64ToUnicode 
+} from '../encoding';
+import * as chromeStorage from '../chrome-storage';
 import type { 
   SyncProvider, 
   SyncProviderType, 
@@ -66,30 +74,15 @@ class SyncServiceImpl {
    * Get current sync configuration
    */
   async getConfig(): Promise<StoredSyncConfig | null> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get([SYNC_CONFIG_KEY], (result) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(result[SYNC_CONFIG_KEY] as StoredSyncConfig || null);
-      });
-    });
+    const config = await chromeStorage.getOne<StoredSyncConfig>(SYNC_CONFIG_KEY);
+    return config || null;
   }
 
   /**
    * Save sync configuration
    */
   private async saveConfig(config: StoredSyncConfig): Promise<void> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set({ [SYNC_CONFIG_KEY]: config }, () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    });
+    await chromeStorage.setOne(SYNC_CONFIG_KEY, config);
   }
 
   /**
@@ -123,7 +116,7 @@ class SyncServiceImpl {
         // Verify passphrase by attempting to decrypt
         try {
           existingRemoteState = await decrypt(remoteBlob, passphrase);
-        } catch (error) {
+        } catch {
           this.passphrase = null; // Clear invalid passphrase
           throw new SyncError('Incorrect passphrase for existing sync data', 'decrypt');
         }
@@ -688,58 +681,8 @@ class SyncServiceImpl {
   }
 }
 
-// =============================================================================
-// ERROR TYPE
-// =============================================================================
-
-export class SyncError extends Error {
-  constructor(
-    message: string,
-    public readonly operation: 'configuration' | 'sync' | 'upload' | 'download' | 'decrypt'
-  ) {
-    super(message);
-    this.name = 'SyncError';
-  }
-}
-
-// =============================================================================
-// UTILITY FUNCTIONS
-// =============================================================================
-
-function arrayBufferToBase64(buffer: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < buffer.byteLength; i++) {
-    binary += String.fromCharCode(buffer[i]);
-  }
-  return btoa(binary);
-}
-
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
-/**
- * Encode a Unicode string to base64 (handles non-Latin1 characters)
- * Uses TextEncoder to convert to UTF-8 bytes first
- */
-function unicodeToBase64(str: string): string {
-  const bytes = new TextEncoder().encode(str);
-  return arrayBufferToBase64(bytes);
-}
-
-/**
- * Decode a base64 string to Unicode (handles non-Latin1 characters)
- * Uses TextDecoder to convert from UTF-8 bytes
- */
-function base64ToUnicode(base64: string): string {
-  const bytes = base64ToUint8Array(base64);
-  return new TextDecoder().decode(bytes);
-}
+// Re-export SyncError for backwards compatibility
+export { SyncError } from '../errors';
 
 // =============================================================================
 // SINGLETON EXPORT

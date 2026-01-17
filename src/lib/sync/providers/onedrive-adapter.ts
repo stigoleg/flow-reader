@@ -12,6 +12,7 @@ import type {
   RemoteMetadata,
   OAuthTokens,
 } from '../types';
+import { generateCodeVerifier, generateCodeChallenge } from '../oauth-utils';
 
 // =============================================================================
 // CONSTANTS
@@ -633,34 +634,6 @@ export class OneDriveAdapter implements SyncProvider {
       });
     });
   }
-}
-
-// =============================================================================
-// PKCE HELPERS
-// =============================================================================
-
-function generateCodeVerifier(): string {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  return base64UrlEncode(array);
-}
-
-async function generateCodeChallenge(verifier: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(verifier);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return base64UrlEncode(new Uint8Array(digest));
-}
-
-function base64UrlEncode(buffer: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < buffer.byteLength; i++) {
-    binary += String.fromCharCode(buffer[i]);
-  }
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
 }
 
 // =============================================================================

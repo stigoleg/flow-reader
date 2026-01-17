@@ -6,6 +6,8 @@
  * - Schema versioning and migration support
  * - Change notification callbacks
  * - Sync state preparation and application
+ * 
+ * Uses chrome-storage.ts for underlying Chrome storage operations.
  */
 
 import type { 
@@ -19,6 +21,8 @@ import type {
 } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 import { CURRENT_STORAGE_VERSION, runMigrations } from './migrations';
+import { normalizeUrl } from './url-utils';
+import * as chromeStorage from './chrome-storage';
 
 // =============================================================================
 // TYPES
@@ -100,47 +104,56 @@ class StorageFacadeImpl {
   }
 
   /**
-   * Get full storage state with defaults applied
+   * Get full storage state with defaults applied.
+   * Auto-initializes storage if empty (matches storage.ts behavior).
    */
   async getState(): Promise<ExtendedStorageSchema> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get(null, (result) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
+    const data = await chromeStorage.get<Record<string, unknown>>(null);
+    
+    // If no data or no version, auto-initialize with defaults
+    if (!data || !data.version) {
+      const initial: ExtendedStorageSchema = {
+        version: CURRENT_STORAGE_VERSION,
+        settings: DEFAULT_SETTINGS,
+        presets: {},
+        positions: {},
+        archiveItems: [],
+        recentDocuments: [],
+        customThemes: [],
+        onboardingCompleted: false,
+        exitConfirmationDismissed: false,
+        deviceId: this.getOrCreateDeviceId(),
+        syncEnabled: false,
+        syncProvider: null,
+        lastSyncTime: null,
+        lastSyncError: null,
+        deletedItems: {},
+      };
+      await chromeStorage.set(initial as unknown as Record<string, unknown>);
+      return initial;
+    }
 
-        const data = result as Record<string, unknown>;
-        
-        // If no data or no version, we need initialization
-        if (!data || !data.version) {
-          reject(new Error('Storage not initialized. Call initializeDefaultStorage first.'));
-          return;
-        }
+    // Merge stored settings with defaults to handle new settings added in updates
+    const storedSettings = (data.settings || {}) as Partial<ReaderSettings>;
+    const mergedSettings = { ...DEFAULT_SETTINGS, ...storedSettings };
 
-        // Merge stored settings with defaults to handle new settings added in updates
-        const storedSettings = (data.settings || {}) as Partial<ReaderSettings>;
-        const mergedSettings = { ...DEFAULT_SETTINGS, ...storedSettings };
-
-        resolve({
-          version: data.version as number,
-          settings: mergedSettings,
-          presets: (data.presets || {}) as Record<string, Partial<ReaderSettings>>,
-          positions: (data.positions || {}) as Record<string, ReadingPosition>,
-          archiveItems: (data.archiveItems || []) as ArchiveItem[],
-          recentDocuments: (data.recentDocuments || []) as StorageSchema['recentDocuments'],
-          customThemes: (data.customThemes || []) as CustomTheme[],
-          onboardingCompleted: (data.onboardingCompleted || false) as boolean,
-          exitConfirmationDismissed: (data.exitConfirmationDismissed || false) as boolean,
-          deviceId: (data.deviceId || this.getOrCreateDeviceId()) as string,
-          syncEnabled: (data.syncEnabled || false) as boolean,
-          syncProvider: (data.syncProvider || null) as SyncProviderType | null,
-          lastSyncTime: (data.lastSyncTime || null) as number | null,
-          lastSyncError: (data.lastSyncError || null) as string | null,
-          deletedItems: (data.deletedItems || {}) as Record<string, number>,
-        });
-      });
-    });
+    return {
+      version: data.version as number,
+      settings: mergedSettings,
+      presets: (data.presets || {}) as Record<string, Partial<ReaderSettings>>,
+      positions: (data.positions || {}) as Record<string, ReadingPosition>,
+      archiveItems: (data.archiveItems || []) as ArchiveItem[],
+      recentDocuments: (data.recentDocuments || []) as StorageSchema['recentDocuments'],
+      customThemes: (data.customThemes || []) as CustomTheme[],
+      onboardingCompleted: (data.onboardingCompleted || false) as boolean,
+      exitConfirmationDismissed: (data.exitConfirmationDismissed || false) as boolean,
+      deviceId: (data.deviceId || this.getOrCreateDeviceId()) as string,
+      syncEnabled: (data.syncEnabled || false) as boolean,
+      syncProvider: (data.syncProvider || null) as SyncProviderType | null,
+      lastSyncTime: (data.lastSyncTime || null) as number | null,
+      lastSyncError: (data.lastSyncError || null) as string | null,
+      deletedItems: (data.deletedItems || {}) as Record<string, number>,
+    };
   }
 
   /**
@@ -151,29 +164,17 @@ class StorageFacadeImpl {
       return this.deviceId;
     }
 
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get(['deviceId'], (result) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-
-        if (result.deviceId) {
-          this.deviceId = result.deviceId as string;
-          resolve(this.deviceId);
-        } else {
-          const newDeviceId = this.generateDeviceId();
-          chrome.storage.local.set({ deviceId: newDeviceId }, () => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-            } else {
-              this.deviceId = newDeviceId;
-              resolve(newDeviceId);
-            }
-          });
-        }
-      });
-    });
+    const result = await chromeStorage.getOne<string>('deviceId');
+    
+    if (result) {
+      this.deviceId = result;
+      return this.deviceId;
+    }
+    
+    const newDeviceId = this.generateDeviceId();
+    await chromeStorage.setOne('deviceId', newDeviceId);
+    this.deviceId = newDeviceId;
+    return newDeviceId;
   }
 
   /**
@@ -233,8 +234,8 @@ class StorageFacadeImpl {
     
     // Also add tombstone for normalized URL if present (for web deduplication)
     if (item.url) {
-      const normalizedUrl = this.normalizeUrl(item.url);
-      deletedItems[`url:${normalizedUrl}`] = now;
+      const normalized = normalizeUrl(item.url);
+      deletedItems[`url:${normalized}`] = now;
     }
     
     return this.setValues({ deletedItems });
@@ -245,25 +246,6 @@ class StorageFacadeImpl {
    */
   async clearDeletedItemTombstones(): Promise<void> {
     return this.setValues({ deletedItems: {} });
-  }
-
-  /**
-   * Normalize a URL for tombstone matching
-   */
-  private normalizeUrl(url: string): string {
-    try {
-      const parsed = new URL(url);
-      parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
-      parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
-      // Remove tracking params
-      ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'ref']
-        .forEach(param => parsed.searchParams.delete(param));
-      parsed.searchParams.sort();
-      parsed.hash = '';
-      return parsed.toString();
-    } catch {
-      return url.toLowerCase();
-    }
   }
 
   /**
@@ -372,15 +354,8 @@ class StorageFacadeImpl {
    * Get current storage version
    */
   async getCurrentVersion(): Promise<number> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get(['version'], (result) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve((result.version as number) || 1);
-      });
-    });
+    const version = await chromeStorage.getOne<number>('version');
+    return version || 1;
   }
 
   /**
@@ -434,16 +409,8 @@ class StorageFacadeImpl {
    * Clear all storage data
    */
   async clearAll(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.clear(() => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          this.deviceId = null;
-          resolve();
-        }
-      });
-    });
+    await chromeStorage.clear();
+    this.deviceId = null;
   }
 
   // =============================================================================
@@ -451,15 +418,7 @@ class StorageFacadeImpl {
   // =============================================================================
 
   private async setValues(values: Record<string, unknown>): Promise<void> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set(values, () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    });
+    await chromeStorage.set(values);
   }
 
   private notifyListeners(changes: Partial<ExtendedStorageSchema>): void {
@@ -478,7 +437,9 @@ class StorageFacadeImpl {
     }
     this.deviceId = this.generateDeviceId();
     // Fire and forget - save the device ID
-    chrome.storage.local.set({ deviceId: this.deviceId });
+    chromeStorage.setOne('deviceId', this.deviceId).catch(err => {
+      console.error('StorageFacade: Failed to persist device ID:', err);
+    });
     return this.deviceId;
   }
 

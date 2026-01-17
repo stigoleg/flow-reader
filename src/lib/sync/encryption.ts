@@ -7,6 +7,11 @@
  */
 
 import type { EncryptedBlob, SyncStateDocument } from './types';
+import { 
+  arrayBufferToBase64, 
+  base64ToUint8Array, 
+  toArrayBuffer 
+} from '../encoding';
 
 // =============================================================================
 // CONSTANTS
@@ -228,43 +233,7 @@ export class EncryptionError extends Error {
   }
 }
 
-// =============================================================================
-// UTILITY FUNCTIONS
-// =============================================================================
 
-/**
- * Convert Uint8Array to ArrayBuffer (for WebCrypto API compatibility with strict TypeScript)
- */
-function toArrayBuffer(uint8Array: Uint8Array): ArrayBuffer {
-  return uint8Array.buffer.slice(
-    uint8Array.byteOffset, 
-    uint8Array.byteOffset + uint8Array.byteLength
-  ) as ArrayBuffer;
-}
-
-/**
- * Convert ArrayBuffer or Uint8Array to base64 string
- */
-function arrayBufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-/**
- * Convert base64 string to Uint8Array
- */
-function base64ToUint8Array(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 // =============================================================================
 // EXPORTS FOR TESTING
@@ -278,3 +247,6 @@ export const _testing = {
   IV_LENGTH,
   AES_KEY_LENGTH,
 };
+
+// Re-export encoding utilities for convenience
+export { arrayBufferToBase64, base64ToUint8Array } from '../encoding';

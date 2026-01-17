@@ -236,6 +236,9 @@ export interface StorageSchema {
   deletedItems?: Record<string, number>;
 }
 
+/**
+ * @deprecated Use ArchiveItem instead. This interface is kept for migration compatibility.
+ */
 export interface RecentDocument {
   id: string;
   title: string;

@@ -10,6 +10,9 @@ import { CURRENT_STORAGE_VERSION } from './migrations';
 import { syncService } from './sync/sync-service';
 import { storageFacade } from './storage-facade';
 import { computeTextHash } from './file-utils';
+import { normalizeUrl, hashString } from './url-utils';
+import { mergeFullArchiveItems } from './archive-utils';
+import * as chromeStorage from './chrome-storage';
 
 // =============================================================================
 // CONFIGURATION
@@ -74,35 +77,29 @@ let pendingItems: ArchiveItem[] | null = null;
  * Get archive items from storage
  */
 async function getArchiveItems(): Promise<ArchiveItem[]> {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get(['archiveItems', 'recentDocuments', 'version'], (result) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      
-      const version = result.version as number | undefined;
-      const archiveItems = result.archiveItems as ArchiveItem[] | undefined;
-      const recentDocuments = result.recentDocuments as RecentDocument[] | undefined;
-      
-      // If we have archive items and version >= 2, use them directly
-      if (archiveItems && version && version >= STORAGE_VERSION) {
-        resolve(archiveItems);
-        return;
-      }
-      
-      // If we only have old recentDocuments, migrate them
-      if (recentDocuments && recentDocuments.length > 0 && !archiveItems) {
-        const migrated = migrateRecentDocuments(recentDocuments);
-        // Save the migrated items
-        saveArchiveItems(migrated).then(() => resolve(migrated)).catch(reject);
-        return;
-      }
-      
-      // No items yet
-      resolve(archiveItems || []);
-    });
-  });
+  const result = await chromeStorage.get<{
+    archiveItems?: ArchiveItem[];
+    recentDocuments?: RecentDocument[];
+    version?: number;
+  }>(['archiveItems', 'recentDocuments', 'version']);
+  
+  const { version, archiveItems, recentDocuments } = result;
+  
+  // If we have archive items and version >= 2, use them directly
+  if (archiveItems && version && version >= STORAGE_VERSION) {
+    return archiveItems;
+  }
+  
+  // If we only have old recentDocuments, migrate them
+  if (recentDocuments && recentDocuments.length > 0 && !archiveItems) {
+    const migrated = migrateRecentDocuments(recentDocuments);
+    // Save the migrated items
+    await saveArchiveItems(migrated);
+    return migrated;
+  }
+  
+  // No items yet
+  return archiveItems || [];
 }
 
 /**
@@ -116,7 +113,7 @@ async function saveArchiveItems(items: ArchiveItem[]): Promise<void> {
   }
   
   return new Promise((resolve, reject) => {
-    pendingWrite = setTimeout(() => {
+    pendingWrite = setTimeout(async () => {
       const itemsToSave = pendingItems;
       pendingItems = null;
       pendingWrite = null;
@@ -126,16 +123,15 @@ async function saveArchiveItems(items: ArchiveItem[]): Promise<void> {
         return;
       }
       
-      chrome.storage.local.set({ 
-        archiveItems: itemsToSave,
-        version: STORAGE_VERSION,
-      }, () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
+      try {
+        await chromeStorage.set({ 
+          archiveItems: itemsToSave,
+          version: STORAGE_VERSION,
+        });
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
     }, DEBOUNCE_DELAY);
   });
 }
@@ -150,17 +146,9 @@ async function flushArchiveItems(items: ArchiveItem[]): Promise<void> {
   }
   pendingItems = null;
   
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.set({ 
-      archiveItems: items,
-      version: STORAGE_VERSION,
-    }, () => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else {
-        resolve();
-      }
-    });
+  await chromeStorage.set({ 
+    archiveItems: items,
+    version: STORAGE_VERSION,
   });
 }
 
@@ -168,75 +156,17 @@ async function flushArchiveItems(items: ArchiveItem[]): Promise<void> {
 // DEDUPLICATION
 // =============================================================================
 
-/**
- * Compare two positions and return true if posA is further in the document
- */
-function isPositionFurther(
-  posA: ReadingPosition | undefined,
-  posB: ReadingPosition | undefined
-): boolean {
-  if (!posA) return false;
-  if (!posB) return true;
-  
-  const aChapter = posA.chapterIndex ?? 0;
-  const bChapter = posB.chapterIndex ?? 0;
-  
-  if (aChapter > bChapter) return true;
-  if (aChapter < bChapter) return false;
-  
-  return posA.blockIndex > posB.blockIndex;
-}
+// Note: isPositionFurther is imported from archive-utils.ts
 
 /**
  * Merge two archive items, keeping the best data from each.
- * - Uses furthest reading position
- * - Uses highest progress percentage
- * - Prefers newer metadata
- * - Keeps the ID from the item with furthest progress
+ * Uses mergeFullArchiveItems from archive-utils.ts which handles cachedDocument.
  */
 function mergeArchiveItemPair(
   item1: ArchiveItem,
   item2: ArchiveItem
 ): ArchiveItem {
-  const item1Further = isPositionFurther(item1.lastPosition, item2.lastPosition);
-  const item2Further = isPositionFurther(item2.lastPosition, item1.lastPosition);
-  
-  const item1Percent = item1.progress?.percent ?? 0;
-  const item2Percent = item2.progress?.percent ?? 0;
-  
-  let primary: ArchiveItem;
-  let secondary: ArchiveItem;
-  
-  if (item1Further || (!item2Further && item1Percent >= item2Percent)) {
-    primary = item1;
-    secondary = item2;
-  } else {
-    primary = item2;
-    secondary = item1;
-  }
-  
-  const newerMetadata = primary.lastOpenedAt >= secondary.lastOpenedAt ? primary : secondary;
-  
-  // Get the better position
-  const mergedPosition = item1Further ? item1.lastPosition 
-    : item2Further ? item2.lastPosition 
-    : (item1.lastPosition?.timestamp ?? 0) >= (item2.lastPosition?.timestamp ?? 0) ? item1.lastPosition : item2.lastPosition;
-  
-  // Get the better progress
-  const mergedProgress = item1Percent >= item2Percent ? item1.progress : item2.progress;
-  
-  return {
-    ...newerMetadata,
-    id: primary.id,
-    createdAt: Math.min(primary.createdAt, secondary.createdAt),
-    lastPosition: mergedPosition,
-    progress: mergedProgress,
-    fileHash: primary.fileHash || secondary.fileHash,
-    url: primary.url || secondary.url,
-    // Prefer the cached document that exists
-    cachedDocument: primary.cachedDocument || secondary.cachedDocument,
-    pasteContent: primary.pasteContent || secondary.pasteContent,
-  };
+  return mergeFullArchiveItems(item1, item2);
 }
 
 /**
@@ -461,53 +391,6 @@ function generateStableId(input: AddRecentInput): string {
   
   // For other sources without identifiable content, use timestamp + random
   return `${input.type}_${now}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-/**
- * Normalize a URL for consistent comparison
- * - Removes trailing slashes
- * - Removes www. prefix
- * - Removes common tracking parameters
- * - Lowercases the domain
- */
-function normalizeUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    
-    // Lowercase the hostname and remove www.
-    parsed.hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
-    
-    // Remove trailing slash from pathname
-    parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
-    
-    // Remove common tracking parameters
-    const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid', 'ref'];
-    trackingParams.forEach(param => parsed.searchParams.delete(param));
-    
-    // Sort remaining search params for consistency
-    parsed.searchParams.sort();
-    
-    // Remove hash (fragment)
-    parsed.hash = '';
-    
-    return parsed.toString();
-  } catch {
-    // If URL parsing fails, return as-is but lowercase
-    return url.toLowerCase();
-  }
-}
-
-/**
- * Simple string hash for generating IDs
- */
-function hashString(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash).toString(36);
 }
 
 // =============================================================================
