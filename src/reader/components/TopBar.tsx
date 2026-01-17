@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useReaderStore } from '../store';
 import { MODE_OPTIONS } from '@/constants/ui-options';
 import WPMInput from './WPMInput';
@@ -23,7 +24,49 @@ export default function TopBar({ onImportClick }: TopBarProps) {
     toggleToc,
     nextChapter,
     prevChapter,
+    renameDocument,
   } = useReaderStore();
+
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when entering edit mode
+  useEffect(() => {
+    if (isEditingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [isEditingTitle]);
+
+  const startEditing = useCallback(() => {
+    if (document) {
+      setEditValue(document.metadata.title);
+      setIsEditingTitle(true);
+    }
+  }, [document]);
+
+  const finishEditing = useCallback(async () => {
+    if (editValue.trim() && editValue.trim() !== document?.metadata.title) {
+      await renameDocument(editValue.trim());
+    }
+    setIsEditingTitle(false);
+  }, [editValue, document?.metadata.title, renameDocument]);
+
+  const cancelEditing = useCallback(() => {
+    setIsEditingTitle(false);
+    setEditValue(document?.metadata.title || '');
+  }, [document?.metadata.title]);
+
+  const handleTitleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finishEditing();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEditing();
+    }
+  }, [finishEditing, cancelEditing]);
 
   const handleExit = () => {
     window.close();
@@ -98,9 +141,26 @@ export default function TopBar({ onImportClick }: TopBarProps) {
                 </h1>
               </>
             ) : (
-              <h1 className="text-sm font-medium truncate opacity-80">
-                {document?.metadata.title || 'FlowReader'}
-              </h1>
+              isEditingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  type="text"
+                  className="text-sm font-medium opacity-80 bg-transparent border-b border-current outline-none px-1 py-0.5 min-w-[100px] max-w-[300px]"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={handleTitleKeyDown}
+                  onBlur={finishEditing}
+                />
+              ) : (
+                <button
+                  onClick={startEditing}
+                  className="text-sm font-medium truncate opacity-80 hover:opacity-100 text-left cursor-text"
+                  title="Click to rename"
+                  aria-label="Click to rename document"
+                >
+                  {document?.metadata.title || 'FlowReader'}
+                </button>
+              )
             )}
           </div>
 

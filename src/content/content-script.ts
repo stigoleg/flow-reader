@@ -1,9 +1,7 @@
 import { extractContent, extractFromSelection } from '@/lib/extraction';
 import type { MessageType } from '@/types';
 
-// =============================================================================
 // KEYBOARD SHORTCUTS (fallback for when Chrome command shortcuts don't work)
-// =============================================================================
 
 /**
  * Check if the user is in an input field where we shouldn't capture shortcuts
@@ -60,9 +58,6 @@ function handleKeyDown(event: KeyboardEvent): void {
 // Register keyboard listener
 document.addEventListener('keydown', handleKeyDown, { capture: true });
 
-// =============================================================================
-// MESSAGE HANDLERS
-// =============================================================================
 
 chrome.runtime.onMessage.addListener((message: MessageType | { type: 'PING' }, _sender, sendResponse) => {
   // Simple ping to check if content script is loaded
@@ -73,19 +68,11 @@ chrome.runtime.onMessage.addListener((message: MessageType | { type: 'PING' }, _
 
   if (message.type === 'EXTRACT_CONTENT') {
     try {
-      // Debug: log document state
-      console.log('FlowReader: Extracting from', window.location.href);
-      console.log('FlowReader: Document ready state:', document.readyState);
-      console.log('FlowReader: Has documentElement:', !!document.documentElement);
-      console.log('FlowReader: Has body:', !!document.body);
-      
       const extractedDoc = extractContent(window.document, window.location.href);
 
       if (extractedDoc) {
-        console.log('FlowReader: Extraction successful, blocks:', extractedDoc.blocks.length);
         sendResponse({ type: 'CONTENT_EXTRACTED', payload: extractedDoc });
       } else {
-        console.log('FlowReader: Extraction returned null, trying selection');
         const selection = window.getSelection()?.toString();
         if (selection && selection.length > 100) {
           const fallbackDoc = extractFromSelection(selection, window.location.href);

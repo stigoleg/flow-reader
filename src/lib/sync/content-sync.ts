@@ -16,15 +16,9 @@ import type {
 } from './types';
 import { encryptData, decryptData } from './encryption';
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
 
 const CONTENT_FILE_EXTENSION = '.enc';
 
-// =============================================================================
-// TYPES FOR CONTENT ENCRYPTION
-// =============================================================================
 
 /** Wrapper type for encrypted compressed content */
 interface EncryptedContentData {
@@ -32,9 +26,6 @@ interface EncryptedContentData {
   data: string;
 }
 
-// =============================================================================
-// CONTENT SYNC MANAGER
-// =============================================================================
 
 export class ContentSyncManager {
   private passphrase: string | null = null;
@@ -348,9 +339,6 @@ export class ContentSyncManager {
     return updatedManifest;
   }
 
-  // ===========================================================================
-  // UTILITY METHODS
-  // ===========================================================================
 
   private hashString(str: string): string {
     // Simple hash for generating stable IDs from strings
@@ -407,17 +395,14 @@ export class ContentSyncManager {
     const filename = this.getContentFileName(item);
     try {
       await provider.deleteContentFile(filename);
-      console.log(`Deleted synced content: ${filename}`);
+      if (import.meta.env.DEV) console.log(`Deleted synced content: ${filename}`);
     } catch (error) {
       // Ignore errors - file may not exist remotely
-      console.log(`Could not delete synced content ${filename}:`, error);
+      if (import.meta.env.DEV) console.log(`Could not delete synced content ${filename}:`, error);
     }
   }
 }
 
-// =============================================================================
-// TYPES
-// =============================================================================
 
 export interface ContentSyncResult {
   /** Updated manifest with all synced content */
@@ -430,8 +415,5 @@ export interface ContentSyncResult {
   errors: Array<{ itemId: string; error: string }>;
 }
 
-// =============================================================================
-// SINGLETON EXPORT
-// =============================================================================
 
 export const contentSyncManager = new ContentSyncManager();

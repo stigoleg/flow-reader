@@ -59,12 +59,4 @@ export function useStorageSync() {
   }, [updateSettingsFromSync]);
 }
 
-/**
- * Hook to subscribe to a specific sync event
- */
-export function useSyncEvent(eventName: string, callback: () => void) {
-  useEffect(() => {
-    window.addEventListener(eventName, callback);
-    return () => window.removeEventListener(eventName, callback);
-  }, [eventName, callback]);
-}
+

@@ -11,9 +11,6 @@
 import { syncService } from './sync-service';
 import { storageFacade } from '../storage-facade';
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
 
 const ALARM_NAME = 'sync-periodic';
 const SYNC_INTERVAL_MINUTES = 15;
@@ -24,9 +21,6 @@ const DEBOUNCE_MS = 3000; // 3 seconds debounce for state changes
 const MAX_BACKOFF_MS = 3600000; // 1 hour max
 const INITIAL_BACKOFF_MS = 60000; // 1 minute initial
 
-// =============================================================================
-// SYNC SCHEDULER CLASS
-// =============================================================================
 
 class SyncSchedulerImpl {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -45,7 +39,7 @@ class SyncSchedulerImpl {
     // Check if sync is enabled
     const config = await syncService.getConfig();
     if (!config?.enabled) {
-      console.log('SyncScheduler: Sync not enabled, skipping initialization');
+      if (import.meta.env.DEV) console.log('SyncScheduler: Sync not enabled, skipping initialization');
       return;
     }
 
@@ -66,7 +60,7 @@ class SyncSchedulerImpl {
       }
     });
 
-    console.log('SyncScheduler: Initialized');
+    if (import.meta.env.DEV) console.log('SyncScheduler: Initialized');
   }
 
   /**
@@ -81,7 +75,7 @@ class SyncSchedulerImpl {
       periodInMinutes: SYNC_INTERVAL_MINUTES,
     });
 
-    console.log(`SyncScheduler: Periodic alarm set for every ${SYNC_INTERVAL_MINUTES} minutes`);
+    if (import.meta.env.DEV) console.log(`SyncScheduler: Periodic alarm set for every ${SYNC_INTERVAL_MINUTES} minutes`);
   }
 
   /**
@@ -90,7 +84,7 @@ class SyncSchedulerImpl {
   async handleAlarm(alarm: chrome.alarms.Alarm): Promise<void> {
     if (alarm.name !== ALARM_NAME) return;
 
-    console.log('SyncScheduler: Periodic alarm triggered');
+    if (import.meta.env.DEV) console.log('SyncScheduler: Periodic alarm triggered');
     await this.triggerSync('periodic');
   }
 
@@ -126,7 +120,7 @@ class SyncSchedulerImpl {
       MAX_BACKOFF_MS
     );
 
-    console.log(`SyncScheduler: Scheduling retry in ${backoffMs / 1000}s (error #${this.consecutiveErrors})`);
+    if (import.meta.env.DEV) console.log(`SyncScheduler: Scheduling retry in ${backoffMs / 1000}s (error #${this.consecutiveErrors})`);
 
     setTimeout(() => {
       this.triggerSync('retry');
@@ -140,24 +134,24 @@ class SyncSchedulerImpl {
     // Check if enough time has passed since last sync
     const timeSinceLastSync = Date.now() - this.lastSyncTime;
     if (timeSinceLastSync < MIN_SYNC_INTERVAL_MS && reason !== 'manual') {
-      console.log(`SyncScheduler: Skipping sync (too soon, ${timeSinceLastSync}ms since last)`);
+      if (import.meta.env.DEV) console.log(`SyncScheduler: Skipping sync (too soon, ${timeSinceLastSync}ms since last)`);
       return;
     }
 
     // Check if sync service is ready (has provider and passphrase if encryption enabled)
     const isReady = await syncService.isReadyToSync();
     if (!isReady) {
-      console.log('SyncScheduler: Skipping sync (not ready - check provider and passphrase)');
+      if (import.meta.env.DEV) console.log('SyncScheduler: Skipping sync (not ready - check provider and passphrase)');
       return;
     }
 
-    console.log(`SyncScheduler: Triggering sync (reason: ${reason})`);
+    if (import.meta.env.DEV) console.log(`SyncScheduler: Triggering sync (reason: ${reason})`);
 
     try {
       const result = await syncService.syncNow();
       
       if (result.success) {
-        console.log(`SyncScheduler: Sync completed (action: ${result.action})`);
+        if (import.meta.env.DEV) console.log(`SyncScheduler: Sync completed (action: ${result.action})`);
       } else {
         console.warn(`SyncScheduler: Sync failed: ${result.error}`);
       }
@@ -203,15 +197,9 @@ class SyncSchedulerImpl {
   }
 }
 
-// =============================================================================
-// SINGLETON EXPORT
-// =============================================================================
 
 export const syncScheduler = new SyncSchedulerImpl();
 
-// =============================================================================
-// ALARM LISTENER SETUP
-// =============================================================================
 
 /**
  * Set up the alarm listener - call this in the service worker

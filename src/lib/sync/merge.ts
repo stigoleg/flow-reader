@@ -21,9 +21,6 @@ import {
   mergeArchiveItemPair as mergeArchiveItemPairBase,
 } from '../archive-utils';
 
-// =============================================================================
-// MAIN MERGE FUNCTION
-// =============================================================================
 
 /**
  * Merge local and remote sync states.
@@ -127,9 +124,6 @@ export function mergeStates(
   return { merged, conflicts, hasChanges };
 }
 
-// =============================================================================
-// DELETED ITEMS MERGE
-// =============================================================================
 
 /**
  * Merge deleted items tombstones from local and remote.
@@ -181,9 +175,6 @@ function isItemDeleted(
   return false;
 }
 
-// =============================================================================
-// ARCHIVE ITEMS MERGE
-// =============================================================================
 
 interface ArchiveMergeResult {
   merged: SyncArchiveItem[];
@@ -382,9 +373,6 @@ function mergeArchiveItems(
   return { merged: sortedMerged, conflicts };
 }
 
-// =============================================================================
-// POSITIONS MERGE
-// =============================================================================
 
 interface PositionsMergeResult {
   merged: Record<string, ReadingPosition>;
@@ -437,9 +425,6 @@ function mergePositions(
   return { merged, conflicts };
 }
 
-// =============================================================================
-// CUSTOM THEMES MERGE
-// =============================================================================
 
 /**
  * Merge custom themes by name.
@@ -464,9 +449,6 @@ function mergeCustomThemes(
   return Array.from(themeMap.values());
 }
 
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
 
 // Note: isPositionFurther, furtherPosition, and furtherProgress are imported from archive-utils.ts
 
@@ -510,9 +492,6 @@ function positionsEqual(a: ReadingPosition, b: ReadingPosition): boolean {
     a.chapterIndex === b.chapterIndex;
 }
 
-// =============================================================================
-// EXPORTS FOR TESTING
-// =============================================================================
 
 export const _testing = {
   mergeArchiveItems,

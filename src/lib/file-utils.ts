@@ -65,27 +65,38 @@ export function getFileExtension(filename: string): string {
   return match ? match[1].toLowerCase() : '';
 }
 
+
 /**
- * Check if a file is a supported ebook format
+ * Supported document file extensions for import.
  */
-export function isEbookFile(filename: string): boolean {
-  const ext = getFileExtension(filename);
-  return ['epub', 'mobi', 'azw', 'azw3'].includes(ext);
+export const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.epub', '.mobi', '.azw', '.azw3'] as const;
+
+export type DocumentFileType = 'pdf' | 'docx' | 'epub' | 'mobi';
+
+/**
+ * Check if a filename has a supported document extension.
+ * Handles case where browser appends .zip to epub files.
+ */
+export function isSupportedFile(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  // Handle case where browser appends .zip to epub files
+  const normalized = lower.replace(/\.zip$/, '');
+  return SUPPORTED_EXTENSIONS.some(ext => normalized.endsWith(ext));
 }
 
 /**
- * Check if a file is an EPUB
+ * Get the document type from a filename.
+ * Returns null if the file type is not supported.
  */
-export function isEpubFile(filename: string): boolean {
-  return getFileExtension(filename) === 'epub';
-}
-
-/**
- * Check if a file is a MOBI/Kindle format
- */
-export function isMobiFile(filename: string): boolean {
-  const ext = getFileExtension(filename);
-  return ['mobi', 'azw', 'azw3'].includes(ext);
+export function getFileType(filename: string): DocumentFileType | null {
+  const lower = filename.toLowerCase();
+  // Handle case where browser appends .zip to epub files
+  const normalized = lower.replace(/\.zip$/, '');
+  if (normalized.endsWith('.pdf')) return 'pdf';
+  if (normalized.endsWith('.docx')) return 'docx';
+  if (normalized.endsWith('.epub')) return 'epub';
+  if (normalized.endsWith('.mobi') || normalized.endsWith('.azw') || normalized.endsWith('.azw3')) return 'mobi';
+  return null;
 }
 
 /**

@@ -2,53 +2,38 @@ import { create } from 'zustand';
 import type { FlowDocument, ReaderSettings, ReadingMode } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 import { getSettings, saveSettings, savePosition, getPosition, isExitConfirmationDismissed, dismissExitConfirmation, saveCurrentDocument } from '@/lib/storage';
-import { addRecent, mapSourceToType, getSourceLabel, shouldCacheDocument, calculateProgress, updateLastOpened } from '@/lib/recents-service';
+import { addRecent, mapSourceToType, getSourceLabel, shouldCacheDocument, calculateProgress, updateLastOpened, updateArchiveItem } from '@/lib/recents-service';
 
-// =============================================================================
-// DEBOUNCE CONFIG FOR POSITION SAVING
-// =============================================================================
 
-/** Debounce delay for position saves (1 second) */
 const POSITION_SAVE_DEBOUNCE_MS = 1000;
 
-/** Module-level debounce timer for position saving */
 let positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
-
-/** The actual position save function that will be called after debounce */
 let pendingSavePosition: (() => Promise<void>) | null = null;
 
 interface ReaderState {
-  // Document
   document: FlowDocument | null;
-  archiveItemId: string | null;  // ID of the archive item for progress updates
+  archiveItemId: string | null;
   isLoading: boolean;
   error: string | null;
 
-  // Reading position
   currentBlockIndex: number;
   currentCharOffset: number;
   
-  // Sub-block position tracking for sentence/word pacing
   currentSentenceIndex: number;
   currentWordIndex: number;
   
-  // RSVP mode position tracking
   currentRsvpIndex: number;
   rsvpTokenCount: number;
   
-  // Chapter navigation (for books)
   currentChapterIndex: number;
   isTocOpen: boolean;
 
-  // Playback
   isPlaying: boolean;
   currentWPM: number;
 
-  // Settings
   settings: ReaderSettings;
   settingsLoaded: boolean;
 
-  // UI state
   isSettingsOpen: boolean;
   isImportOpen: boolean;
   isHelpOpen: boolean;
@@ -56,9 +41,8 @@ interface ReaderState {
   isExitConfirmOpen: boolean;
   exitConfirmationDismissed: boolean;
   
-  // Reading time tracking
-  accumulatedReadingTime: number;  // Total ms spent reading (persisted)
-  playStartTime: number | null;     // When current play session started
+  accumulatedReadingTime: number;
+  playStartTime: number | null;
 
   // Actions
   setDocument: (doc: FlowDocument | null) => void;
@@ -83,42 +67,36 @@ interface ReaderState {
   startReading: () => void;
   showCompletion: () => void;
   
-  // Position persistence
   saveCurrentPosition: () => Promise<void>;
   restorePosition: () => Promise<void>;
   
-  // Block navigation
   nextBlock: () => void;
   prevBlock: () => void;
   
-  // Sentence navigation
   setSentenceIndex: (index: number) => void;
   nextSentence: () => void;
   prevSentence: () => void;
   resetSentenceIndex: () => void;
   
-  // Word navigation
   setWordIndex: (index: number) => void;
   nextWord: () => void;
   prevWord: () => void;
   resetWordIndex: () => void;
   
-  // RSVP navigation
   setRsvpIndex: (index: number) => void;
   setRsvpTokenCount: (count: number) => void;
   rsvpAdvance: () => void;
   rsvpRetreat: () => void;
   
-  // Chapter navigation (for books)
   setChapter: (chapterIndex: number) => void;
   nextChapter: () => void;
   prevChapter: () => void;
   setTocOpen: (open: boolean) => void;
   toggleToc: () => void;
+  renameDocument: (newTitle: string) => Promise<void>;
 }
 
 export const useReaderStore = create<ReaderState>((set, get) => ({
-  // Initial state
   document: null,
   archiveItemId: null,
   isLoading: true,
@@ -144,9 +122,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   accumulatedReadingTime: 0,
   playStartTime: null,
 
-  // Actions
   setDocument: (doc) => {
-    // For books, ensure blocks point to the first chapter
     let finalDoc = doc;
     if (doc?.book && doc.book.chapters.length > 0) {
       const firstChapter = doc.book.chapters[0];
@@ -167,10 +143,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       currentRsvpIndex: 0,
     });
     
-    // Add to recent documents and save as current document for refresh persistence
     if (doc) {
-      // For non-web sources, cache the full document so it can be reopened
-      // Web sources can be re-extracted from their URL
       const cache = shouldCacheDocument(doc.metadata.source);
       
       addRecent({
@@ -182,13 +155,11 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         cachedDocument: cache ? doc : undefined,
         fileHash: doc.metadata.fileHash,
       }).then((item) => {
-        // Store the archive item ID for progress updates
         set({ archiveItemId: item.id });
       }).catch((err) => {
         console.error('Failed to add to archive:', err);
       });
       
-      // Save current document to storage so it survives page refresh
       saveCurrentDocument(doc);
     }
   },
@@ -204,14 +175,12 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       currentSentenceIndex: 0,
       currentWordIndex: 0,
       currentRsvpIndex: 0,
-      // Reset reading time when position is explicitly set (e.g., "Read Again")
       accumulatedReadingTime: 0,
       playStartTime: null,
     }),
 
   togglePlay: () => set((state) => {
     if (state.isPlaying) {
-      // Pausing: accumulate the time from this session
       const sessionTime = state.playStartTime ? Date.now() - state.playStartTime : 0;
       return {
         isPlaying: false,
@@ -219,7 +188,6 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         accumulatedReadingTime: state.accumulatedReadingTime + sessionTime,
       };
     } else {
-      // Starting: record when this play session started
       return {
         isPlaying: true,
         playStartTime: Date.now(),
@@ -229,10 +197,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   setPlaying: (playing) => set((state) => {
     if (playing && !state.isPlaying) {
-      // Starting playback
       return { isPlaying: true, playStartTime: Date.now() };
     } else if (!playing && state.isPlaying) {
-      // Stopping playback - accumulate time
       const sessionTime = state.playStartTime ? Date.now() - state.playStartTime : 0;
       return {
         isPlaying: false,
@@ -247,7 +213,6 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const clampedWPM = Math.max(50, Math.min(1000, wpm));
     const newSettings = { ...get().settings, baseWPM: clampedWPM };
     set({ currentWPM: clampedWPM, settings: newSettings });
-    // Persist to storage so WPM is remembered across sessions
     saveSettings(newSettings);
   },
 
@@ -256,7 +221,6 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const clampedWPM = Math.max(50, Math.min(1000, currentWPM + delta));
     const newSettings = { ...settings, baseWPM: clampedWPM };
     set({ currentWPM: clampedWPM, settings: newSettings });
-    // Persist to storage so WPM is remembered across sessions
     saveSettings(newSettings);
   },
 
@@ -264,25 +228,19 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const newSettings = { ...get().settings, activeMode: mode };
     set({
       settings: newSettings,
-      // Reset sub-block positions when changing mode
       currentSentenceIndex: 0,
       currentWordIndex: 0,
     });
-    // Persist to storage
     saveSettings(newSettings);
   },
 
   updateSettings: (newSettings) => {
     const merged = { ...get().settings, ...newSettings };
     set({ settings: merged });
-    // Persist to storage
     saveSettings(merged);
   },
 
-  /**
-   * Update settings from sync without re-saving to storage.
-   * This prevents infinite loops when sync applies remote settings.
-   */
+  /** Update settings from sync without re-saving (prevents infinite loops) */
   updateSettingsFromSync: (newSettings) => {
     set({ 
       settings: newSettings,
@@ -315,7 +273,6 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   setExitConfirmOpen: (open) => set({ isExitConfirmOpen: open }),
 
   closeReader: async () => {
-    // Check if user has dismissed the exit confirmation
     const dismissed = await isExitConfirmationDismissed();
     if (dismissed) {
       window.close();
@@ -332,7 +289,6 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   },
 
   startReading: () => {
-    // Start tracking time if not already playing
     const { playStartTime } = get();
     if (!playStartTime) {
       set({ playStartTime: Date.now() });
@@ -340,7 +296,6 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   },
 
   showCompletion: () => {
-    // Accumulate any remaining time and show completion
     const { playStartTime, accumulatedReadingTime } = get();
     const sessionTime = playStartTime ? Date.now() - playStartTime : 0;
     set({
@@ -574,11 +529,33 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   setTocOpen: (open: boolean) => set({ isTocOpen: open }),
   
   toggleToc: () => set((state) => ({ isTocOpen: !state.isTocOpen })),
+
+  renameDocument: async (newTitle: string) => {
+    const { document, archiveItemId } = get();
+    if (!document || !newTitle.trim()) return;
+    
+    const trimmedTitle = newTitle.trim();
+    
+    // Update the document in state
+    const updatedDoc: FlowDocument = {
+      ...document,
+      metadata: {
+        ...document.metadata,
+        title: trimmedTitle,
+      },
+    };
+    set({ document: updatedDoc });
+    
+    // Update the current document in storage
+    await saveCurrentDocument(updatedDoc);
+    
+    // Update the archive item if we have one
+    if (archiveItemId) {
+      await updateArchiveItem(archiveItemId, { title: trimmedTitle });
+    }
+  },
 }));
 
-// =============================================================================
-// SELECTORS
-// =============================================================================
 // Use these selectors with useReaderStore(selector) to minimize re-renders.
 // Components will only re-render when the selected values change.
 
@@ -591,13 +568,4 @@ export const selectError = (state: ReaderState) => state.error;
 export const selectSettings = (state: ReaderState) => state.settings;
 export const selectSettingsLoaded = (state: ReaderState) => state.settingsLoaded;
 
-/** Select individual UI panel states (for components that only care about one) */
-export const selectIsSettingsOpen = (state: ReaderState) => state.isSettingsOpen;
-export const selectIsImportOpen = (state: ReaderState) => state.isImportOpen;
-export const selectIsHelpOpen = (state: ReaderState) => state.isHelpOpen;
-export const selectIsCompletionOpen = (state: ReaderState) => state.isCompletionOpen;
-export const selectIsExitConfirmOpen = (state: ReaderState) => state.isExitConfirmOpen;
 
-/** Select chapter navigation state (for book documents) */
-export const selectCurrentChapterIndex = (state: ReaderState) => state.currentChapterIndex;
-export const selectIsTocOpen = (state: ReaderState) => state.isTocOpen;

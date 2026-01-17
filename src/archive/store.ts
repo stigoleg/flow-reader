@@ -1,8 +1,4 @@
-/**
- * Archive Store
- * 
- * Zustand store for managing archive page state.
- */
+/** Zustand store for managing archive page state */
 
 import { create } from 'zustand';
 import type { ArchiveItem, ArchiveItemType, FlowDocument } from '@/types';
@@ -22,11 +18,9 @@ import { extractFromDocx } from '@/lib/docx-handler';
 import { extractFromEpub } from '@/lib/epub-handler';
 import { extractFromMobi } from '@/lib/mobi-handler';
 import { extractFromPaste } from '@/lib/extraction';
+import { isSupportedFile, getFileType } from '@/lib/file-utils';
 import { syncService } from '@/lib/sync/sync-service';
 
-// =============================================================================
-// TYPES
-// =============================================================================
 
 export type FilterType = 'all' | ArchiveItemType | 'books';
 
@@ -82,34 +76,8 @@ export interface ArchiveState {
   toggleSettings: () => void;
 }
 
-// =============================================================================
-// FILE HANDLING
-// =============================================================================
-
-const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.epub', '.mobi', '.azw', '.azw3'];
-
-function isSupportedFile(filename: string): boolean {
-  const lower = filename.toLowerCase();
-  const normalized = lower.replace(/\.zip$/, '');
-  return SUPPORTED_EXTENSIONS.some(ext => normalized.endsWith(ext));
-}
-
-function getFileType(filename: string): 'pdf' | 'docx' | 'epub' | 'mobi' | null {
-  const lower = filename.toLowerCase();
-  const normalized = lower.replace(/\.zip$/, '');
-  if (normalized.endsWith('.pdf')) return 'pdf';
-  if (normalized.endsWith('.docx')) return 'docx';
-  if (normalized.endsWith('.epub')) return 'epub';
-  if (normalized.endsWith('.mobi') || normalized.endsWith('.azw') || normalized.endsWith('.azw3')) return 'mobi';
-  return null;
-}
-
-// =============================================================================
-// STORE
-// =============================================================================
 
 export const useArchiveStore = create<ArchiveState>((set, get) => ({
-  // Initial state
   items: [],
   isLoading: true,
   error: null,
@@ -125,14 +93,11 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   renamingItemId: null,
   isSettingsOpen: false,
   
-  // Actions
   loadItems: async () => {
     set({ isLoading: true, error: null });
     try {
-      // First, run deduplication to clean up any duplicates from previous syncs
       await deduplicateArchive();
       
-      // Load items and sync config in parallel
       const [items, syncConfig] = await Promise.all([
         queryRecents(),
         syncService.getConfig(),
@@ -165,7 +130,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   
   openItem: async (item: ArchiveItem) => {
     try {
-      // Re-fetch from storage to get latest data (may have been updated by content sync)
       const freshItem = await getRecent(item.id) || item;
       
       if (freshItem.cachedDocument) {
@@ -234,7 +198,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
           throw new Error('Unsupported file type');
       }
       
-      // Add to archive
       await addRecent({
         type: mapSourceToType(doc.metadata.source),
         title: doc.metadata.title,
@@ -245,7 +208,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
         cachedDocument: doc,
       });
       
-      // Open in reader
       await chrome.runtime.sendMessage({ type: 'OPEN_READER', document: doc });
     } catch (error) {
       set({ 
@@ -271,7 +233,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
     let firstDoc: FlowDocument | null = null;
     const errors: string[] = [];
     
-    // Add unsupported files to errors
     unsupportedFiles.forEach(f => {
       errors.push(`${f.name}: Unsupported file type`);
     });
@@ -298,7 +259,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
             throw new Error('Unsupported file type');
         }
         
-        // Add to archive
         await addRecent({
           type: mapSourceToType(doc.metadata.source),
           title: doc.metadata.title,
@@ -309,7 +269,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
           cachedDocument: doc,
         });
         
-        // Keep first successfully imported document
         if (!firstDoc) {
           firstDoc = doc;
         }
@@ -320,7 +279,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
     
     set({ isLoading: false });
     
-    // Show errors if any
     if (errors.length > 0) {
       const successCount = supportedFiles.length - (errors.length - unsupportedFiles.length);
       if (successCount > 0) {
@@ -330,7 +288,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
       }
     }
     
-    // Open first successfully imported document
     if (firstDoc) {
       await chrome.runtime.sendMessage({ type: 'OPEN_READER', document: firstDoc });
     }
@@ -344,7 +301,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
     try {
       const doc = extractFromPaste(text);
       
-      // Add to archive with fileHash for deduplication
       await addRecent({
         type: 'paste',
         title: doc.metadata.title,
@@ -354,7 +310,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
         fileHash: doc.metadata.fileHash,
       });
       
-      // Open in reader
       await chrome.runtime.sendMessage({ type: 'OPEN_READER', document: doc });
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'Failed to import pasted text' });
@@ -395,7 +350,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
     try {
       const updated = await updateArchiveItem(renamingItemId, { title: newTitle.trim() });
       if (updated) {
-        // Update local state
         set({
           items: items.map(item => item.id === renamingItemId ? updated : item),
           renamingItemId: null,
@@ -416,8 +370,6 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   },
   
   focusSearch: () => {
-    // This will be handled by the component via a ref
-    // The store just provides a signal
     const event = new CustomEvent('archive-focus-search');
     document.dispatchEvent(event);
   },
@@ -427,40 +379,27 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   },
 }));
 
-// =============================================================================
-// SELECTORS
-// =============================================================================
 
-/**
- * Get items filtered only by search query (for filter chip counts)
- */
-export function selectSearchFilteredItems(state: ArchiveState): ArchiveItem[] {
-  let items = state.items;
-  
-  // Apply search filter only (not type filter)
-  if (state.searchQuery.trim()) {
-    const query = state.searchQuery.toLowerCase().trim();
-    items = items.filter(item => {
-      const title = item.title.toLowerCase();
-      const author = item.author?.toLowerCase() || '';
-      const sourceLabel = item.sourceLabel.toLowerCase();
-      
-      return title.includes(query) || 
-             author.includes(query) || 
-             sourceLabel.includes(query);
-    });
-  }
-  
-  return items;
+function matchesSearch(item: ArchiveItem, query: string): boolean {
+  const title = item.title.toLowerCase();
+  const author = item.author?.toLowerCase() || '';
+  const sourceLabel = item.sourceLabel.toLowerCase();
+  return title.includes(query) || author.includes(query) || sourceLabel.includes(query);
 }
 
-/**
- * Get filtered items based on search query and active filter
- */
+/** Get items filtered only by search query (for filter chip counts) */
+export function selectSearchFilteredItems(state: ArchiveState): ArchiveItem[] {
+  if (!state.searchQuery.trim()) {
+    return state.items;
+  }
+  const query = state.searchQuery.toLowerCase().trim();
+  return state.items.filter(item => matchesSearch(item, query));
+}
+
+/** Get filtered items based on search query and active filter */
 export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
   let items = state.items;
   
-  // Apply type filter
   if (state.activeFilter !== 'all') {
     if (state.activeFilter === 'books') {
       items = items.filter(item => item.type === 'epub' || item.type === 'mobi');
@@ -469,32 +408,19 @@ export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
     }
   }
   
-  // Apply search filter
   if (state.searchQuery.trim()) {
     const query = state.searchQuery.toLowerCase().trim();
-    items = items.filter(item => {
-      const title = item.title.toLowerCase();
-      const author = item.author?.toLowerCase() || '';
-      const sourceLabel = item.sourceLabel.toLowerCase();
-      
-      return title.includes(query) || 
-             author.includes(query) || 
-             sourceLabel.includes(query);
-    });
+    items = items.filter(item => matchesSearch(item, query));
   }
   
   return items;
 }
 
-// =============================================================================
-// SYNC STATUS HELPERS
-// =============================================================================
 
 export type ItemSyncStatus = 'synced' | 'not-synced' | 'not-applicable';
 
 /**
- * Determine the sync status of an archive item.
- * 
+ * Determine the sync status of an archive item:
  * - File types (PDF, EPUB, MOBI, DOCX): Synced if cachedDocument exists
  * - Web types: Always synced (can re-extract from URL)
  * - Paste types: Synced if pasteContent exists (included in state sync)
@@ -505,15 +431,12 @@ export function getItemSyncStatus(item: ArchiveItem): ItemSyncStatus {
     case 'epub':
     case 'mobi':
     case 'docx':
-      // File types need cachedDocument to be available on other devices
       return item.cachedDocument ? 'synced' : 'not-synced';
     
     case 'web':
-      // Web content can always be re-extracted from URL
       return item.url ? 'synced' : 'not-synced';
     
     case 'paste':
-      // Paste content is included in state sync
       return item.pasteContent ? 'synced' : 'not-synced';
     
     default:

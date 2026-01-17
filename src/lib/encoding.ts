@@ -5,9 +5,7 @@
  * Used by encryption and sync modules.
  */
 
-// =============================================================================
 // BASE64 CONVERSION
-// =============================================================================
 
 /**
  * Convert ArrayBuffer or Uint8Array to base64 string
@@ -33,9 +31,7 @@ export function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-// =============================================================================
 // UNICODE-SAFE BASE64
-// =============================================================================
 
 /**
  * Encode a Unicode string to base64 (handles non-Latin1 characters)
@@ -55,9 +51,6 @@ export function base64ToUnicode(base64: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-// =============================================================================
-// ARRAYBUFFER UTILITIES
-// =============================================================================
 
 /**
  * Convert Uint8Array to ArrayBuffer (for WebCrypto API compatibility with strict TypeScript)

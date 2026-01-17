@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 interface HelpOverlayProps {
   isOpen: boolean;
@@ -24,12 +25,14 @@ const SHORTCUTS = [
 ];
 
 export default function HelpOverlay({ isOpen, onClose }: HelpOverlayProps) {
-  // Handle escape key to close
+  useEscapeKey(onClose, isOpen);
+  
+  // Also close on '?' key press
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === '?') {
+      if (e.key === '?') {
         e.preventDefault();
         onClose();
       }

@@ -79,17 +79,4 @@ export function hashString(str: string): string {
   return Math.abs(hash).toString(36);
 }
 
-/**
- * Extract the domain from a URL, removing www. prefix.
- * 
- * @param url - The URL to extract domain from
- * @returns The domain (hostname without www.) or the original URL if parsing fails
- */
-export function extractDomain(url: string): string {
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
-}
+

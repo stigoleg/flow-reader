@@ -5,9 +5,7 @@
  * Implements RFC 7636 (PKCE) for secure OAuth 2.0 authorization.
  */
 
-// =============================================================================
 // PKCE (Proof Key for Code Exchange)
-// =============================================================================
 
 /**
  * Generates a cryptographically random code verifier for PKCE.

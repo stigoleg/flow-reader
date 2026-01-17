@@ -13,9 +13,6 @@ import {
   toArrayBuffer 
 } from '../encoding';
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
 
 /** Number of PBKDF2 iterations for key derivation */
 const PBKDF2_ITERATIONS = 100_000;
@@ -29,9 +26,6 @@ const IV_LENGTH = 12;
 /** AES key length in bits */
 const AES_KEY_LENGTH = 256;
 
-// =============================================================================
-// ENCRYPTION SERVICE
-// =============================================================================
 
 /**
  * Derive an AES-GCM key from a passphrase using PBKDF2
@@ -219,9 +213,6 @@ export function getSaltFromBlob(blob: EncryptedBlob): Uint8Array {
   return base64ToUint8Array(blob.salt);
 }
 
-// =============================================================================
-// ERROR TYPES
-// =============================================================================
 
 export class EncryptionError extends Error {
   constructor(
@@ -235,9 +226,6 @@ export class EncryptionError extends Error {
 
 
 
-// =============================================================================
-// EXPORTS FOR TESTING
-// =============================================================================
 
 export const _testing = {
   arrayBufferToBase64,

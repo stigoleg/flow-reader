@@ -126,9 +126,6 @@ export async function getStorageVersion(): Promise<number> {
   });
 }
 
-// =============================================================================
-// MIGRATION FUNCTIONS
-// =============================================================================
 
 /**
  * v1 → v2: Migrate recentDocuments to archiveItems format
@@ -186,9 +183,6 @@ function migrateV2ToV3(data: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-// =============================================================================
-// HELPER FUNCTIONS
-// =============================================================================
 
 function mapSourceToType(source: string): ArchiveItem['type'] {
   switch (source) {

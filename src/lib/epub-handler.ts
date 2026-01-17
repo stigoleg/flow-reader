@@ -11,9 +11,6 @@ import { parseEbookHtml } from './html-parser';
 import { getPlainText } from './block-utils';
 import { computeFileHash, countWords } from './file-utils';
 
-// =============================================================================
-// ERROR TYPES
-// =============================================================================
 
 export type EpubErrorType = 
   | 'invalid-epub'
@@ -32,9 +29,6 @@ export class EpubExtractionError extends Error {
   }
 }
 
-// =============================================================================
-// EPUB STRUCTURE TYPES
-// =============================================================================
 
 interface EpubMetadata {
   title: string;
@@ -58,43 +52,25 @@ interface NavPoint {
   children: NavPoint[];
 }
 
-// =============================================================================
-// MAIN EXTRACTION FUNCTION
-// =============================================================================
 
 /**
  * Extract a FlowDocument from an EPUB file
  */
 export async function extractFromEpub(file: File): Promise<FlowDocument> {
   try {
-    // Create zip loader
     const loader = await createZipLoader(file);
     
-    // Log files for debugging
-    const files = loader.listFiles();
-    console.log(`[EPUB] Archive contains ${files.length} files`);
-    
-    // Check for DRM
     await checkForDrm(loader);
     
-    // Parse container.xml to find content.opf
     const opfPath = await findOpfPath(loader);
     const opfDir = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
-    console.log(`[EPUB] OPF path: ${opfPath}, directory: ${opfDir}`);
     
-    // Parse content.opf
     const opfContent = await loader.loadText(opfPath);
     const { metadata, manifest, spine } = parseOpf(opfContent);
-    console.log(`[EPUB] Metadata: ${metadata.title} by ${metadata.author}`);
-    console.log(`[EPUB] Spine has ${spine.length} items`);
     
-    // Parse TOC (NCX for EPUB2, nav for EPUB3)
     const toc = await parseToc(loader, manifest, opfDir);
-    console.log(`[EPUB] TOC has ${toc.length} entries`);
     
-    // Extract chapters from spine
     const chapters = await extractChapters(loader, spine, manifest, opfDir, toc);
-    console.log(`[EPUB] Extracted ${chapters.length} chapters`);
     
     if (chapters.length === 0) {
       throw new EpubExtractionError(
@@ -103,15 +79,6 @@ export async function extractFromEpub(file: File): Promise<FlowDocument> {
       );
     }
     
-    // Log chapter info
-    let totalWords = 0;
-    for (const ch of chapters) {
-      console.log(`[EPUB] Chapter: "${ch.title}" - ${ch.wordCount} words, ${ch.blocks.length} blocks`);
-      totalWords += ch.wordCount;
-    }
-    console.log(`[EPUB] Total: ${totalWords} words`);
-    
-    // Compute file hash for position keying
     const fileHash = await computeFileHash(file);
     
     // Create book structure
@@ -162,9 +129,6 @@ export async function extractFromEpub(file: File): Promise<FlowDocument> {
   }
 }
 
-// =============================================================================
-// EPUB PARSING HELPERS
-// =============================================================================
 
 /**
  * Check if EPUB is DRM protected
@@ -227,7 +191,6 @@ async function findOpfPath(loader: ZipLoader): Promise<string> {
   const opfFile = files.find(f => f.toLowerCase().endsWith('.opf'));
   
   if (opfFile) {
-    console.log('[EPUB] Found OPF file by search:', opfFile);
     return opfFile;
   }
   
@@ -429,9 +392,7 @@ async function extractChapters(
   for (let i = 0; i < spine.length; i++) {
     const spineItem = spine[i];
     
-    // Skip non-linear items (but log for debugging)
     if (!spineItem.linear) {
-      console.log(`[EPUB] Skipping non-linear item: ${spineItem.href}`);
       continue;
     }
     
@@ -442,9 +403,7 @@ async function extractChapters(
       // Parse HTML using ebook-specific parser
       const blocks = parseChapterHtml(html);
       
-      // Skip empty chapters
       if (blocks.length === 0) {
-        console.log(`[EPUB] Skipping empty chapter: ${spineItem.href}`);
         continue;
       }
       
@@ -457,9 +416,7 @@ async function extractChapters(
       const wordCount = countWords(plainText);
       
       // Skip very short "chapters" that are likely cover pages, copyright, etc.
-      // But only if we already have some chapters
       if (wordCount < 20 && chapters.length > 0) {
-        console.log(`[EPUB] Skipping short section (${wordCount} words): ${spineItem.href}`);
         continue;
       }
       
@@ -589,9 +546,6 @@ function findFirstHeading(blocks: Block[]): string | undefined {
   return undefined;
 }
 
-// =============================================================================
-// UTILITY FUNCTIONS
-// =============================================================================
 
 /**
  * Get text content from first matching element

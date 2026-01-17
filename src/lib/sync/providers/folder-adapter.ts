@@ -13,17 +13,11 @@ import type {
   RemoteMetadata 
 } from '../types';
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
 
 const SYNC_FILE_NAME = 'flowreader_state.enc';
 const CONTENT_FOLDER_NAME = 'content';
 const FOLDER_HANDLE_KEY = 'folderSyncHandle';
 
-// =============================================================================
-// FOLDER ADAPTER CLASS
-// =============================================================================
 
 export class FolderAdapter implements SyncProvider {
   readonly name = 'Folder Sync';
@@ -237,9 +231,6 @@ export class FolderAdapter implements SyncProvider {
     return this.folderPath;
   }
 
-  // ===========================================================================
-  // CONTENT FILE OPERATIONS
-  // ===========================================================================
 
   /**
    * Ensure the content subfolder exists
@@ -391,9 +382,7 @@ export class FolderAdapter implements SyncProvider {
     }
   }
 
-  // ===========================================================================
   // PRIVATE METHODS - Handle persistence using IndexedDB
-  // ===========================================================================
 
   private async storeHandle(handle: FileSystemDirectoryHandle): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -487,9 +476,6 @@ export class FolderAdapter implements SyncProvider {
   }
 }
 
-// =============================================================================
-// ERROR TYPE
-// =============================================================================
 
 export class FolderSyncError extends Error {
   constructor(
@@ -501,8 +487,5 @@ export class FolderSyncError extends Error {
   }
 }
 
-// =============================================================================
-// SINGLETON EXPORT
-// =============================================================================
 
 export const folderAdapter = new FolderAdapter();

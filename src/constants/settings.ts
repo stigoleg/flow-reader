@@ -21,20 +21,6 @@ export const COLUMN_WIDTH = {
   default: 680,
 } as const;
 
-export const PARAGRAPH_SPACING = {
-  min: 8,
-  max: 48,
-  step: 4,
-  default: 24,
-} as const;
-
-export const MARGINS = {
-  min: 16,
-  max: 80,
-  step: 8,
-  default: 40,
-} as const;
-
 export const WPM = {
   min: 50,
   max: 600,
@@ -79,9 +65,4 @@ export const BIONIC_PROPORTION = {
   default: 0.4,
 } as const;
 
-export const RSVP_CHUNK_SIZE = {
-  min: 1,
-  max: 5,
-  step: 1,
-  default: 1,
-} as const;
+

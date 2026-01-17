@@ -1,10 +1,3 @@
-/**
- * Recents Service
- * 
- * Unified service for managing archive items (reading history).
- * Provides CRUD operations, search, and filtering for the Archive page.
- */
-
 import type { ArchiveItem, ArchiveItemType, ArchiveProgress, ReadingPosition, DocumentMetadata, FlowDocument } from '@/types';
 import { syncService } from './sync/sync-service';
 import { storageFacade } from './storage-facade';
@@ -12,22 +5,11 @@ import { computeTextHash } from './file-utils';
 import { normalizeUrl, hashString } from './url-utils';
 import { mergeFullArchiveItems } from './archive-utils';
 
-// =============================================================================
-// CONFIGURATION
-// =============================================================================
 
-/** Maximum number of archive items to store */
 export const MAX_ARCHIVE_ITEMS = 200;
-
-/** Maximum size of paste content to store (100KB) */
 export const MAX_PASTE_CONTENT_SIZE = 100_000;
-
-/** Debounce delay for storage writes (ms) */
 const DEBOUNCE_DELAY = 300;
 
-// =============================================================================
-// TYPES
-// =============================================================================
 
 export interface QueryOptions {
   /** Filter by search query (matches title, author, sourceLabel) */
@@ -57,28 +39,15 @@ export interface AddRecentInput {
   fileHash?: string;
 }
 
-// =============================================================================
-// INTERNAL STATE
-// =============================================================================
 
 let pendingWrite: ReturnType<typeof setTimeout> | null = null;
 let pendingItems: ArchiveItem[] | null = null;
 
-// =============================================================================
-// STORAGE HELPERS
-// =============================================================================
-
-/**
- * Get archive items from storage
- */
 async function getArchiveItems(): Promise<ArchiveItem[]> {
   const state = await storageFacade.getState();
   return state.archiveItems;
 }
 
-/**
- * Save archive items to storage (debounced)
- */
 async function saveArchiveItems(items: ArchiveItem[]): Promise<void> {
   pendingItems = items;
   
@@ -107,9 +76,6 @@ async function saveArchiveItems(items: ArchiveItem[]): Promise<void> {
   });
 }
 
-/**
- * Force immediate save (for critical operations)
- */
 async function flushArchiveItems(items: ArchiveItem[]): Promise<void> {
   if (pendingWrite) {
     clearTimeout(pendingWrite);
@@ -120,32 +86,10 @@ async function flushArchiveItems(items: ArchiveItem[]): Promise<void> {
   await storageFacade.updateArchiveItems(items);
 }
 
-// =============================================================================
-// DEDUPLICATION
-// =============================================================================
-
-// Note: isPositionFurther is imported from archive-utils.ts
-
-/**
- * Merge two archive items, keeping the best data from each.
- * Uses mergeFullArchiveItems from archive-utils.ts which handles cachedDocument.
- */
-function mergeArchiveItemPair(
-  item1: ArchiveItem,
-  item2: ArchiveItem
-): ArchiveItem {
-  return mergeFullArchiveItems(item1, item2);
-}
-
-/**
- * Deduplicate archive items by fileHash and URL.
- * Returns a new array with duplicates merged (furthest progress wins).
- */
 function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
   const byFileHash = new Map<string, ArchiveItem[]>();
   const byNormalizedUrl = new Map<string, ArchiveItem[]>();
   
-  // Build indexes
   for (const item of items) {
     if (item.fileHash) {
       const existing = byFileHash.get(item.fileHash) || [];
@@ -164,7 +108,6 @@ function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
   const processedIds = new Set<string>();
   const merged = new Map<string, ArchiveItem>();
   
-  // First pass: merge by fileHash
   for (const [, duplicates] of byFileHash) {
     if (duplicates.length === 1) {
       if (!processedIds.has(duplicates[0].id)) {
@@ -174,8 +117,7 @@ function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
     } else {
       let mergedItem = duplicates[0];
       for (let i = 1; i < duplicates.length; i++) {
-        console.log(`Deduplicating: "${duplicates[i].title}" (same fileHash as "${mergedItem.title}")`);
-        mergedItem = mergeArchiveItemPair(mergedItem, duplicates[i]);
+        mergedItem = mergeFullArchiveItems(mergedItem, duplicates[i]);
         processedIds.add(duplicates[i].id);
       }
       
@@ -187,7 +129,6 @@ function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
     }
   }
   
-  // Second pass: merge by URL
   for (const [, duplicates] of byNormalizedUrl) {
     const unprocessed = duplicates.filter(item => !processedIds.has(item.id));
     
@@ -199,8 +140,7 @@ function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
     } else {
       let mergedItem = unprocessed[0];
       for (let i = 1; i < unprocessed.length; i++) {
-        console.log(`Deduplicating: "${unprocessed[i].title}" (same URL as "${mergedItem.title}")`);
-        mergedItem = mergeArchiveItemPair(mergedItem, unprocessed[i]);
+        mergedItem = mergeFullArchiveItems(mergedItem, unprocessed[i]);
         processedIds.add(unprocessed[i].id);
       }
       
@@ -212,7 +152,6 @@ function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
     }
   }
   
-  // Third pass: add any remaining items
   for (const item of items) {
     if (!processedIds.has(item.id)) {
       merged.set(item.id, item);
@@ -220,7 +159,6 @@ function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
     }
   }
   
-  // Sort by lastOpenedAt descending
   return Array.from(merged.values())
     .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt);
 }
@@ -237,20 +175,12 @@ export async function deduplicateArchive(): Promise<{ removed: number }> {
   const removedCount = originalCount - deduped.length;
   
   if (removedCount > 0) {
-    console.log(`Deduplicated archive: removed ${removedCount} duplicate(s) from ${originalCount} items`);
     await flushArchiveItems(deduped);
   }
   
   return { removed: removedCount };
 }
 
-// =============================================================================
-// TYPE MAPPING
-// =============================================================================
-
-/**
- * Map document source to archive item type
- */
 export function mapSourceToType(source: string): ArchiveItemType {
   switch (source) {
     case 'web':
@@ -271,65 +201,38 @@ export function mapSourceToType(source: string): ArchiveItemType {
   }
 }
 
-// =============================================================================
-// ID GENERATION
-// =============================================================================
-
-/**
- * Generate a stable ID for a document
- */
 export function generateItemId(metadata: DocumentMetadata): string {
-  // For file-based sources, use the file hash
   if (metadata.fileHash) {
     return `file_${metadata.source}_${metadata.fileHash}`;
   }
   
-  // For web sources, use the URL
   if (metadata.url) {
-    // Create a simple hash of the URL
     return `web_${hashString(normalizeUrl(metadata.url))}`;
   }
   
-  // For paste and other sources, use timestamp + random
   return `${metadata.source}_${metadata.createdAt}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/**
- * Generate a stable ID for an AddRecentInput
- * Uses fileHash for files, normalized URL for web content, computed hash for paste
- */
 function generateStableId(input: AddRecentInput): string {
   const now = Date.now();
   
-  // For file-based documents, use the file hash (most reliable)
   if (input.fileHash) {
     return `file_${input.type}_${input.fileHash}`;
   }
   
-  // For web sources, use normalized URL hash
   if (input.url) {
     return `web_${hashString(normalizeUrl(input.url))}`;
   }
   
-  // For paste content, compute hash for stable ID
   if (input.pasteContent) {
     const textHash = computeTextHash(input.pasteContent);
     return `paste_${textHash}`;
   }
   
-  // For other sources without identifiable content, use timestamp + random
   return `${input.type}_${now}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-// =============================================================================
-// SOURCE LABEL HELPERS
-// =============================================================================
-
-/**
- * Get source label from document metadata
- */
 export function getSourceLabel(metadata: DocumentMetadata): string {
-  // For web sources, extract domain
   if (metadata.url) {
     try {
       const url = new URL(metadata.url);
@@ -339,43 +242,28 @@ export function getSourceLabel(metadata: DocumentMetadata): string {
     }
   }
   
-  // For file sources, use filename
   if (metadata.fileName) {
     return metadata.fileName;
   }
   
-  // Fallback to source type
   return metadata.source;
 }
 
-// =============================================================================
-// CORE API
-// =============================================================================
-
-/**
- * Add a new item to the archive or update an existing one
- */
 export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
   const items = await getArchiveItems();
   const now = Date.now();
   
-  // Check for existing item with same characteristics
   const normalizedInputUrl = input.url ? normalizeUrl(input.url) : null;
-  
-  // For paste items without fileHash, compute hash from pasteContent for matching
   const inputFileHash = input.fileHash || (input.pasteContent ? computeTextHash(input.pasteContent) : undefined);
   
   const existingIndex = items.findIndex(item => {
-    // Match by file hash for file-based documents (most reliable)
     if (inputFileHash && item.fileHash === inputFileHash) {
       return true;
     }
-    // Match by normalized URL for web documents
     if (normalizedInputUrl && item.url && normalizeUrl(item.url) === normalizedInputUrl) {
       return true;
     }
-    // Match paste items by computing hash from their stored pasteContent
-    // This handles legacy paste items that don't have fileHash stored
+    // Handle legacy paste items without fileHash
     if (inputFileHash && item.type === 'paste' && item.pasteContent && !item.fileHash) {
       const existingHash = computeTextHash(item.pasteContent);
       if (existingHash === inputFileHash) {
@@ -385,7 +273,6 @@ export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
     return false;
   });
   
-  // Truncate paste content if too large
   let pasteContent = input.pasteContent;
   if (pasteContent && pasteContent.length > MAX_PASTE_CONTENT_SIZE) {
     pasteContent = pasteContent.slice(0, MAX_PASTE_CONTENT_SIZE);
@@ -395,10 +282,7 @@ export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
   let item: ArchiveItem;
   
   if (existingIndex >= 0) {
-    // Update existing item and move to top
     const existing = items[existingIndex];
-    
-    // Preserve existing pasteContent and cachedDocument if not provided in input
     const finalPasteContent = pasteContent ?? existing.pasteContent;
     const finalCachedDocument = input.cachedDocument ?? existing.cachedDocument;
     
@@ -410,12 +294,10 @@ export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
       id: existing.id,
       createdAt: existing.createdAt,
       lastOpenedAt: now,
-      // Ensure fileHash is set for paste items (migrates legacy items)
       fileHash: input.fileHash || existing.fileHash || inputFileHash,
     };
     items.splice(existingIndex, 1);
   } else {
-    // Create new item with stable ID based on content hash or URL
     const stableId = generateStableId(input);
     item = {
       ...input,
@@ -426,10 +308,8 @@ export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
     };
   }
   
-  // Add to top of list
   items.unshift(item);
   
-  // Evict oldest items if over limit
   if (items.length > MAX_ARCHIVE_ITEMS) {
     items.splice(MAX_ARCHIVE_ITEMS);
   }
@@ -438,9 +318,6 @@ export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
   return item;
 }
 
-/**
- * Update the lastOpenedAt timestamp and optionally the position/progress
- */
 export async function updateLastOpened(
   id: string,
   position?: ReadingPosition,
@@ -450,7 +327,7 @@ export async function updateLastOpened(
   const index = items.findIndex(item => item.id === id);
   
   if (index < 0) {
-    return; // Item not found, no-op
+    return;
   }
   
   const item = items[index];
@@ -467,16 +344,12 @@ export async function updateLastOpened(
     updated.progress = progress;
   }
   
-  // Move to top of list
   items.splice(index, 1);
   items.unshift(updated);
   
   await saveArchiveItems(items);
 }
 
-/**
- * Update an archive item's metadata (title, author, etc.)
- */
 export async function updateArchiveItem(
   id: string,
   updates: Partial<Pick<ArchiveItem, 'title' | 'author' | 'sourceLabel'>>
@@ -485,7 +358,7 @@ export async function updateArchiveItem(
   const index = items.findIndex(item => item.id === id);
   
   if (index < 0) {
-    return null; // Item not found
+    return null;
   }
   
   const item = items[index];
@@ -494,7 +367,6 @@ export async function updateArchiveItem(
     ...updates,
   };
   
-  // Also update the title in cachedDocument metadata if present
   if (updates.title && updated.cachedDocument) {
     updated.cachedDocument = {
       ...updated.cachedDocument,
@@ -511,9 +383,6 @@ export async function updateArchiveItem(
   return updated;
 }
 
-/**
- * Remove an item from the archive
- */
 export async function removeRecent(id: string): Promise<void> {
   const items = await getArchiveItems();
   const itemToRemove = items.find(item => item.id === id);
@@ -522,9 +391,7 @@ export async function removeRecent(id: string): Promise<void> {
   if (filtered.length !== items.length) {
     await flushArchiveItems(filtered);
     
-    // Add tombstone and delete synced content if item was found
     if (itemToRemove) {
-      // Add tombstone to prevent item from being re-synced
       storageFacade.addDeletedItemTombstone({
         id: itemToRemove.id,
         fileHash: itemToRemove.fileHash,
@@ -533,7 +400,6 @@ export async function removeRecent(id: string): Promise<void> {
         console.error('Failed to add deleted item tombstone:', error);
       });
       
-      // Delete content from sync provider if sync is enabled
       syncService.deleteItemContent({
         id: itemToRemove.id,
         fileHash: itemToRemove.fileHash,
@@ -545,18 +411,12 @@ export async function removeRecent(id: string): Promise<void> {
   }
 }
 
-/**
- * Clear all items from the archive
- */
 export async function clearRecents(): Promise<void> {
-  // Get items before clearing to delete their synced content
   const items = await getArchiveItems();
   
   await flushArchiveItems([]);
   
-  // Add tombstones and delete content from sync provider for all items
   for (const item of items) {
-    // Add tombstone to prevent item from being re-synced
     storageFacade.addDeletedItemTombstone({
       id: item.id,
       fileHash: item.fileHash,
@@ -565,7 +425,6 @@ export async function clearRecents(): Promise<void> {
       console.error('Failed to add deleted item tombstone:', error);
     });
     
-    // Delete content from sync provider
     syncService.deleteItemContent({
       id: item.id,
       fileHash: item.fileHash,
@@ -591,12 +450,10 @@ export async function queryRecents(options: QueryOptions = {}): Promise<ArchiveI
   
   let items = await getArchiveItems();
   
-  // Filter by type
   if (types && types.length > 0) {
     items = items.filter(item => types.includes(item.type));
   }
   
-  // Filter by search query
   if (search && search.trim()) {
     const query = search.toLowerCase().trim();
     items = items.filter(item => {
@@ -610,7 +467,6 @@ export async function queryRecents(options: QueryOptions = {}): Promise<ArchiveI
     });
   }
   
-  // Sort
   items.sort((a, b) => {
     let comparison = 0;
     
@@ -629,7 +485,6 @@ export async function queryRecents(options: QueryOptions = {}): Promise<ArchiveI
     return sortOrder === 'desc' ? -comparison : comparison;
   });
   
-  // Apply offset and limit
   if (offset > 0 || limit !== undefined) {
     items = items.slice(offset, limit !== undefined ? offset + limit : undefined);
   }
@@ -637,29 +492,17 @@ export async function queryRecents(options: QueryOptions = {}): Promise<ArchiveI
   return items;
 }
 
-/**
- * Get a single archive item by ID
- */
 export async function getRecent(id: string): Promise<ArchiveItem | null> {
   const items = await getArchiveItems();
   return items.find(item => item.id === id) || null;
 }
 
-// =============================================================================
-// UTILITY FUNCTIONS
-// =============================================================================
 
-/**
- * Check if a document should have its content cached
- */
+/** Cache file-based documents since they can't be re-fetched */
 export function shouldCacheDocument(source: string): boolean {
-  // Cache file-based documents since they can't be re-fetched
   return ['pdf', 'docx', 'epub', 'mobi'].includes(source);
 }
 
-/**
- * Calculate progress from reading position
- */
 export function calculateProgress(
   currentBlockIndex: number,
   totalBlocks: number,
@@ -681,9 +524,6 @@ export function calculateProgress(
   return { percent, label };
 }
 
-/**
- * Format relative time (e.g., "2 hours ago", "Yesterday")
- */
 export function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
@@ -713,7 +553,6 @@ export function formatRelativeTime(timestamp: number): string {
     return `${days} days ago`;
   }
   
-  // Format as date
   const date = new Date(timestamp);
   return date.toLocaleDateString(undefined, { 
     month: 'short', 
@@ -722,9 +561,6 @@ export function formatRelativeTime(timestamp: number): string {
   });
 }
 
-/**
- * Get type badge label for display
- */
 export function getTypeBadgeLabel(type: ArchiveItemType): string {
   switch (type) {
     case 'web':

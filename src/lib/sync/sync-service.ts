@@ -31,9 +31,6 @@ import type {
   EncryptedBlob,
 } from './types';
 
-// =============================================================================
-// SYNC CONFIGURATION STORAGE
-// =============================================================================
 
 const SYNC_CONFIG_KEY = 'syncConfig';
 
@@ -46,9 +43,6 @@ interface StoredSyncConfig {
   lastSyncError: string | null;
 }
 
-// =============================================================================
-// SYNC SERVICE CLASS
-// =============================================================================
 
 class SyncServiceImpl {
   private provider: SyncProvider | null = null;
@@ -373,9 +367,6 @@ class SyncServiceImpl {
     };
   }
 
-  // ===========================================================================
-  // PRIVATE METHODS
-  // ===========================================================================
 
   private async performSync(config: StoredSyncConfig): Promise<SyncResult> {
     if (!this.provider) {
@@ -684,8 +675,5 @@ class SyncServiceImpl {
 // Re-export SyncError for backwards compatibility
 export { SyncError } from '../errors';
 
-// =============================================================================
-// SINGLETON EXPORT
-// =============================================================================
 
 export const syncService = new SyncServiceImpl();

@@ -26,9 +26,7 @@ export interface DocumentMetadata {
   fileHash?: string;
 }
 
-// =============================================================================
 // BOOK STRUCTURE (for EPUB and MOBI)
-// =============================================================================
 
 /** Book structure for multi-chapter documents */
 export interface BookStructure {
@@ -252,9 +250,7 @@ export interface RecentDocument {
   cachedDocument?: FlowDocument;
 }
 
-// =============================================================================
 // ARCHIVE ITEMS (Enhanced recent documents for Archive page)
-// =============================================================================
 
 /** Content type for archive items */
 export type ArchiveItemType = 'web' | 'pdf' | 'docx' | 'epub' | 'mobi' | 'paste';

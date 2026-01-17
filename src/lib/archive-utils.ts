@@ -11,9 +11,6 @@
 
 import type { ReadingPosition, ArchiveProgress, ArchiveItem } from '@/types';
 
-// =============================================================================
-// POSITION COMPARISON
-// =============================================================================
 
 /**
  * Check if position A is further in the document than position B.
@@ -60,9 +57,6 @@ export function furtherPosition(
   return a.timestamp > b.timestamp ? a : b;
 }
 
-// =============================================================================
-// PROGRESS COMPARISON
-// =============================================================================
 
 /**
  * Get the further of two progress values (higher percentage wins).
@@ -81,9 +75,6 @@ export function furtherProgress(
   return aProgress >= bProgress ? a : b;
 }
 
-// =============================================================================
-// ARCHIVE ITEM MERGING
-// =============================================================================
 
 /**
  * Base type for items that can be merged.
@@ -178,9 +169,4 @@ export function mergeFullArchiveItems(
   };
 }
 
-/**
- * Type guard to check if an item is a full ArchiveItem (has cachedDocument field).
- */
-export function isFullArchiveItem(item: MergeableItem): item is ArchiveItem {
-  return 'cachedDocument' in item;
-}
+

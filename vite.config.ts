@@ -19,12 +19,50 @@ export default defineConfig({
     },
   },
   build: {
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       input: {
         reader: resolve(__dirname, 'src/reader/index.html'),
         popup: resolve(__dirname, 'src/popup/index.html'),
         options: resolve(__dirname, 'src/options/index.html'),
         archive: resolve(__dirname, 'src/archive/index.html'),
+      },
+      output: {
+        manualChunks: (id) => {
+          // Split large vendor libraries into separate chunks
+          if (id.includes('node_modules')) {
+            if (id.includes('pdfjs-dist')) {
+              return 'pdf';
+            }
+            // mammoth and all its dependencies (for DOCX parsing)
+            if (id.includes('mammoth') || 
+                id.includes('xmldom') || 
+                id.includes('base64-js') ||
+                id.includes('bluebird') ||
+                id.includes('dingbat-to-unicode') ||
+                id.includes('jszip') ||
+                id.includes('lop') ||
+                id.includes('underscore') ||
+                id.includes('xmlbuilder')) {
+              return 'docx';
+            }
+            // fflate for compression (used by epub/mobi handlers)
+            if (id.includes('fflate')) {
+              return 'compression';
+            }
+            if (id.includes('react-dom')) {
+              return 'react-dom';
+            }
+            if (id.includes('react')) {
+              return 'react';
+            }
+            if (id.includes('zustand')) {
+              return 'zustand';
+            }
+            // Group remaining node_modules into vendor chunk
+            return 'vendor';
+          }
+        },
       },
     },
   },

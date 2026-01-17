@@ -4,7 +4,7 @@
  * Confirmation dialog for clearing all history.
  */
 
-import { useEffect } from 'react';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 interface ClearHistoryDialogProps {
   onClose: () => void;
@@ -12,17 +12,7 @@ interface ClearHistoryDialogProps {
 }
 
 export default function ClearHistoryDialog({ onClose, onConfirm }: ClearHistoryDialogProps) {
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  useEscapeKey(onClose);
   
   return (
     <div className="modal-backdrop" onClick={onClose}>

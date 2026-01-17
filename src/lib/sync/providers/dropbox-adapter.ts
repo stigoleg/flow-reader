@@ -13,10 +13,8 @@ import type {
   OAuthTokens,
 } from '../types';
 import { generateCodeVerifier, generateCodeChallenge } from '../oauth-utils';
+import { OAuthStorageHelper } from '../oauth-storage';
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
 
 const DROPBOX_AUTH_URL = 'https://www.dropbox.com/oauth2/authorize';
 const DROPBOX_TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token';
@@ -29,9 +27,6 @@ const TOKENS_STORAGE_KEY = 'dropboxTokens';
 const PKCE_VERIFIER_KEY = 'dropboxPkceVerifier';
 const APP_KEY_STORAGE_KEY = 'dropboxAppKey';
 
-// =============================================================================
-// DROPBOX ADAPTER CLASS
-// =============================================================================
 
 export class DropboxAdapter implements SyncProvider {
   readonly name = 'Dropbox';
@@ -40,6 +35,7 @@ export class DropboxAdapter implements SyncProvider {
 
   private tokens: OAuthTokens | null = null;
   private appKey: string | null = null;
+  private oauthStorage = new OAuthStorageHelper(TOKENS_STORAGE_KEY, PKCE_VERIFIER_KEY);
 
   /**
    * Set the Dropbox App Key (provided by user)
@@ -84,7 +80,7 @@ export class DropboxAdapter implements SyncProvider {
     const codeChallenge = await generateCodeChallenge(codeVerifier);
 
     // Store verifier for later
-    await this.storePkceVerifier(codeVerifier);
+    await this.oauthStorage.storePkceVerifier(codeVerifier);
 
     // Get redirect URL (extension page)
     const redirectUri = chrome.identity.getRedirectURL();
@@ -107,7 +103,7 @@ export class DropboxAdapter implements SyncProvider {
    */
   async completeAuth(code: string): Promise<OAuthTokens> {
     const appKey = await this.getAppKey();
-    const codeVerifier = await this.getPkceVerifier();
+    const codeVerifier = await this.oauthStorage.getPkceVerifier();
     if (!codeVerifier) {
       throw new DropboxError('PKCE verifier not found', 'auth');
     }
@@ -143,8 +139,8 @@ export class DropboxAdapter implements SyncProvider {
       scope: data.scope,
     };
 
-    await this.storeTokens(this.tokens);
-    await this.clearPkceVerifier();
+    await this.oauthStorage.storeTokens(this.tokens);
+    await this.oauthStorage.clearPkceVerifier();
 
     return this.tokens;
   }
@@ -186,7 +182,7 @@ export class DropboxAdapter implements SyncProvider {
       scope: data.scope,
     };
 
-    await this.storeTokens(this.tokens);
+    await this.oauthStorage.storeTokens(this.tokens);
     return this.tokens;
   }
 
@@ -335,7 +331,7 @@ export class DropboxAdapter implements SyncProvider {
   async isConnected(): Promise<boolean> {
     if (!this.tokens) {
       // Try to load tokens from storage
-      this.tokens = await this.getStoredTokens();
+      this.tokens = await this.oauthStorage.getStoredTokens();
     }
     return this.tokens !== null;
   }
@@ -359,12 +355,9 @@ export class DropboxAdapter implements SyncProvider {
     }
 
     this.tokens = null;
-    await this.clearTokens();
+    await this.oauthStorage.clearTokens();
   }
 
-  // ===========================================================================
-  // CONTENT FILE OPERATIONS
-  // ===========================================================================
 
   /**
    * Ensure the content folder exists in Dropbox
@@ -543,13 +536,10 @@ export class DropboxAdapter implements SyncProvider {
     }
   }
 
-  // ===========================================================================
-  // PRIVATE METHODS
-  // ===========================================================================
 
   private async ensureValidToken(): Promise<void> {
     if (!this.tokens) {
-      this.tokens = await this.getStoredTokens();
+      this.tokens = await this.oauthStorage.getStoredTokens();
     }
 
     if (!this.tokens) {
@@ -563,83 +553,8 @@ export class DropboxAdapter implements SyncProvider {
       }
     }
   }
-
-  private async storeTokens(tokens: OAuthTokens): Promise<void> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set({ [TOKENS_STORAGE_KEY]: tokens }, () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  private async getStoredTokens(): Promise<OAuthTokens | null> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get([TOKENS_STORAGE_KEY], (result) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(result[TOKENS_STORAGE_KEY] as OAuthTokens || null);
-      });
-    });
-  }
-
-  private async clearTokens(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.remove([TOKENS_STORAGE_KEY], () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  private async storePkceVerifier(verifier: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.set({ [PKCE_VERIFIER_KEY]: verifier }, () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  private async getPkceVerifier(): Promise<string | null> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.get([PKCE_VERIFIER_KEY], (result) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-          return;
-        }
-        resolve(result[PKCE_VERIFIER_KEY] as string || null);
-      });
-    });
-  }
-
-  private async clearPkceVerifier(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      chrome.storage.local.remove([PKCE_VERIFIER_KEY], () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
 }
 
-// =============================================================================
-// ERROR TYPE
-// =============================================================================
 
 export class DropboxError extends Error {
   constructor(
@@ -651,8 +566,5 @@ export class DropboxError extends Error {
   }
 }
 
-// =============================================================================
-// SINGLETON EXPORT
-// =============================================================================
 
 export const dropboxAdapter = new DropboxAdapter();

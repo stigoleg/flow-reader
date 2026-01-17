@@ -16,9 +16,6 @@ import type {
   ArchiveProgress,
 } from '@/types';
 
-// =============================================================================
-// SYNC PROVIDERS
-// =============================================================================
 
 /** Available sync provider types */
 export type SyncProviderType = 'dropbox' | 'onedrive' | 'folder';
@@ -76,9 +73,6 @@ export interface SyncProvider {
   disconnect(): Promise<void>;
 }
 
-// =============================================================================
-// ENCRYPTED DATA
-// =============================================================================
 
 /** Encrypted blob format for storage in cloud providers */
 export interface EncryptedBlob {
@@ -96,9 +90,7 @@ export interface EncryptedBlob {
   encryptedAt: number;
 }
 
-// =============================================================================
 // CONTENT MANIFEST (for multi-file content sync)
-// =============================================================================
 
 /** Manifest tracking synced content files */
 export interface ContentManifest {
@@ -128,9 +120,6 @@ export interface ContentManifestItem {
   checksum: string;
 }
 
-// =============================================================================
-// SYNC STATE DOCUMENT
-// =============================================================================
 
 /** Archive item for sync (excludes large cachedDocument) */
 export interface SyncArchiveItem {
@@ -182,9 +171,6 @@ export interface SyncStateDocument {
   exitConfirmationDismissed: boolean;
 }
 
-// =============================================================================
-// SYNC CONFIGURATION
-// =============================================================================
 
 /** Sync configuration stored locally */
 export interface SyncConfig {
@@ -203,9 +189,6 @@ export interface SyncConfig {
   encryptionSalt?: string;
 }
 
-// =============================================================================
-// SYNC STATUS AND RESULTS
-// =============================================================================
 
 /** Current sync status */
 export type SyncStatus = 
@@ -232,9 +215,6 @@ export interface ConflictInfo {
   resolution: 'local-wins' | 'remote-wins' | 'merged';
 }
 
-// =============================================================================
-// MERGE RESULT
-// =============================================================================
 
 /** Result of merging local and remote state */
 export interface MergeResult {
@@ -246,9 +226,6 @@ export interface MergeResult {
   hasChanges: boolean;
 }
 
-// =============================================================================
-// SYNC EVENTS
-// =============================================================================
 
 /** Sync event types */
 export type SyncEventType = 

@@ -4,6 +4,7 @@ import { extractFromDocx } from '@/lib/docx-handler';
 import { extractFromEpub, EpubExtractionError } from '@/lib/epub-handler';
 import { extractFromMobi, MobiExtractionError } from '@/lib/mobi-handler';
 import { extractFromPaste } from '@/lib/extraction';
+import { isSupportedFile, getFileType } from '@/lib/file-utils';
 import { getRecentDocuments } from '@/lib/storage';
 import { addRecent, mapSourceToType, getSourceLabel } from '@/lib/recents-service';
 import { useReaderStore } from '../store';
@@ -18,27 +19,6 @@ interface ImportProgress {
 interface ImportResult {
   successCount: number;
   failed: { name: string; error: string }[];
-}
-
-// Supported file extensions
-const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.epub', '.mobi', '.azw', '.azw3'];
-
-function isSupportedFile(filename: string): boolean {
-  const lower = filename.toLowerCase();
-  // Handle case where browser appends .zip to epub files
-  const normalized = lower.replace(/\.zip$/, '');
-  return SUPPORTED_EXTENSIONS.some(ext => normalized.endsWith(ext));
-}
-
-function getFileType(filename: string): 'pdf' | 'docx' | 'epub' | 'mobi' | null {
-  const lower = filename.toLowerCase();
-  // Handle case where browser appends .zip to epub files
-  const normalized = lower.replace(/\.zip$/, '');
-  if (normalized.endsWith('.pdf')) return 'pdf';
-  if (normalized.endsWith('.docx')) return 'docx';
-  if (normalized.endsWith('.epub')) return 'epub';
-  if (normalized.endsWith('.mobi') || normalized.endsWith('.azw') || normalized.endsWith('.azw3')) return 'mobi';
-  return null;
 }
 
 interface ImportPanelProps {

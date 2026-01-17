@@ -302,15 +302,12 @@ export function extractContent(doc: Document, url: string): FlowDocument | null 
   }
   
   if (!html) {
-    console.log('FlowReader: No HTML content found');
     return null;
   }
   
   const documentClone = parser.parseFromString(html, 'text/html');
   
-  // Verify we have a valid document for Readability
   if (!documentClone || !documentClone.documentElement) {
-    console.log('FlowReader: Invalid document clone');
     return null;
   }
   

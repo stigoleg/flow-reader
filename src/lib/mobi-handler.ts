@@ -18,9 +18,6 @@ import { parseEbookHtml } from './html-parser';
 import { getPlainText } from './block-utils';
 import { computeFileHash, countWords } from './file-utils';
 
-// =============================================================================
-// ERROR TYPES
-// =============================================================================
 
 export type MobiErrorType = 
   | 'invalid-mobi'
@@ -40,9 +37,6 @@ export class MobiExtractionError extends Error {
   }
 }
 
-// =============================================================================
-// MOBI STRUCTURE CONSTANTS
-// =============================================================================
 
 const PDB_HEADER_SIZE = 78;
 const MOBI_MAGIC = 'MOBI';
@@ -65,9 +59,6 @@ const EXTH_DESCRIPTION = 103;
 const EXTH_PUBLISHED_DATE = 106;
 const EXTH_LANGUAGE = 524;
 
-// =============================================================================
-// MAIN EXTRACTION FUNCTION
-// =============================================================================
 
 /**
  * Extract a FlowDocument from a MOBI file
@@ -78,22 +69,13 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
     const data = new DataView(arrayBuffer);
     const bytes = new Uint8Array(arrayBuffer);
     
-    console.log(`[MOBI] File size: ${bytes.length} bytes`);
-    
-    // Parse PDB header
     const pdbHeader = parsePdbHeader(data);
-    console.log(`[MOBI] PDB name: "${pdbHeader.name}", records: ${pdbHeader.numRecords}`);
     
-    // Parse record list
     const records = parseRecordList(data, pdbHeader.numRecords);
     
-    // Read first record (contains MOBI header)
     const record0 = getRecord(bytes, records, 0);
-    console.log(`[MOBI] Record 0 size: ${record0.length} bytes`);
     
-    // Parse PalmDOC header
     const palmDocHeader = parsePalmDocHeader(new DataView(record0.buffer, record0.byteOffset));
-    console.log(`[MOBI] Compression: ${palmDocHeader.compression}, Text length: ${palmDocHeader.textLength}, Records: ${palmDocHeader.recordCount}`);
     
     // Check for DRM
     if (palmDocHeader.encryption !== ENCRYPTION_NONE) {
@@ -103,16 +85,13 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
       );
     }
     
-    // Parse MOBI header (follows PalmDOC header)
     const mobiHeader = parseMobiHeader(new DataView(record0.buffer, record0.byteOffset));
-    console.log(`[MOBI] MOBI header length: ${mobiHeader.headerLength}, First image: ${mobiHeader.firstImageIndex}`);
     
     // Parse EXTH header if present
     const exthData = mobiHeader.exthFlags & 0x40 
       ? parseExthHeader(record0, mobiHeader.headerLength + 16)
       : {};
     
-    // Get metadata
     const metadata = {
       title: mobiHeader.fullName || pdbHeader.name || file.name.replace(/\.(mobi|azw3?|prc)$/i, ''),
       author: exthData[EXTH_AUTHOR],
@@ -121,20 +100,15 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
       language: exthData[EXTH_LANGUAGE],
       date: exthData[EXTH_PUBLISHED_DATE],
     };
-    console.log(`[MOBI] Metadata: ${metadata.title} by ${metadata.author}`);
     
-    // Extract and decompress text records
     const textContent = extractTextContent(
       bytes,
       records,
       palmDocHeader,
       mobiHeader
     );
-    console.log(`[MOBI] Extracted text: ${textContent.length} characters`);
     
-    // Parse HTML content into chapters
     const chapters = parseContentIntoChapters(textContent);
-    console.log(`[MOBI] Parsed ${chapters.length} chapters`);
     
     if (chapters.length === 0) {
       throw new MobiExtractionError(
@@ -143,15 +117,6 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
       );
     }
     
-    // Log chapter info
-    let totalWords = 0;
-    for (const ch of chapters) {
-      console.log(`[MOBI] Chapter: "${ch.title}" - ${ch.wordCount} words, ${ch.blocks.length} blocks`);
-      totalWords += ch.wordCount;
-    }
-    console.log(`[MOBI] Total: ${totalWords} words`);
-    
-    // Compute file hash for position keying
     const fileHash = await computeFileHash(file);
     
     // Build TOC from chapters
@@ -203,9 +168,6 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
   }
 }
 
-// =============================================================================
-// PDB PARSING
-// =============================================================================
 
 interface PdbHeader {
   name: string;
@@ -255,9 +217,7 @@ function getRecord(bytes: Uint8Array, records: RecordInfo[], index: number): Uin
   return bytes.slice(record.offset, nextOffset);
 }
 
-// =============================================================================
 // PALMDOC & MOBI HEADER PARSING
-// =============================================================================
 
 interface PalmDocHeader {
   compression: number;
@@ -336,9 +296,6 @@ function parseMobiHeader(data: DataView): MobiHeader {
   return { headerLength, mobiType, encoding, firstImageIndex, exthFlags, fullName };
 }
 
-// =============================================================================
-// EXTH HEADER PARSING
-// =============================================================================
 
 function parseExthHeader(record0: Uint8Array, offset: number): Record<number, string> {
   const exthData: Record<number, string> = {};
@@ -380,9 +337,6 @@ function parseExthHeader(record0: Uint8Array, offset: number): Record<number, st
   return exthData;
 }
 
-// =============================================================================
-// TEXT EXTRACTION
-// =============================================================================
 
 function extractTextContent(
   bytes: Uint8Array,
@@ -408,8 +362,6 @@ function extractTextContent(
   
   // Don't go beyond available records
   endRecord = Math.min(endRecord, records.length);
-  
-  console.log(`[MOBI] Reading text records ${startRecord} to ${endRecord - 1}`);
   
   for (let i = startRecord; i < endRecord; i++) {
     try {
@@ -500,9 +452,6 @@ function decompressPalmDoc(input: Uint8Array): Uint8Array {
   return new Uint8Array(output);
 }
 
-// =============================================================================
-// CONTENT PARSING
-// =============================================================================
 
 /**
  * Parse HTML content into chapters
@@ -522,8 +471,6 @@ function parseContentIntoChapters(html: string): Chapter[] {
   // Split on page breaks
   const pageBreakPattern = /<mbp:pagebreak\s*\/?>/gi;
   const sections = cleanHtml.split(pageBreakPattern);
-  
-  console.log(`[MOBI] Found ${sections.length} sections after splitting on pagebreak`);
   
   const chapters: Chapter[] = [];
   
@@ -565,7 +512,6 @@ function parseContentIntoChapters(html: string): Chapter[] {
   
   // If no chapters were created from pagebreaks, try splitting by headings
   if (chapters.length <= 1 && cleanHtml.length > 1000) {
-    console.log('[MOBI] No pagebreaks found, splitting by headings');
     return createChaptersFromHeadings(cleanHtml);
   }
   

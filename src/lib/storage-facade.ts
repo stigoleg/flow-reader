@@ -1,13 +1,6 @@
 /**
- * Storage Facade
- * 
- * Centralized storage abstraction layer that provides:
- * - Single source of truth for all storage operations
- * - Schema versioning and migration support
- * - Change notification callbacks
- * - Sync state preparation and application
- * 
- * Uses chrome-storage.ts for underlying Chrome storage operations.
+ * Centralized storage abstraction providing schema versioning, change notifications,
+ * and sync state preparation. Uses chrome-storage.ts for Chrome storage operations.
  */
 
 import type { 
@@ -24,9 +17,6 @@ import { CURRENT_STORAGE_VERSION, runMigrations } from './migrations';
 import { normalizeUrl } from './url-utils';
 import * as chromeStorage from './chrome-storage';
 
-// =============================================================================
-// TYPES
-// =============================================================================
 
 /** Extended storage schema with sync-related fields */
 export interface ExtendedStorageSchema extends StorageSchema {
@@ -81,16 +71,12 @@ export interface SyncArchiveItem {
 
 export type StorageChangeCallback = (changes: Partial<ExtendedStorageSchema>) => void;
 
-// =============================================================================
-// STORAGE FACADE CLASS
-// =============================================================================
 
 class StorageFacadeImpl {
   private changeListeners: Set<StorageChangeCallback> = new Set();
   private deviceId: string | null = null;
 
   constructor() {
-    // Listen for storage changes from other contexts
     chrome.storage.onChanged.addListener((changes, areaName) => {
       if (areaName === 'local') {
         const convertedChanges: Partial<ExtendedStorageSchema> = {};
@@ -104,10 +90,7 @@ class StorageFacadeImpl {
     });
   }
 
-  /**
-   * Get full storage state with defaults applied.
-   * Auto-initializes storage if empty (matches storage.ts behavior).
-   */
+  /** Get full storage state with defaults applied. Auto-initializes if empty. */
   async getState(): Promise<ExtendedStorageSchema> {
     const data = await chromeStorage.get<Record<string, unknown>>(null);
     
@@ -159,9 +142,6 @@ class StorageFacadeImpl {
     };
   }
 
-  /**
-   * Get device ID (creates one if not exists)
-   */
   async getDeviceId(): Promise<string> {
     if (this.deviceId) {
       return this.deviceId;
@@ -180,9 +160,6 @@ class StorageFacadeImpl {
     return newDeviceId;
   }
 
-  /**
-   * Update settings (partial update)
-   */
   async updateSettings(settings: Partial<ReaderSettings>): Promise<void> {
     const state = await this.getState();
     const newSettings = { ...state.settings, ...settings };
@@ -193,9 +170,6 @@ class StorageFacadeImpl {
     });
   }
 
-  /**
-   * Update positions
-   */
   async updatePositions(positions: Record<string, ReadingPosition>): Promise<void> {
     const state = await this.getState();
     const newPositions = { ...state.positions, ...positions };
@@ -203,9 +177,6 @@ class StorageFacadeImpl {
     return this.setValues({ positions: newPositions });
   }
 
-  /**
-   * Update archive items
-   */
   async updateArchiveItems(items: ArchiveItem[]): Promise<void> {
     return this.setValues({ 
       archiveItems: items,
@@ -214,9 +185,9 @@ class StorageFacadeImpl {
   }
 
   /**
-   * Add a deleted item tombstone for sync
+   * Add a deleted item tombstone for sync.
    * Uses multiple identifiers (id, fileHash, normalized URL) to ensure the item
-   * won't be re-synced back from any device
+   * won't be re-synced back from any device.
    */
   async addDeletedItemTombstone(item: {
     id: string;
@@ -227,15 +198,12 @@ class StorageFacadeImpl {
     const deletedItems = { ...state.deletedItems };
     const now = Date.now();
     
-    // Add tombstone for the item ID
     deletedItems[item.id] = now;
     
-    // Also add tombstone for fileHash if present (for file-based deduplication)
     if (item.fileHash) {
       deletedItems[`hash:${item.fileHash}`] = now;
     }
     
-    // Also add tombstone for normalized URL if present (for web deduplication)
     if (item.url) {
       const normalized = normalizeUrl(item.url);
       deletedItems[`url:${normalized}`] = now;
@@ -244,30 +212,18 @@ class StorageFacadeImpl {
     return this.setValues({ deletedItems });
   }
 
-  /**
-   * Clear all deleted item tombstones
-   */
   async clearDeletedItemTombstones(): Promise<void> {
     return this.setValues({ deletedItems: {} });
   }
 
-  /**
-   * Update custom themes
-   */
   async updateCustomThemes(themes: CustomTheme[]): Promise<void> {
     return this.setValues({ customThemes: themes });
   }
 
-  /**
-   * Update presets
-   */
   async updatePresets(presets: Record<string, Partial<ReaderSettings>>): Promise<void> {
     return this.setValues({ presets });
   }
 
-  /**
-   * Update UI flags (onboardingCompleted, exitConfirmationDismissed)
-   */
   async updateFlags(flags: {
     onboardingCompleted?: boolean;
     exitConfirmationDismissed?: boolean;
@@ -275,9 +231,6 @@ class StorageFacadeImpl {
     return this.setValues(flags);
   }
 
-  /**
-   * Update sync configuration
-   */
   async updateSyncConfig(config: {
     syncEnabled?: boolean;
     syncProvider?: SyncProviderType | null;
@@ -287,14 +240,11 @@ class StorageFacadeImpl {
     return this.setValues(config);
   }
 
-  /**
-   * Get state prepared for sync (excludes large cached documents)
-   */
+  /** Get state prepared for sync (excludes large cached documents) */
   async getStateForSync(): Promise<SyncStateDocument> {
     const state = await this.getState();
     const deviceId = await this.getDeviceId();
 
-    // Convert archive items to sync format (remove cachedDocument)
     const syncArchiveItems: SyncArchiveItem[] = state.archiveItems.map(item => ({
       id: item.id,
       type: item.type,
@@ -308,12 +258,11 @@ class StorageFacadeImpl {
       lastPosition: item.lastPosition,
       fileHash: item.fileHash,
       pasteContent: item.pasteContent,
-      // Explicitly exclude cachedDocument
     }));
 
     return {
       schemaVersion: CURRENT_STORAGE_VERSION,
-      updatedAt: state.dataUpdatedAt, // Use stored timestamp, not Date.now()
+      updatedAt: state.dataUpdatedAt,
       deviceId,
       settings: state.settings,
       presets: state.presets,
@@ -326,23 +275,18 @@ class StorageFacadeImpl {
     };
   }
 
-  /**
-   * Apply remote state from sync (preserves local cachedDocument data)
-   */
+  /** Apply remote state from sync (preserves local cachedDocument data) */
   async applyRemoteState(remote: SyncStateDocument): Promise<void> {
     const localState = await this.getState();
 
-    // Merge archive items - preserve local cachedDocument
     const mergedArchiveItems: ArchiveItem[] = remote.archiveItems.map(remoteItem => {
       const localItem = localState.archiveItems.find(l => l.id === remoteItem.id);
       return {
         ...remoteItem,
-        // Preserve local cachedDocument if it exists
         cachedDocument: localItem?.cachedDocument,
       };
     });
 
-    // Add any local items not in remote (they may have been added locally since last sync)
     for (const localItem of localState.archiveItems) {
       if (!mergedArchiveItems.find(m => m.id === localItem.id)) {
         mergedArchiveItems.push(localItem);
@@ -350,9 +294,9 @@ class StorageFacadeImpl {
     }
 
     await this.setValues({
-      _fromRemoteSync: true, // Flag to prevent setValues from overwriting dataUpdatedAt
+      _fromRemoteSync: true,
       version: CURRENT_STORAGE_VERSION,
-      dataUpdatedAt: remote.updatedAt, // Preserve remote timestamp for future conflict resolution
+      dataUpdatedAt: remote.updatedAt,
       settings: remote.settings,
       presets: remote.presets,
       customThemes: remote.customThemes,
@@ -365,24 +309,15 @@ class StorageFacadeImpl {
     });
   }
 
-  /**
-   * Get current storage version
-   */
   async getCurrentVersion(): Promise<number> {
     const version = await chromeStorage.getOne<number>('version');
     return version || 1;
   }
 
-  /**
-   * Run migrations if needed
-   */
   async runMigrations(): Promise<void> {
     return runMigrations();
   }
 
-  /**
-   * Subscribe to storage changes
-   */
   onChange(callback: StorageChangeCallback): () => void {
     this.changeListeners.add(callback);
     return () => {
@@ -390,19 +325,13 @@ class StorageFacadeImpl {
     };
   }
 
-  /**
-   * Get archive items with their full data (including cachedDocument)
-   * For use by content sync manager
-   */
+  /** Get archive items with full data (including cachedDocument) for content sync */
   async getArchiveItemsForContentSync(): Promise<ArchiveItem[]> {
     const state = await this.getState();
     return state.archiveItems;
   }
 
-  /**
-   * Update a single archive item's cached document
-   * For use when downloading content from remote
-   */
+  /** Update a single archive item's cached document when downloading from remote */
   async updateArchiveItemCachedDocument(
     itemId: string, 
     cachedDocument: ArchiveItem['cachedDocument']
@@ -420,17 +349,11 @@ class StorageFacadeImpl {
     });
   }
 
-  /**
-   * Clear all storage data
-   */
   async clearAll(): Promise<void> {
     await chromeStorage.clear();
     this.deviceId = null;
   }
 
-  // =============================================================================
-  // PRIVATE METHODS
-  // =============================================================================
 
   /** Keys that represent user data (should update dataUpdatedAt when modified) */
   private static readonly SYNC_RELEVANT_KEYS: readonly string[] = [
@@ -438,16 +361,13 @@ class StorageFacadeImpl {
   ];
 
   private async setValues(values: Record<string, unknown>): Promise<void> {
-    // Check if any sync-relevant data is being modified
     const hasDataChange = StorageFacadeImpl.SYNC_RELEVANT_KEYS.some(key => key in values);
     
-    // If this is a data change and not from remote sync, update dataUpdatedAt
-    // The _fromRemoteSync flag prevents updating timestamp when applying remote state
+    // _fromRemoteSync flag prevents updating timestamp when applying remote state
     if (hasDataChange && !values._fromRemoteSync) {
       values.dataUpdatedAt = Date.now();
     }
     
-    // Remove internal flag before saving (it's not part of the schema)
     delete values._fromRemoteSync;
     
     await chromeStorage.set(values);
@@ -482,9 +402,6 @@ class StorageFacadeImpl {
   }
 }
 
-// =============================================================================
-// SINGLETON EXPORT
-// =============================================================================
 
 /** Storage facade singleton */
 export const storageFacade = new StorageFacadeImpl();

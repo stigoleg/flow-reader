@@ -5,6 +5,7 @@
  */
 
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 interface PasteModalProps {
   onClose: () => void;
@@ -23,17 +24,7 @@ export default function PasteModal({ onClose, onSubmit }: PasteModalProps) {
     textareaRef.current?.focus();
   }, []);
   
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  useEscapeKey(onClose);
   
   const handleSubmit = () => {
     if (text.trim()) {
