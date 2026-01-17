@@ -34,7 +34,7 @@ A Chrome extension for distraction-free reading. Extracts content from web pages
 - Rename and delete items
 
 **Sync**
-- Cross-device sync via local folder, Dropbox, or OneDrive
+- Cross-device sync via local folder or Dropbox
 - End-to-end encryption
 - Syncs settings, positions, history, and custom themes
 

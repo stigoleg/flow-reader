@@ -2,13 +2,12 @@
  * Sync Settings Section
  * 
  * Settings UI for configuring cross-device sync.
- * Allows connecting to Dropbox, OneDrive, or a local folder (for iCloud).
+ * Allows connecting to Dropbox or a local folder (for iCloud).
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { syncService } from '@/lib/sync/sync-service';
 import { dropboxAdapter } from '@/lib/sync/providers/dropbox-adapter';
-import { oneDriveAdapter } from '@/lib/sync/providers/onedrive-adapter';
 import { folderAdapter } from '@/lib/sync/providers/folder-adapter';
 import type { SyncProviderType, SyncStatus, SyncEvent } from '@/lib/sync/types';
 import { SyncStatusBadge, ApiKeyModal, PassphraseModal } from './sync';
@@ -42,20 +41,11 @@ const PROVIDER_OPTIONS: ProviderOption[] = [
     needsApiKey: true,
     apiKeyLabel: 'Dropbox App Key',
   },
-  {
-    type: 'onedrive',
-    name: 'OneDrive',
-    description: 'Sync via Microsoft OneDrive',
-    icon: 'M12 4a7 7 0 016.93 6.03A5 5 0 0119 20H6a6 6 0 01-.84-11.95A7 7 0 0112 4z',
-    needsApiKey: true,
-    apiKeyLabel: 'Microsoft Client ID',
-  },
 ];
 
 // Storage keys for API keys
 const API_KEY_STORAGE: Record<string, string> = {
   dropbox: 'dropboxAppKey',
-  onedrive: 'onedriveClientId',
 };
 
 // =============================================================================
@@ -118,11 +108,6 @@ export function SyncSettingsSection() {
           const connected = await dropboxAdapter.isConnected();
           if (connected) {
             syncService.setProvider(dropboxAdapter);
-          }
-        } else if (config.provider === 'onedrive') {
-          const connected = await oneDriveAdapter.isConnected();
-          if (connected) {
-            syncService.setProvider(oneDriveAdapter);
           }
         }
       }
@@ -193,19 +178,14 @@ export function SyncSettingsSection() {
     return unsubscribe;
   }, []);
 
-  const startOAuthFlow = async (option: ProviderOption, apiKey: string) => {
+  const startOAuthFlow = async (_option: ProviderOption, apiKey: string) => {
     setIsConnecting(true);
     setError(null);
 
     try {
-      if (option.type === 'dropbox') {
-        dropboxAdapter.setAppKey(apiKey);
-      } else if (option.type === 'onedrive') {
-        oneDriveAdapter.setClientId(apiKey);
-      }
+      dropboxAdapter.setAppKey(apiKey);
 
-      const adapter = option.type === 'dropbox' ? dropboxAdapter : oneDriveAdapter;
-      const authUrl = await adapter.startAuth();
+      const authUrl = await dropboxAdapter.startAuth();
       
       const responseUrl = await new Promise<string>((resolve, reject) => {
         chrome.identity.launchWebAuthFlow(
@@ -229,20 +209,20 @@ export function SyncSettingsSection() {
         throw new Error('No authorization code received');
       }
 
-      await adapter.completeAuth(code);
+      await dropboxAdapter.completeAuth(code);
       
       // Check if there's an existing encrypted file
-      const remoteState = await syncService.checkRemoteState(adapter);
+      const remoteState = await syncService.checkRemoteState(dropboxAdapter);
       
       if (remoteState.exists && remoteState.encrypted) {
         // Existing encrypted file - need passphrase
-        syncService.setProvider(adapter);
+        syncService.setProvider(dropboxAdapter);
         setIsExistingEncryptedFile(true);
         setShowPassphraseModal(true);
       } else {
         // No existing file or unencrypted - configure without encryption (like folder sync)
-        syncService.setProvider(adapter);
-        await syncService.configureWithoutEncryption(adapter);
+        syncService.setProvider(dropboxAdapter);
+        await syncService.configureWithoutEncryption(dropboxAdapter);
         await syncService.syncNow();
         setPendingProvider(null);
       }
@@ -309,10 +289,8 @@ export function SyncSettingsSection() {
       let adapter;
       if (pendingProvider.type === 'folder') {
         adapter = folderAdapter;
-      } else if (pendingProvider.type === 'dropbox') {
-        adapter = dropboxAdapter;
       } else {
-        adapter = oneDriveAdapter;
+        adapter = dropboxAdapter;
       }
       
       syncService.setProvider(adapter);
@@ -364,14 +342,6 @@ export function SyncSettingsSection() {
         syncService.setProvider(dropboxAdapter);
       } else {
         setError('Dropbox session expired. Please reconnect.');
-        return;
-      }
-    } else if (connectedProvider === 'onedrive') {
-      const connected = await oneDriveAdapter.isConnected();
-      if (connected) {
-        syncService.setProvider(oneDriveAdapter);
-      } else {
-        setError('OneDrive session expired. Please reconnect.');
         return;
       }
     }

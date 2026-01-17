@@ -30,7 +30,7 @@ export interface ExtendedStorageSchema extends StorageSchema {
   deletedItems: Record<string, number>;
 }
 
-export type SyncProviderType = 'dropbox' | 'onedrive' | 'folder';
+export type SyncProviderType = 'dropbox' | 'folder';
 
 /** State document for sync (excludes large cached documents) */
 export interface SyncStateDocument {

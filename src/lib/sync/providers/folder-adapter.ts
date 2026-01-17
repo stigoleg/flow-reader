@@ -2,7 +2,7 @@
  * Folder Sync Adapter
  * 
  * Uses the File System Access API to sync to a user-selected folder.
- * This works with iCloud Drive, Dropbox folder, OneDrive folder, or any local folder.
+ * This works with iCloud Drive, Google Drive folder, Dropbox folder, or any local folder.
  * The desktop sync app handles cross-device synchronization.
  */
 

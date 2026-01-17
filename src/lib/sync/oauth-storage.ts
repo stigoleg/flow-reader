@@ -2,7 +2,7 @@
  * OAuth Storage Helper
  * 
  * Shared utilities for storing and retrieving OAuth tokens and PKCE verifiers
- * in Chrome storage. Used by Dropbox and OneDrive adapters.
+ * in Chrome storage. Used by Dropbox adapter.
  */
 
 import type { OAuthTokens } from './types';

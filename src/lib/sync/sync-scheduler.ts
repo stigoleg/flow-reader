@@ -12,7 +12,6 @@ import { syncService } from './sync-service';
 import { storageFacade } from '../storage-facade';
 import { folderAdapter } from './providers/folder-adapter';
 import { dropboxAdapter } from './providers/dropbox-adapter';
-import { oneDriveAdapter } from './providers/onedrive-adapter';
 
 
 const ALARM_NAME = 'sync-periodic';
@@ -87,12 +86,6 @@ class SyncSchedulerImpl {
         if (connected) {
           syncService.setProvider(dropboxAdapter);
           if (import.meta.env.DEV) console.log('SyncScheduler: Restored Dropbox provider');
-        }
-      } else if (providerType === 'onedrive') {
-        const connected = await oneDriveAdapter.isConnected();
-        if (connected) {
-          syncService.setProvider(oneDriveAdapter);
-          if (import.meta.env.DEV) console.log('SyncScheduler: Restored OneDrive provider');
         }
       }
     } catch (error) {

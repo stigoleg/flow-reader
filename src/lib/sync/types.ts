@@ -18,7 +18,7 @@ import type {
 
 
 /** Available sync provider types */
-export type SyncProviderType = 'dropbox' | 'onedrive' | 'folder';
+export type SyncProviderType = 'dropbox' | 'folder';
 
 /** OAuth token storage */
 export interface OAuthTokens {
@@ -179,7 +179,6 @@ export interface SyncConfig {
   
   // Provider-specific tokens (stored encrypted)
   dropboxTokens?: OAuthTokens;
-  onedriveTokens?: OAuthTokens;
   
   // Folder sync path handle (stored as serialized handle)
   folderHandle?: FileSystemDirectoryHandle;

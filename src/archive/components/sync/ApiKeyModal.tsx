@@ -22,7 +22,6 @@ interface ApiKeyModalProps {
 // Storage keys for API keys
 const API_KEY_STORAGE: Record<string, string> = {
   dropbox: 'dropboxAppKey',
-  onedrive: 'onedriveClientId',
 };
 
 async function getStoredApiKey(provider: SyncProviderType): Promise<string | null> {
@@ -127,21 +126,6 @@ export function ApiKeyModal({ provider, onSubmit, onCancel }: ApiKeyModalProps) 
                     {redirectUri}
                   </div>
                 </li>
-              </ol>
-            )}
-            {provider.type === 'onedrive' && (
-              <ol className="list-decimal list-inside space-y-1.5 opacity-70">
-                <li>Go to <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noopener noreferrer" className="underline hover:opacity-100">Azure App registrations</a></li>
-                <li>Click <strong>"New registration"</strong></li>
-                <li>Name it (e.g., "FlowReader Sync")</li>
-                <li>Under "Supported account types", select <strong>"Personal Microsoft accounts only"</strong></li>
-                <li>Under "Redirect URI", select <strong>"Single-page application (SPA)"</strong> and enter:
-                  <div className="mt-1 p-1.5 bg-current/10 rounded font-mono text-[10px] break-all select-all">
-                    {redirectUri}
-                  </div>
-                </li>
-                <li>Click <strong>"Register"</strong></li>
-                <li>Copy the <strong>"Application (client) ID"</strong> from the overview page</li>
               </ol>
             )}
           </div>
