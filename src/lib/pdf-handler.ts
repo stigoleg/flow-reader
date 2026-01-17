@@ -1,5 +1,6 @@
 import type { FlowDocument } from '@/types';
 import { createDocument } from './block-utils';
+import { computeFileHash } from './file-utils';
 
 // PDF.js types
 interface PDFDocumentProxy {
@@ -145,9 +146,12 @@ export async function extractFromPdf(file: File): Promise<FlowDocument> {
     id: `block-${index}`,
   }));
 
+  const fileHash = await computeFileHash(file);
+
   return createDocument(blocks, {
     title: file.name.replace(/\.pdf$/i, ''),
     source: 'pdf',
+    fileHash,
   });
 }
 
