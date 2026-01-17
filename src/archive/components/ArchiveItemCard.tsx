@@ -105,9 +105,11 @@ export default memo(function ArchiveItemCard({
   const handleRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation(); // Prevent parent from opening the file
       finishRenaming(editValue);
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       cancelRenaming();
       setEditValue(item.title);
     }
