@@ -1,7 +1,30 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useReaderStore } from '@/reader/store';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '@/types';
-import type { FlowDocument } from '@/types';
+import type { FlowDocument, ReadingPosition } from '@/types';
+
+// Mock the storage module - must be defined before importing the store
+vi.mock('@/lib/storage', () => ({
+  getSettings: vi.fn().mockResolvedValue(null),
+  saveSettings: vi.fn().mockResolvedValue(undefined),
+  savePosition: vi.fn().mockResolvedValue(undefined),
+  getPosition: vi.fn().mockResolvedValue(null),
+  isExitConfirmationDismissed: vi.fn().mockResolvedValue(false),
+  dismissExitConfirmation: vi.fn().mockResolvedValue(undefined),
+  saveCurrentDocument: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Mock recents-service
+vi.mock('@/lib/recents-service', () => ({
+  addRecent: vi.fn().mockResolvedValue(undefined),
+  mapSourceToType: vi.fn().mockReturnValue('web'),
+  getSourceLabel: vi.fn().mockReturnValue('Test'),
+  shouldCacheDocument: vi.fn().mockReturnValue(false),
+  calculateProgress: vi.fn().mockReturnValue({ percent: 0, label: '0%' }),
+  updateLastOpened: vi.fn().mockResolvedValue(undefined),
+}));
+
+// Import store after mocks are set up
+import { useReaderStore } from '@/reader/store';
 
 describe('Reader Store', () => {
   // Reset store state before each test
@@ -427,6 +450,177 @@ describe('Reader Store', () => {
         expect(state.currentSentenceIndex).toBe(0);
         expect(state.currentWordIndex).toBe(0);
       });
+    });
+  });
+
+  describe('restorePosition', () => {
+    // Helper to create a book document with multiple chapters
+    const createBookDocument = (): FlowDocument => ({
+      metadata: {
+        title: 'Test Book',
+        source: 'epub',
+        createdAt: Date.now(),
+      },
+      blocks: [
+        { type: 'paragraph', content: 'Chapter 1 Block 1', id: 'c1b1' },
+        { type: 'paragraph', content: 'Chapter 1 Block 2', id: 'c1b2' },
+        { type: 'paragraph', content: 'Chapter 1 Block 3', id: 'c1b3' },
+      ],
+      plainText: 'Chapter 1 content',
+      book: {
+        title: 'Test Book',
+        chapters: [
+          {
+            title: 'Chapter 1',
+            blocks: [
+              { type: 'paragraph', content: 'Chapter 1 Block 1', id: 'c1b1' },
+              { type: 'paragraph', content: 'Chapter 1 Block 2', id: 'c1b2' },
+              { type: 'paragraph', content: 'Chapter 1 Block 3', id: 'c1b3' },
+            ],
+            plainText: 'Chapter 1 content',
+          },
+          {
+            title: 'Chapter 2',
+            blocks: [
+              { type: 'paragraph', content: 'Chapter 2 Block 1', id: 'c2b1' },
+              { type: 'paragraph', content: 'Chapter 2 Block 2', id: 'c2b2' },
+            ],
+            plainText: 'Chapter 2 content',
+          },
+          {
+            title: 'Chapter 3',
+            blocks: [
+              { type: 'paragraph', content: 'Chapter 3 Block 1', id: 'c3b1' },
+              { type: 'paragraph', content: 'Chapter 3 Block 2', id: 'c3b2' },
+              { type: 'paragraph', content: 'Chapter 3 Block 3', id: 'c3b3' },
+              { type: 'paragraph', content: 'Chapter 3 Block 4', id: 'c3b4' },
+              { type: 'paragraph', content: 'Chapter 3 Block 5', id: 'c3b5' },
+            ],
+            plainText: 'Chapter 3 content',
+          },
+        ],
+      },
+    });
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('restores position within a chapter for books', async () => {
+      const { getPosition } = await import('@/lib/storage');
+      
+      // Mock saved position: chapter 2, block 1, with word/sentence positions
+      const savedPosition: ReadingPosition = {
+        blockIndex: 1,
+        charOffset: 50,
+        timestamp: Date.now(),
+        chapterIndex: 2,
+        sentenceIndex: 3,
+        wordIndex: 15,
+      };
+      vi.mocked(getPosition).mockResolvedValueOnce(savedPosition);
+
+      // Set up a book document (starts at chapter 0)
+      const bookDoc = createBookDocument();
+      useReaderStore.getState().setDocument(bookDoc);
+      
+      // Verify initial state
+      expect(useReaderStore.getState().currentChapterIndex).toBe(0);
+      expect(useReaderStore.getState().currentBlockIndex).toBe(0);
+
+      // Restore position
+      await useReaderStore.getState().restorePosition();
+
+      // Verify chapter was restored
+      const state = useReaderStore.getState();
+      expect(state.currentChapterIndex).toBe(2);
+      
+      // Verify block position within chapter was restored (not reset to 0)
+      expect(state.currentBlockIndex).toBe(1);
+      expect(state.currentCharOffset).toBe(50);
+      expect(state.currentSentenceIndex).toBe(3);
+      expect(state.currentWordIndex).toBe(15);
+    });
+
+    it('restores position when saved blockIndex exceeds first chapter length', async () => {
+      const { getPosition } = await import('@/lib/storage');
+      
+      // Saved position: chapter 2, block 4
+      // First chapter only has 3 blocks, so this would fail with the old bug
+      const savedPosition: ReadingPosition = {
+        blockIndex: 4,
+        charOffset: 100,
+        timestamp: Date.now(),
+        chapterIndex: 2,
+        sentenceIndex: 2,
+        wordIndex: 20,
+      };
+      vi.mocked(getPosition).mockResolvedValueOnce(savedPosition);
+
+      const bookDoc = createBookDocument();
+      useReaderStore.getState().setDocument(bookDoc);
+
+      await useReaderStore.getState().restorePosition();
+
+      const state = useReaderStore.getState();
+      // Chapter 2 has 5 blocks, so block 4 is valid
+      expect(state.currentChapterIndex).toBe(2);
+      expect(state.currentBlockIndex).toBe(4);
+      expect(state.currentCharOffset).toBe(100);
+      expect(state.currentSentenceIndex).toBe(2);
+      expect(state.currentWordIndex).toBe(20);
+    });
+
+    it('handles chapter 0 position restoration', async () => {
+      const { getPosition } = await import('@/lib/storage');
+      
+      // Saved position in chapter 0 (no chapter switch needed)
+      const savedPosition: ReadingPosition = {
+        blockIndex: 2,
+        charOffset: 25,
+        timestamp: Date.now(),
+        chapterIndex: 0,
+      };
+      vi.mocked(getPosition).mockResolvedValueOnce(savedPosition);
+
+      const bookDoc = createBookDocument();
+      useReaderStore.getState().setDocument(bookDoc);
+
+      await useReaderStore.getState().restorePosition();
+
+      const state = useReaderStore.getState();
+      expect(state.currentChapterIndex).toBe(0);
+      expect(state.currentBlockIndex).toBe(2);
+      expect(state.currentCharOffset).toBe(25);
+    });
+
+    it('restores position for non-book documents', async () => {
+      const { getPosition } = await import('@/lib/storage');
+      
+      const savedPosition: ReadingPosition = {
+        blockIndex: 5,
+        charOffset: 100,
+        timestamp: Date.now(),
+      };
+      vi.mocked(getPosition).mockResolvedValueOnce(savedPosition);
+
+      // Regular document (not a book)
+      const doc: FlowDocument = {
+        metadata: { title: 'Article', source: 'web', createdAt: Date.now() },
+        blocks: Array.from({ length: 10 }, (_, i) => ({
+          type: 'paragraph' as const,
+          content: `Block ${i}`,
+          id: `b${i}`,
+        })),
+        plainText: 'Article content',
+      };
+      useReaderStore.getState().setDocument(doc);
+
+      await useReaderStore.getState().restorePosition();
+
+      const state = useReaderStore.getState();
+      expect(state.currentBlockIndex).toBe(5);
+      expect(state.currentCharOffset).toBe(100);
     });
   });
 });

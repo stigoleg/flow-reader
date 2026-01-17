@@ -416,8 +416,11 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         setChapter(position.chapterIndex);
       }
       
+      // Re-get document after setChapter to get updated blocks
+      const { document: updatedDoc } = get();
+      
       // Then restore block position within the chapter
-      if (position.blockIndex < document.blocks.length) {
+      if (updatedDoc && position.blockIndex < updatedDoc.blocks.length) {
         set({
           currentBlockIndex: position.blockIndex,
           currentCharOffset: position.charOffset,
