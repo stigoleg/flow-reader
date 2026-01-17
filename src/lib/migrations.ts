@@ -23,7 +23,9 @@ const migrations: Record<number, MigrationFn> = {
 };
 
 /**
- * Run all necessary migrations to bring storage to current version
+ * Run all necessary migrations to bring storage to current version.
+ * Saves after each successful migration step to ensure partial progress
+ * is preserved if a later migration fails.
  */
 export async function runMigrations(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -45,27 +47,36 @@ export async function runMigrations(): Promise<void> {
 
       let migratedData = { ...data };
 
-      // Run each migration in sequence
+      // Run each migration in sequence, saving after each successful step
       for (let version = currentVersion + 1; version <= CURRENT_STORAGE_VERSION; version++) {
         const migrationFn = migrations[version];
         if (migrationFn) {
-          console.log(`FlowReader: Running migration to v${version}`);
-          migratedData = migrationFn(migratedData);
+          try {
+            console.log(`FlowReader: Running migration to v${version}`);
+            migratedData = migrationFn(migratedData);
+            migratedData.version = version;
+            
+            // Save after each successful migration step
+            await new Promise<void>((resolveStep, rejectStep) => {
+              chrome.storage.local.set(migratedData, () => {
+                if (chrome.runtime.lastError) {
+                  rejectStep(new Error(chrome.runtime.lastError.message));
+                } else {
+                  console.log(`FlowReader: Migration to v${version} saved`);
+                  resolveStep();
+                }
+              });
+            });
+          } catch (error) {
+            console.error(`FlowReader: Migration to v${version} failed:`, error);
+            reject(error);
+            return;
+          }
         }
       }
 
-      // Update version
-      migratedData.version = CURRENT_STORAGE_VERSION;
-
-      // Save migrated data
-      chrome.storage.local.set(migratedData, () => {
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          console.log(`FlowReader: Migration complete. Now at v${CURRENT_STORAGE_VERSION}`);
-          resolve();
-        }
-      });
+      console.log(`FlowReader: Migration complete. Now at v${CURRENT_STORAGE_VERSION}`);
+      resolve();
     });
   });
 }

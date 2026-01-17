@@ -4,7 +4,7 @@
  * Individual item in the archive list.
  */
 
-import { useCallback, useRef, useEffect, useState } from 'react';
+import { useCallback, useRef, useEffect, useState, memo } from 'react';
 import type { ArchiveItem } from '@/types';
 import { formatRelativeTime, getTypeBadgeLabel } from '@/lib/recents-service';
 import { useArchiveStore, getItemSyncStatus } from '../store';
@@ -58,7 +58,7 @@ function getTypeIcon(type: ArchiveItem['type']) {
   }
 }
 
-export default function ArchiveItemCard({
+export default memo(function ArchiveItemCard({
   item,
   isFocused,
   onClick,
@@ -214,4 +214,4 @@ export default function ArchiveItemCard({
       </div>
     </div>
   );
-}
+});

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { Block } from '@/types';
 import type { ModeConfig, BionicConfig, PacingConfig, PositionState, BlockHandlers } from './types';
 import BionicMode from '../modes/BionicMode';
@@ -15,7 +16,11 @@ export interface BlockRendererProps {
   handlers: BlockHandlers;
 }
 
-export default function BlockRenderer({
+/**
+ * Renders a single block of content (heading, paragraph, list, quote, code).
+ * Memoized to prevent re-renders when position changes in other blocks.
+ */
+export default memo(function BlockRenderer({
   block,
   index,
   isActive,
@@ -130,4 +135,4 @@ export default function BlockRenderer({
     default:
       return null;
   }
-}
+});

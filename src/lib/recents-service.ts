@@ -42,12 +42,18 @@ export interface AddRecentInput {
 
 let pendingWrite: ReturnType<typeof setTimeout> | null = null;
 let pendingItems: ArchiveItem[] | null = null;
+let pendingResolvers: Array<{ resolve: () => void; reject: (error: Error) => void }> = [];
 
 async function getArchiveItems(): Promise<ArchiveItem[]> {
   const state = await storageFacade.getState();
   return state.archiveItems;
 }
 
+/**
+ * Save archive items with debouncing.
+ * Multiple rapid calls will be coalesced into a single save, and ALL callers
+ * will have their promises resolved when the save completes.
+ */
 async function saveArchiveItems(items: ArchiveItem[]): Promise<void> {
   pendingItems = items;
   
@@ -56,34 +62,62 @@ async function saveArchiveItems(items: ArchiveItem[]): Promise<void> {
   }
   
   return new Promise((resolve, reject) => {
+    // Add this caller to the list of pending resolvers
+    pendingResolvers.push({ resolve, reject });
+    
     pendingWrite = setTimeout(async () => {
       const itemsToSave = pendingItems;
+      const resolvers = pendingResolvers;
+      
+      // Reset state before async work
       pendingItems = null;
       pendingWrite = null;
+      pendingResolvers = [];
       
       if (!itemsToSave) {
-        resolve();
+        // No items to save - resolve all waiters
+        resolvers.forEach(r => r.resolve());
         return;
       }
       
       try {
         await storageFacade.updateArchiveItems(itemsToSave);
-        resolve();
+        // Resolve all waiters on success
+        resolvers.forEach(r => r.resolve());
       } catch (error) {
-        reject(error);
+        // Reject all waiters on failure
+        const err = error instanceof Error ? error : new Error(String(error));
+        resolvers.forEach(r => r.reject(err));
       }
     }, DEBOUNCE_DELAY);
   });
 }
 
+/**
+ * Immediately save archive items, bypassing debounce.
+ * Used for critical operations like delete where we need immediate persistence.
+ * Any pending debounced saves will be superseded and resolved.
+ */
 async function flushArchiveItems(items: ArchiveItem[]): Promise<void> {
   if (pendingWrite) {
     clearTimeout(pendingWrite);
     pendingWrite = null;
   }
-  pendingItems = null;
   
-  await storageFacade.updateArchiveItems(items);
+  // Capture and clear pending resolvers - they'll be resolved by this flush
+  const resolvers = pendingResolvers;
+  pendingItems = null;
+  pendingResolvers = [];
+  
+  try {
+    await storageFacade.updateArchiveItems(items);
+    // Resolve any pending callers that were waiting for debounced save
+    resolvers.forEach(r => r.resolve());
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    resolvers.forEach(r => r.reject(err));
+    throw error; // Re-throw for the flush caller
+  }
 }
 
 function deduplicateItems(items: ArchiveItem[]): ArchiveItem[] {
@@ -392,14 +426,20 @@ export async function removeRecent(id: string): Promise<void> {
     await flushArchiveItems(filtered);
     
     if (itemToRemove) {
-      storageFacade.addDeletedItemTombstone({
-        id: itemToRemove.id,
-        fileHash: itemToRemove.fileHash,
-        url: itemToRemove.url,
-      }).catch(error => {
+      // Tombstone creation is critical for sync - await it to ensure
+      // the item won't be re-synced back from other devices
+      try {
+        await storageFacade.addDeletedItemTombstone({
+          id: itemToRemove.id,
+          fileHash: itemToRemove.fileHash,
+          url: itemToRemove.url,
+        });
+      } catch (error) {
         console.error('Failed to add deleted item tombstone:', error);
-      });
+        // Continue anyway - the item is already removed locally
+      }
       
+      // Content deletion is best-effort, fire-and-forget is acceptable
       syncService.deleteItemContent({
         id: itemToRemove.id,
         fileHash: itemToRemove.fileHash,
@@ -416,15 +456,24 @@ export async function clearRecents(): Promise<void> {
   
   await flushArchiveItems([]);
   
-  for (const item of items) {
-    storageFacade.addDeletedItemTombstone({
-      id: item.id,
-      fileHash: item.fileHash,
-      url: item.url,
-    }).catch(error => {
+  // Create tombstones for all items to prevent re-sync
+  // Use Promise.allSettled to ensure we try all items even if some fail
+  const tombstonePromises = items.map(async item => {
+    try {
+      await storageFacade.addDeletedItemTombstone({
+        id: item.id,
+        fileHash: item.fileHash,
+        url: item.url,
+      });
+    } catch (error) {
       console.error('Failed to add deleted item tombstone:', error);
-    });
-    
+    }
+  });
+  
+  await Promise.allSettled(tombstonePromises);
+  
+  // Content deletion is best-effort, fire-and-forget is acceptable
+  for (const item of items) {
     syncService.deleteItemContent({
       id: item.id,
       fileHash: item.fileHash,

@@ -3,12 +3,37 @@ import type { FlowDocument, ReaderSettings, ReadingMode } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 import { getSettings, saveSettings, savePosition, getPosition, isExitConfirmationDismissed, dismissExitConfirmation, saveCurrentDocument } from '@/lib/storage';
 import { addRecent, mapSourceToType, getSourceLabel, shouldCacheDocument, calculateProgress, updateLastOpened, updateArchiveItem } from '@/lib/recents-service';
+import { pacingToWordCount, wordCountToRsvpIndex, rsvpIndexToWordCount, wordCountToPacing } from '@/lib/position-utils';
 
 
 const POSITION_SAVE_DEBOUNCE_MS = 1000;
+const SETTINGS_SAVE_DEBOUNCE_MS = 500;
 
 let positionSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSavePosition: (() => Promise<void>) | null = null;
+
+let settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSettings: ReaderSettings | null = null;
+
+/**
+ * Debounced settings save to prevent storage thrashing when rapidly adjusting WPM.
+ * Coalesces multiple saves into one after the debounce period.
+ */
+function debouncedSaveSettings(settings: ReaderSettings): void {
+  pendingSettings = settings;
+  if (settingsSaveTimer) {
+    clearTimeout(settingsSaveTimer);
+  }
+  settingsSaveTimer = setTimeout(() => {
+    if (pendingSettings) {
+      saveSettings(pendingSettings).catch((err) => {
+        console.error('[ReaderStore] Failed to save settings:', err);
+      });
+      pendingSettings = null;
+    }
+    settingsSaveTimer = null;
+  }, SETTINGS_SAVE_DEBOUNCE_MS);
+}
 
 interface ReaderState {
   document: FlowDocument | null;
@@ -160,7 +185,10 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         console.error('Failed to add to archive:', err);
       });
       
-      saveCurrentDocument(doc);
+      // Save current document for refresh persistence
+      saveCurrentDocument(doc).catch((err) => {
+        console.error('Failed to save current document for refresh persistence:', err);
+      });
     }
   },
 
@@ -213,7 +241,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const clampedWPM = Math.max(50, Math.min(1000, wpm));
     const newSettings = { ...get().settings, baseWPM: clampedWPM };
     set({ currentWPM: clampedWPM, settings: newSettings });
-    saveSettings(newSettings);
+    debouncedSaveSettings(newSettings);
   },
 
   adjustWPM: (delta) => {
@@ -221,16 +249,60 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const clampedWPM = Math.max(50, Math.min(1000, currentWPM + delta));
     const newSettings = { ...settings, baseWPM: clampedWPM };
     set({ currentWPM: clampedWPM, settings: newSettings });
-    saveSettings(newSettings);
+    debouncedSaveSettings(newSettings);
   },
 
   setMode: (mode) => {
-    const newSettings = { ...get().settings, activeMode: mode };
-    set({
-      settings: newSettings,
-      currentSentenceIndex: 0,
-      currentWordIndex: 0,
-    });
+    const { 
+      settings, 
+      document, 
+      currentBlockIndex, 
+      currentWordIndex, 
+      currentRsvpIndex,
+      currentChapterIndex,
+    } = get();
+    
+    const newSettings = { ...settings, activeMode: mode };
+    
+    // If no document or same mode, just update settings
+    if (!document || settings.activeMode === mode) {
+      set({ settings: newSettings });
+      saveSettings(newSettings);
+      return;
+    }
+    
+    // Get the blocks for the current chapter (or document if no chapters)
+    const blocks = document.book?.chapters?.[currentChapterIndex]?.blocks ?? document.blocks;
+    
+    // Convert current position to cumulative word count
+    let wordCount: number;
+    if (settings.activeMode === 'rsvp') {
+      // Converting FROM RSVP: use rsvpIndex to calculate word position
+      wordCount = rsvpIndexToWordCount(currentRsvpIndex, settings.rsvpChunkSize);
+    } else {
+      // Converting FROM pacing/bionic: use block + word position
+      wordCount = pacingToWordCount(blocks, currentBlockIndex, currentWordIndex);
+    }
+    
+    // Convert word count to the new mode's position system
+    if (mode === 'rsvp') {
+      // Converting TO RSVP
+      const rsvpIndex = wordCountToRsvpIndex(wordCount, newSettings.rsvpChunkSize);
+      set({ 
+        settings: newSettings,
+        currentRsvpIndex: rsvpIndex,
+      });
+    } else {
+      // Converting TO pacing/bionic
+      const { blockIndex, wordIndex } = wordCountToPacing(blocks, wordCount);
+      set({
+        settings: newSettings,
+        currentBlockIndex: blockIndex,
+        currentWordIndex: wordIndex,
+        currentSentenceIndex: 0, // Sentence granularity resets (could be enhanced)
+      });
+    }
+    
     saveSettings(newSettings);
   },
 
@@ -546,12 +618,17 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     };
     set({ document: updatedDoc });
     
-    // Update the current document in storage
-    await saveCurrentDocument(updatedDoc);
-    
-    // Update the archive item if we have one
-    if (archiveItemId) {
-      await updateArchiveItem(archiveItemId, { title: trimmedTitle });
+    try {
+      // Update the current document in storage
+      await saveCurrentDocument(updatedDoc);
+      
+      // Update the archive item if we have one
+      if (archiveItemId) {
+        await updateArchiveItem(archiveItemId, { title: trimmedTitle });
+      }
+    } catch (err) {
+      console.error('[ReaderStore] Failed to save renamed document:', err);
+      // Note: State is already updated, storage will eventually sync on next save
     }
   },
 }));

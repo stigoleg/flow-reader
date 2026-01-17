@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { tokenizeIntoSentences, tokenizeIntoWords } from '@/lib/tokenizer';
 import type { ModeConfig, BionicConfig, PacingConfig, PositionState } from './types';
 import BionicMode from '../modes/BionicMode';
@@ -17,7 +17,11 @@ interface ListItemRendererProps {
   onSentenceClick: (sentenceIndex: number) => void;
 }
 
-export default function ListItemRenderer({
+/**
+ * Renders a single list item with mode-specific formatting.
+ * Memoized to prevent re-renders when position changes in other list items.
+ */
+export default memo(function ListItemRenderer({
   item,
   itemIndex,
   isBlockActive,
@@ -76,4 +80,4 @@ export default function ListItemRenderer({
   }
 
   return <li>{item}</li>;
-}
+});

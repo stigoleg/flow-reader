@@ -438,7 +438,8 @@ describe('Reader Store', () => {
         expect(useReaderStore.getState().settings.activeMode).toBe('pacing');
       });
 
-      it('resets sub-block positions when changing mode', () => {
+      it('preserves position when switching modes with no document', () => {
+        // Without a document, positions are preserved (no conversion possible)
         useReaderStore.setState({ 
           currentSentenceIndex: 5, 
           currentWordIndex: 10 
@@ -447,8 +448,61 @@ describe('Reader Store', () => {
         useReaderStore.getState().setMode('rsvp');
         
         const state = useReaderStore.getState();
-        expect(state.currentSentenceIndex).toBe(0);
-        expect(state.currentWordIndex).toBe(0);
+        // Without a document, positions are not changed
+        expect(state.currentSentenceIndex).toBe(5);
+        expect(state.currentWordIndex).toBe(10);
+        expect(state.settings.activeMode).toBe('rsvp');
+      });
+
+      it('converts position when switching from pacing to rsvp', () => {
+        // Set up a document with blocks
+        const testDoc: FlowDocument = {
+          metadata: { title: 'Test', source: 'web', createdAt: Date.now() },
+          blocks: [
+            { type: 'paragraph', content: 'One two three four five' },      // 5 words
+            { type: 'paragraph', content: 'Six seven eight nine ten' },     // 5 words
+          ],
+          plainText: 'One two three four five Six seven eight nine ten',
+        };
+
+        useReaderStore.setState({ 
+          document: testDoc,
+          settings: { ...useReaderStore.getState().settings, activeMode: 'pacing', rsvpChunkSize: 1 },
+          currentBlockIndex: 1,
+          currentWordIndex: 2,  // "eight" - 7 words from start (5 + 2)
+        });
+        
+        useReaderStore.getState().setMode('rsvp');
+        
+        const state = useReaderStore.getState();
+        expect(state.settings.activeMode).toBe('rsvp');
+        // 7 words from start = rsvp index 7 (with chunk size 1)
+        expect(state.currentRsvpIndex).toBe(7);
+      });
+
+      it('converts position when switching from rsvp to pacing', () => {
+        const testDoc: FlowDocument = {
+          metadata: { title: 'Test', source: 'web', createdAt: Date.now() },
+          blocks: [
+            { type: 'paragraph', content: 'One two three four five' },      // 5 words
+            { type: 'paragraph', content: 'Six seven eight nine ten' },     // 5 words
+          ],
+          plainText: 'One two three four five Six seven eight nine ten',
+        };
+
+        useReaderStore.setState({ 
+          document: testDoc,
+          settings: { ...useReaderStore.getState().settings, activeMode: 'rsvp', rsvpChunkSize: 1 },
+          currentRsvpIndex: 7,  // 7 words from start
+        });
+        
+        useReaderStore.getState().setMode('pacing');
+        
+        const state = useReaderStore.getState();
+        expect(state.settings.activeMode).toBe('pacing');
+        // 7 words = block 1 (after 5 words), word index 2
+        expect(state.currentBlockIndex).toBe(1);
+        expect(state.currentWordIndex).toBe(2);
       });
     });
   });

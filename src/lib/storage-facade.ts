@@ -16,6 +16,7 @@ import { DEFAULT_SETTINGS } from '@/types';
 import { CURRENT_STORAGE_VERSION, runMigrations } from './migrations';
 import { normalizeUrl } from './url-utils';
 import * as chromeStorage from './chrome-storage';
+import { storageMutex } from './async-mutex';
 
 
 /** Extended storage schema with sync-related fields */
@@ -161,20 +162,24 @@ class StorageFacadeImpl {
   }
 
   async updateSettings(settings: Partial<ReaderSettings>): Promise<void> {
-    const state = await this.getState();
-    const newSettings = { ...state.settings, ...settings };
-    
-    return this.setValues({ 
-      settings: newSettings,
-      version: CURRENT_STORAGE_VERSION,
+    return storageMutex.withLock(async () => {
+      const state = await this.getState();
+      const newSettings = { ...state.settings, ...settings };
+      
+      return this.setValues({ 
+        settings: newSettings,
+        version: CURRENT_STORAGE_VERSION,
+      });
     });
   }
 
   async updatePositions(positions: Record<string, ReadingPosition>): Promise<void> {
-    const state = await this.getState();
-    const newPositions = { ...state.positions, ...positions };
-    
-    return this.setValues({ positions: newPositions });
+    return storageMutex.withLock(async () => {
+      const state = await this.getState();
+      const newPositions = { ...state.positions, ...positions };
+      
+      return this.setValues({ positions: newPositions });
+    });
   }
 
   async updateArchiveItems(items: ArchiveItem[]): Promise<void> {
@@ -194,22 +199,24 @@ class StorageFacadeImpl {
     fileHash?: string;
     url?: string;
   }): Promise<void> {
-    const state = await this.getState();
-    const deletedItems = { ...state.deletedItems };
-    const now = Date.now();
-    
-    deletedItems[item.id] = now;
-    
-    if (item.fileHash) {
-      deletedItems[`hash:${item.fileHash}`] = now;
-    }
-    
-    if (item.url) {
-      const normalized = normalizeUrl(item.url);
-      deletedItems[`url:${normalized}`] = now;
-    }
-    
-    return this.setValues({ deletedItems });
+    return storageMutex.withLock(async () => {
+      const state = await this.getState();
+      const deletedItems = { ...state.deletedItems };
+      const now = Date.now();
+      
+      deletedItems[item.id] = now;
+      
+      if (item.fileHash) {
+        deletedItems[`hash:${item.fileHash}`] = now;
+      }
+      
+      if (item.url) {
+        const normalized = normalizeUrl(item.url);
+        deletedItems[`url:${normalized}`] = now;
+      }
+      
+      return this.setValues({ deletedItems });
+    });
   }
 
   async clearDeletedItemTombstones(): Promise<void> {
@@ -277,35 +284,37 @@ class StorageFacadeImpl {
 
   /** Apply remote state from sync (preserves local cachedDocument data) */
   async applyRemoteState(remote: SyncStateDocument): Promise<void> {
-    const localState = await this.getState();
+    return storageMutex.withLock(async () => {
+      const localState = await this.getState();
 
-    const mergedArchiveItems: ArchiveItem[] = remote.archiveItems.map(remoteItem => {
-      const localItem = localState.archiveItems.find(l => l.id === remoteItem.id);
-      return {
-        ...remoteItem,
-        cachedDocument: localItem?.cachedDocument,
-      };
-    });
+      const mergedArchiveItems: ArchiveItem[] = remote.archiveItems.map(remoteItem => {
+        const localItem = localState.archiveItems.find(l => l.id === remoteItem.id);
+        return {
+          ...remoteItem,
+          cachedDocument: localItem?.cachedDocument,
+        };
+      });
 
-    for (const localItem of localState.archiveItems) {
-      if (!mergedArchiveItems.find(m => m.id === localItem.id)) {
-        mergedArchiveItems.push(localItem);
+      for (const localItem of localState.archiveItems) {
+        if (!mergedArchiveItems.find(m => m.id === localItem.id)) {
+          mergedArchiveItems.push(localItem);
+        }
       }
-    }
 
-    await this.setValues({
-      _fromRemoteSync: true,
-      version: CURRENT_STORAGE_VERSION,
-      dataUpdatedAt: remote.updatedAt,
-      settings: remote.settings,
-      presets: remote.presets,
-      customThemes: remote.customThemes,
-      archiveItems: mergedArchiveItems,
-      positions: remote.positions,
-      onboardingCompleted: remote.onboardingCompleted,
-      exitConfirmationDismissed: remote.exitConfirmationDismissed,
-      lastSyncTime: Date.now(),
-      lastSyncError: null,
+      await this.setValues({
+        _fromRemoteSync: true,
+        version: CURRENT_STORAGE_VERSION,
+        dataUpdatedAt: remote.updatedAt,
+        settings: remote.settings,
+        presets: remote.presets,
+        customThemes: remote.customThemes,
+        archiveItems: mergedArchiveItems,
+        positions: remote.positions,
+        onboardingCompleted: remote.onboardingCompleted,
+        exitConfirmationDismissed: remote.exitConfirmationDismissed,
+        lastSyncTime: Date.now(),
+        lastSyncError: null,
+      });
     });
   }
 
@@ -336,16 +345,18 @@ class StorageFacadeImpl {
     itemId: string, 
     cachedDocument: ArchiveItem['cachedDocument']
   ): Promise<void> {
-    const state = await this.getState();
-    const updatedItems = state.archiveItems.map(item => 
-      item.id === itemId 
-        ? { ...item, cachedDocument } 
-        : item
-    );
-    
-    return this.setValues({ 
-      archiveItems: updatedItems,
-      version: CURRENT_STORAGE_VERSION,
+    return storageMutex.withLock(async () => {
+      const state = await this.getState();
+      const updatedItems = state.archiveItems.map(item => 
+        item.id === itemId 
+          ? { ...item, cachedDocument } 
+          : item
+      );
+      
+      return this.setValues({ 
+        archiveItems: updatedItems,
+        version: CURRENT_STORAGE_VERSION,
+      });
     });
   }
 
