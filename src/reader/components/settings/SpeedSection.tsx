@@ -8,6 +8,20 @@ interface SpeedSectionProps {
 }
 
 export function SpeedSection({ settings, onUpdate }: SpeedSectionProps) {
+  // Target speed must be at least baseWPM + 10
+  const minTargetWPM = settings.baseWPM + 10;
+  
+  // When base speed changes, ensure target speed stays valid
+  const handleBaseWPMChange = (value: number) => {
+    const newMinTarget = value + 10;
+    if (settings.targetWPM < newMinTarget) {
+      // Update both base and target together
+      onUpdate({ baseWPM: value, targetWPM: newMinTarget });
+    } else {
+      onUpdate({ baseWPM: value });
+    }
+  };
+
   return (
     <div className="settings-group">
       <h3>Speed</h3>
@@ -19,7 +33,7 @@ export function SpeedSection({ settings, onUpdate }: SpeedSectionProps) {
           max={WPM.max}
           step={WPM.step}
           unit=" WPM"
-          onChange={(value) => onUpdate({ baseWPM: value })}
+          onChange={handleBaseWPMChange}
         />
         <CheckboxField
           id="rampEnabled"
@@ -31,8 +45,8 @@ export function SpeedSection({ settings, onUpdate }: SpeedSectionProps) {
           <>
             <SliderField
               label="Target Speed"
-              value={settings.targetWPM}
-              min={TARGET_WPM.min}
+              value={Math.max(settings.targetWPM, minTargetWPM)}
+              min={minTargetWPM}
               max={TARGET_WPM.max}
               step={TARGET_WPM.step}
               unit=" WPM"
