@@ -211,8 +211,8 @@ export default function Options() {
         <Section title="Keyboard Shortcuts">
           <div className="space-y-4">
             <ShortcutGroup title="Extension">
-              <Shortcut label="Open Reader Mode" keys={isMac ? '⌥+Shift+R' : 'Alt+Shift+R'} />
-              <Shortcut label="Open Popup" keys={isMac ? '⌥+Shift+O' : 'Alt+Shift+O'} />
+              <Shortcut label="Open Archive" keys={isMac ? '⌘+Shift+F' : 'Ctrl+Shift+F'} />
+              <Shortcut label="Read Current Page" keys={isMac ? '⌘+Shift+R' : 'Ctrl+Shift+R'} />
             </ShortcutGroup>
             <p className="text-xs text-gray-400">
               Customize shortcuts at{' '}

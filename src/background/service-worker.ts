@@ -36,11 +36,22 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // Listen for messages from content scripts and popup
-chrome.runtime.onMessage.addListener((message: MessageType, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse) => {
   switch (message.type) {
     case 'OPEN_READER':
-      pendingDocument = message.document;
-      openReaderPage();
+      // If document is provided, use it directly
+      if (message.document) {
+        pendingDocument = message.document;
+        openReaderPage();
+      } else if (sender.tab?.id) {
+        // If no document but sent from a content script, extract from that tab
+        extractAndOpenReader(sender.tab.id).then(() => {
+          sendResponse({ success: true });
+        }).catch(error => {
+          sendResponse({ error: error.message });
+        });
+        return true; // Keep channel open for async response
+      }
       break;
 
     case 'GET_PENDING_DOCUMENT':
@@ -56,6 +67,28 @@ chrome.runtime.onMessage.addListener((message: MessageType, _sender, sendRespons
         sendResponse({ error: error.message });
       });
       return true; // Keep channel open for async response
+    
+    case 'EXTRACT_FROM_URL_AND_OPEN':
+      // Re-extract content from a URL and open in reader
+      extractFromUrl((message as { type: 'EXTRACT_FROM_URL_AND_OPEN'; url: string }).url).then(doc => {
+        if (doc) {
+          pendingDocument = doc;
+          openReaderPage();
+        }
+        sendResponse({ success: true });
+      }).catch(error => {
+        sendResponse({ error: error.message });
+      });
+      return true; // Keep channel open for async response
+    
+    case 'OPEN_ARCHIVE':
+      // Open or focus the Archive page
+      openOrFocusArchiveTab().then(() => {
+        sendResponse({ success: true });
+      }).catch(error => {
+        sendResponse({ error: error.message });
+      });
+      return true; // Keep channel open for async response
   }
 
   return true;
@@ -64,7 +97,10 @@ chrome.runtime.onMessage.addListener((message: MessageType, _sender, sendRespons
 // Listen for keyboard shortcut
 chrome.commands.onCommand.addListener(async (command) => {
   console.log('FlowReader: Command received:', command);
-  if (command === 'open-reader') {
+  if (command === 'open-archive') {
+    // Open or focus the Archive page
+    await openOrFocusArchiveTab();
+  } else if (command === 'open-reader') {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       console.log('FlowReader: Active tab:', tab?.id, tab?.url);
@@ -251,6 +287,34 @@ async function extractAndOpenReader(tabId?: number, selectionText?: string): Pro
 function openReaderPage(): void {
   const readerUrl = chrome.runtime.getURL('src/reader/index.html');
   chrome.tabs.create({ url: readerUrl });
+}
+
+/**
+ * Open the Archive page in a new tab, or focus it if already open
+ */
+async function openOrFocusArchiveTab(): Promise<void> {
+  const archiveUrl = chrome.runtime.getURL('src/archive/index.html');
+  
+  // Check if archive tab already exists
+  const tabs = await chrome.tabs.query({ url: archiveUrl });
+  
+  if (tabs.length > 0 && tabs[0].id) {
+    // Focus existing tab
+    await chrome.tabs.update(tabs[0].id, { active: true });
+    if (tabs[0].windowId) {
+      await chrome.windows.update(tabs[0].windowId, { focused: true });
+    }
+    
+    // Send message to focus search (when already on Archive)
+    try {
+      await chrome.tabs.sendMessage(tabs[0].id, { type: 'FOCUS_SEARCH' });
+    } catch {
+      // Tab might not be ready to receive messages, ignore
+    }
+  } else {
+    // Open new tab
+    await chrome.tabs.create({ url: archiveUrl });
+  }
 }
 
 /**

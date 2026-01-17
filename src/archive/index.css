@@ -1,0 +1,337 @@
+/* Import base styles from reader */
+@import '../reader/index.css';
+
+/* Archive-specific styles */
+
+.archive-container {
+  min-height: 100vh;
+  background-color: var(--reader-bg);
+  color: var(--reader-text);
+}
+
+.archive-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  padding-top: 5rem; /* Space for fixed floating header */
+}
+
+@media (min-width: 768px) {
+  .archive-content {
+    padding-top: 5.5rem; /* Slightly more on desktop */
+  }
+}
+
+/* Search input */
+.archive-search {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  padding-left: 2.5rem;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 0.5rem;
+  background-color: var(--reader-bg);
+  color: var(--reader-text);
+  font-size: 1rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.archive-search:focus {
+  outline: none;
+  border-color: var(--reader-link);
+  box-shadow: 0 0 0 3px rgba(var(--reader-link-rgb, 0, 102, 204), 0.15);
+}
+
+.archive-search::placeholder {
+  color: rgba(128, 128, 128, 0.7);
+}
+
+/* Filter chips */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  background-color: transparent;
+  color: var(--reader-text);
+}
+
+.filter-chip:hover {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+
+.filter-chip.active {
+  background-color: var(--reader-link);
+  border-color: var(--reader-link);
+  color: white;
+}
+
+/* Archive item card */
+.archive-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s;
+  border: 1px solid transparent;
+}
+
+.archive-item:hover {
+  background-color: rgba(128, 128, 128, 0.08);
+}
+
+.archive-item:focus-visible {
+  outline: 2px solid var(--reader-link);
+  outline-offset: 2px;
+}
+
+.archive-item.focused {
+  background-color: rgba(128, 128, 128, 0.1);
+  border-color: var(--reader-link);
+}
+
+.archive-item-icon {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  background-color: rgba(128, 128, 128, 0.1);
+}
+
+.archive-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.archive-item-title {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archive-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  opacity: 0.7;
+}
+
+.archive-item-source {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.archive-item-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  background-color: rgba(128, 128, 128, 0.15);
+}
+
+.archive-item-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.archive-item-continue {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background-color: var(--reader-link);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.archive-item-continue:hover {
+  opacity: 0.9;
+}
+
+/* Drop overlay */
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(var(--reader-bg-rgb, 255, 255, 255), 0.95);
+  border: 3px dashed var(--reader-link);
+  margin: 1rem;
+  border-radius: 1rem;
+}
+
+.drop-overlay-icon {
+  width: 4rem;
+  height: 4rem;
+  margin-bottom: 1rem;
+  color: var(--reader-link);
+}
+
+.drop-overlay-text {
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.drop-overlay-hint {
+  font-size: 0.875rem;
+  opacity: 0.7;
+  margin-top: 0.5rem;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 4rem;
+  height: 4rem;
+  opacity: 0.4;
+  margin-bottom: 1.5rem;
+}
+
+.empty-state-title {
+  font-size: 1.25rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-description {
+  font-size: 0.9375rem;
+  opacity: 0.7;
+  max-width: 400px;
+  margin-bottom: 1.5rem;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+/* Modal/Dialog styles */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-content {
+  background-color: var(--reader-bg);
+  color: var(--reader-text);
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 32rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+/* Context menu */
+.context-menu {
+  position: fixed;
+  z-index: 60;
+  background-color: var(--reader-bg);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  padding: 0.25rem;
+  min-width: 160px;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--reader-text);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.context-menu-item:hover {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+
+.context-menu-item.danger {
+  color: #dc2626;
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 0.25rem 0;
+  background-color: rgba(128, 128, 128, 0.2);
+}

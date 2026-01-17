@@ -225,6 +225,9 @@ export interface StorageSchema {
   settings: ReaderSettings;
   presets: Record<string, Partial<ReaderSettings>>;
   positions: Record<string, ReadingPosition>;
+  /** Archive items (reading history) - v2+ */
+  archiveItems: ArchiveItem[];
+  /** @deprecated Use archiveItems instead. Kept for migration. */
   recentDocuments: RecentDocument[];
   customThemes: CustomTheme[];
   onboardingCompleted: boolean;
@@ -242,6 +245,53 @@ export interface RecentDocument {
   cachedDocument?: FlowDocument;
 }
 
+// =============================================================================
+// ARCHIVE ITEMS (Enhanced recent documents for Archive page)
+// =============================================================================
+
+/** Content type for archive items */
+export type ArchiveItemType = 'web' | 'pdf' | 'docx' | 'epub' | 'mobi' | 'paste';
+
+/** Progress information for an archive item */
+export interface ArchiveProgress {
+  /** Progress percentage (0-100) */
+  percent: number;
+  /** Human-readable label (e.g., "Chapter 3 of 12" or "45%") */
+  label: string;
+}
+
+/** An item in the Archive (reading history) */
+export interface ArchiveItem {
+  /** Stable identifier (UUID or hash-based) */
+  id: string;
+  /** Content type */
+  type: ArchiveItemType;
+  /** Document title */
+  title: string;
+  /** Author name (optional) */
+  author?: string;
+  /** Source label (domain for web, filename for files) */
+  sourceLabel: string;
+  /** URL for web and URL-based imports */
+  url?: string;
+  /** When the item was first added */
+  createdAt: number;
+  /** When the item was last opened */
+  lastOpenedAt: number;
+  /** Reading progress (optional) */
+  progress?: ArchiveProgress;
+  /** Last saved reading position */
+  lastPosition?: ReadingPosition;
+  /** Thumbnail URL (optional, for future use) */
+  thumbnail?: string;
+  /** Paste content (for paste documents, size-limited) */
+  pasteContent?: string;
+  /** Cached document for reopening */
+  cachedDocument?: FlowDocument;
+  /** File hash for stable identification */
+  fileHash?: string;
+}
+
 // Message types for communication between scripts
 export type MessageType =
   | { type: 'EXTRACT_CONTENT' }
@@ -254,7 +304,10 @@ export type MessageType =
   | { type: 'SAVE_SETTINGS'; settings: Partial<ReaderSettings> }
   | { type: 'GET_POSITION'; url: string }
   | { type: 'SAVE_POSITION'; url: string; position: ReadingPosition }
-  | { type: 'EXTRACT_FROM_URL'; url: string };
+  | { type: 'EXTRACT_FROM_URL'; url: string }
+  | { type: 'EXTRACT_FROM_URL_AND_OPEN'; url: string }
+  | { type: 'OPEN_ARCHIVE' }
+  | { type: 'FOCUS_SEARCH' };
 
 // Default settings
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -267,7 +320,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 
   backgroundColor: '#ffffff',
   textColor: '#1a1a1a',
-  linkColor: '#0066cc',
+  linkColor: '#b58900',  // Golden amber - matches warm yellow highlight
   selectionColor: '#b4d5fe',
   highlightColor: '#fff3cd',
 
@@ -310,7 +363,7 @@ export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
   light: {
     backgroundColor: '#ffffff',
     textColor: '#1a1a1a',
-    linkColor: '#0066cc',
+    linkColor: '#b58900',  // Golden amber - matches warm yellow highlight
     selectionColor: '#b4d5fe',
     highlightColor: '#fff3cd',  // Warm yellow - good contrast with dark text
   },
@@ -387,7 +440,7 @@ export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
   custom: {
     backgroundColor: '#ffffff',
     textColor: '#1a1a1a',
-    linkColor: '#0066cc',
+    linkColor: '#b58900',  // Golden amber - matches warm yellow highlight
     selectionColor: '#b4d5fe',
     highlightColor: '#fff3cd',
   },

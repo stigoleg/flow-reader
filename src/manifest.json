@@ -31,18 +31,19 @@
     "<all_urls>"
   ],
   "commands": {
+    "open-archive": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+F",
+        "mac": "Command+Shift+F"
+      },
+      "description": "Open FlowReader Archive"
+    },
     "open-reader": {
       "suggested_key": {
-        "default": "Alt+Shift+R",
-        "mac": "Alt+Shift+R"
+        "default": "Ctrl+Shift+R",
+        "mac": "Command+Shift+R"
       },
-      "description": "Open Reader Mode"
-    },
-    "_execute_action": {
-      "suggested_key": {
-        "default": "Alt+Shift+O",
-        "mac": "Alt+Shift+O"
-      }
+      "description": "Read Current Page"
     }
   },
   "content_scripts": [

@@ -7,7 +7,13 @@ export default function Popup() {
 
   // Detect platform for shortcut hint
   const isMac = useMemo(() => navigator.platform.toUpperCase().includes('MAC'), []);
-  const shortcutHint = isMac ? '⌥+Shift+R' : 'Alt+Shift+R';
+  const archiveShortcut = isMac ? '⌘+Shift+F' : 'Ctrl+Shift+F';
+  const readerShortcut = isMac ? '⌘+Shift+R' : 'Ctrl+Shift+R';
+
+  const handleOpenArchive = async () => {
+    await chrome.runtime.sendMessage({ type: 'OPEN_ARCHIVE' });
+    window.close();
+  };
 
   const handleReadPage = async () => {
     try {
@@ -49,15 +55,26 @@ export default function Popup() {
       </header>
 
       <div className="space-y-2">
-        {/* Read Current Page */}
+        {/* Open Archive */}
         <button
-          onClick={handleReadPage}
+          onClick={handleOpenArchive}
           className="w-full flex items-center gap-3 p-3 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+          <span className="font-medium">Open Archive</span>
+        </button>
+
+        {/* Read Current Page */}
+        <button
+          onClick={handleReadPage}
+          className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
           </svg>
-          <span className="font-medium">Read This Page</span>
+          <span>Read This Page</span>
         </button>
 
         {/* Paste and Read Toggle */}
@@ -91,10 +108,11 @@ export default function Popup() {
         )}
       </div>
 
-      {/* Keyboard shortcut hint */}
-      <p className="mt-4 text-xs text-center text-gray-400">
-        Tip: Press {shortcutHint} to open reader mode
-      </p>
+      {/* Keyboard shortcut hints */}
+      <div className="mt-4 text-xs text-center text-gray-400 space-y-1">
+        <p>{archiveShortcut} - Open Archive</p>
+        <p>{readerShortcut} - Read current page</p>
+      </div>
     </div>
   );
 }

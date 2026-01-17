@@ -24,6 +24,7 @@ export default defineConfig({
         reader: resolve(__dirname, 'src/reader/index.html'),
         popup: resolve(__dirname, 'src/popup/index.html'),
         options: resolve(__dirname, 'src/options/index.html'),
+        archive: resolve(__dirname, 'src/archive/index.html'),
       },
     },
   },

@@ -257,10 +257,11 @@ describe('HTML Parser', () => {
       });
 
       it('handles plain text (no elements)', () => {
-        // Plain text without wrapper elements won't be captured
-        // since we only process element nodes
+        // Plain text is now captured as a paragraph block
         const blocks = parseHtmlToBlocks('Just plain text');
-        expect(blocks).toEqual([]);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].type).toBe('paragraph');
+        expect(blocks[0].content).toBe('Just plain text');
       });
     });
   });

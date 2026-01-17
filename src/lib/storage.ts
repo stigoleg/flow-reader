@@ -1,7 +1,7 @@
-import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument, CustomTheme, FlowDocument, DocumentMetadata } from '@/types';
+import type { ReaderSettings, ReadingPosition, StorageSchema, RecentDocument, CustomTheme, FlowDocument, DocumentMetadata, ArchiveItem } from '@/types';
 import { DEFAULT_SETTINGS as defaultSettings } from '@/types';
 
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 const MAX_RECENT_DOCUMENTS = 20;
 
 /** Storage operation error */
@@ -37,6 +37,7 @@ export async function getStorage(): Promise<StorageSchema> {
           settings: defaultSettings,
           presets: {},
           positions: {},
+          archiveItems: [],
           recentDocuments: [],
           customThemes: [],
           onboardingCompleted: false,
@@ -60,6 +61,7 @@ export async function getStorage(): Promise<StorageSchema> {
           settings: mergedSettings,
           presets: (data.presets || {}) as Record<string, Partial<ReaderSettings>>,
           positions: (data.positions || {}) as Record<string, ReadingPosition>,
+          archiveItems: (data.archiveItems || []) as ArchiveItem[],
           recentDocuments: (data.recentDocuments || []) as RecentDocument[],
           customThemes: (data.customThemes || []) as CustomTheme[],
           onboardingCompleted: (data.onboardingCompleted || false) as boolean,

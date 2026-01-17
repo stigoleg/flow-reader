@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import type { FlowDocument, ReaderSettings, ReadingMode } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
-import { getSettings, saveSettings, savePosition, getPosition, addRecentDocument, isExitConfirmationDismissed, dismissExitConfirmation, saveCurrentDocument } from '@/lib/storage';
+import { getSettings, saveSettings, savePosition, getPosition, isExitConfirmationDismissed, dismissExitConfirmation, saveCurrentDocument } from '@/lib/storage';
+import { addRecent, mapSourceToType, getSourceLabel, shouldCacheDocument, calculateProgress, updateLastOpened } from '@/lib/recents-service';
 
 interface ReaderState {
   // Document
   document: FlowDocument | null;
+  archiveItemId: string | null;  // ID of the archive item for progress updates
   isLoading: boolean;
   error: string | null;
 
@@ -104,6 +106,7 @@ interface ReaderState {
 export const useReaderStore = create<ReaderState>((set, get) => ({
   // Initial state
   document: null,
+  archiveItemId: null,
   isLoading: true,
   error: null,
   currentBlockIndex: 0,
@@ -152,18 +155,23 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     
     // Add to recent documents and save as current document for refresh persistence
     if (doc) {
-      const preview = doc.plainText.slice(0, 150).trim() + (doc.plainText.length > 150 ? '...' : '');
       // For non-web sources, cache the full document so it can be reopened
       // Web sources can be re-extracted from their URL
-      const shouldCache = doc.metadata.source !== 'web' && doc.metadata.source !== 'selection';
-      addRecentDocument({
-        id: doc.metadata.url || `doc_${doc.metadata.createdAt}`,
+      const cache = shouldCacheDocument(doc.metadata.source);
+      
+      addRecent({
+        type: mapSourceToType(doc.metadata.source),
         title: doc.metadata.title,
-        source: doc.metadata.source,
-        timestamp: Date.now(),
-        preview,
+        sourceLabel: getSourceLabel(doc.metadata),
         url: doc.metadata.url,
-        cachedDocument: shouldCache ? doc : undefined,
+        author: doc.metadata.author,
+        cachedDocument: cache ? doc : undefined,
+        fileHash: doc.metadata.fileHash,
+      }).then((item) => {
+        // Store the archive item ID for progress updates
+        set({ archiveItemId: item.id });
+      }).catch((err) => {
+        console.error('Failed to add to archive:', err);
       });
       
       // Save current document to storage so it survives page refresh
@@ -320,14 +328,14 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
   // Position persistence
   saveCurrentPosition: async () => {
-    const { document, currentBlockIndex, currentCharOffset, currentWordIndex, currentSentenceIndex, currentRsvpIndex, currentChapterIndex, settings, accumulatedReadingTime, playStartTime } = get();
+    const { document, currentBlockIndex, currentCharOffset, currentWordIndex, currentSentenceIndex, currentRsvpIndex, currentChapterIndex, settings, accumulatedReadingTime, playStartTime, archiveItemId } = get();
     if (!document) return;
     
     // Calculate total reading time including current session if playing
     const sessionTime = playStartTime ? Date.now() - playStartTime : 0;
     const totalReadingTime = accumulatedReadingTime + sessionTime;
     
-    await savePosition(document.metadata, {
+    const position = {
       blockIndex: currentBlockIndex,
       charOffset: currentCharOffset,
       timestamp: Date.now(),
@@ -338,7 +346,27 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       chapterIndex: currentChapterIndex,
       activeMode: settings.activeMode,
       accumulatedReadingTime: totalReadingTime,
-    });
+    };
+    
+    await savePosition(document.metadata, position);
+    
+    // Also update the archive item with progress
+    if (archiveItemId) {
+      const chapterInfo = document.book ? {
+        currentChapter: currentChapterIndex,
+        totalChapters: document.book.chapters.length,
+      } : undefined;
+      
+      const progress = calculateProgress(
+        currentBlockIndex,
+        document.blocks.length,
+        chapterInfo
+      );
+      
+      updateLastOpened(archiveItemId, position, progress).catch((err) => {
+        console.error('Failed to update archive progress:', err);
+      });
+    }
   },
 
   restorePosition: async () => {
