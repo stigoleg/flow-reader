@@ -71,6 +71,7 @@ interface ReaderState {
   adjustWPM: (delta: number) => void;
   setMode: (mode: ReadingMode) => void;
   updateSettings: (settings: Partial<ReaderSettings>) => void;
+  updateSettingsFromSync: (settings: ReaderSettings) => void;
   loadSettings: () => Promise<void>;
   toggleSettings: () => void;
   setImportOpen: (open: boolean) => void;
@@ -276,6 +277,17 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     set({ settings: merged });
     // Persist to storage
     saveSettings(merged);
+  },
+
+  /**
+   * Update settings from sync without re-saving to storage.
+   * This prevents infinite loops when sync applies remote settings.
+   */
+  updateSettingsFromSync: (newSettings) => {
+    set({ 
+      settings: newSettings,
+      currentWPM: newSettings.baseWPM,
+    });
   },
 
   loadSettings: async () => {

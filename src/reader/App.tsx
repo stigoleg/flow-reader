@@ -17,6 +17,7 @@ import ImportPanel from './components/ImportPanel';
 import HelpOverlay from './components/HelpOverlay';
 import CompletionOverlay from './components/CompletionOverlay';
 import Onboarding, { useOnboarding } from './components/Onboarding';
+import { useStorageSync } from './hooks/useStorageSync';
 import { getCurrentDocument } from '@/lib/storage';
 import type { FlowDocument } from '@/types';
 
@@ -53,6 +54,9 @@ export default function App() {
   const saveCurrentPosition = useReaderStore(state => state.saveCurrentPosition);
   
   const onboarding = useOnboarding();
+  
+  // Subscribe to storage changes for live sync updates
+  useStorageSync();
   
   // Track which document we've restored position for to prevent loops
   // (setChapter modifies document, which would re-trigger restorePosition)

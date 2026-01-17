@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useReaderStore } from '../store';
 import { THEME_PRESETS, type ThemePreset, type ReaderSettings, type ThemeColors } from '@/types';
 import { getPresets, savePreset, deletePreset } from '@/lib/storage';
 import { useToast } from './Toast';
+import { SYNC_EVENTS } from '../hooks/useStorageSync';
 import {
   ThemeSection,
   PresetSection,
@@ -19,11 +20,28 @@ export default function SettingsPanel() {
   const { showToast } = useToast();
   const [presets, setPresets] = useState<Record<string, Partial<ReaderSettings>>>({});
 
+  const loadPresets = useCallback(async () => {
+    const loaded = await getPresets();
+    setPresets(loaded);
+  }, []);
+
   useEffect(() => {
     if (isSettingsOpen) {
-      getPresets().then(setPresets);
+      loadPresets();
     }
-  }, [isSettingsOpen]);
+    
+    // Listen for sync updates to refresh presets
+    const handleSyncUpdate = () => {
+      if (isSettingsOpen) {
+        loadPresets();
+      }
+    };
+    window.addEventListener(SYNC_EVENTS.PRESETS_UPDATED, handleSyncUpdate);
+    
+    return () => {
+      window.removeEventListener(SYNC_EVENTS.PRESETS_UPDATED, handleSyncUpdate);
+    };
+  }, [isSettingsOpen, loadPresets]);
 
   const applyTheme = (theme: ThemePreset) => {
     const colors = THEME_PRESETS[theme];

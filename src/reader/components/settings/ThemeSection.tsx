@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { THEME_PRESETS, type ThemePreset, type ThemeColors, type CustomTheme, type ThemeExport } from '@/types';
 import { THEME_OPTIONS } from '@/constants/ui-options';
 import { getCustomThemes, saveCustomTheme, deleteCustomTheme } from '@/lib/storage';
+import { SYNC_EVENTS } from '../../hooks/useStorageSync';
 
 interface ThemeSectionProps {
   currentColors: ThemeColors;
@@ -15,14 +16,22 @@ export function ThemeSection({ currentColors, onApplyTheme, onApplyCustomTheme }
   const [editingTheme, setEditingTheme] = useState<CustomTheme | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    loadCustomThemes();
-  }, []);
-
-  const loadCustomThemes = async () => {
+  const loadCustomThemes = useCallback(async () => {
     const themes = await getCustomThemes();
     setCustomThemes(themes);
-  };
+  }, []);
+
+  useEffect(() => {
+    loadCustomThemes();
+    
+    // Listen for sync updates to refresh custom themes
+    const handleSyncUpdate = () => loadCustomThemes();
+    window.addEventListener(SYNC_EVENTS.THEMES_UPDATED, handleSyncUpdate);
+    
+    return () => {
+      window.removeEventListener(SYNC_EVENTS.THEMES_UPDATED, handleSyncUpdate);
+    };
+  }, [loadCustomThemes]);
 
   const handleCreateNew = () => {
     setEditingTheme({
