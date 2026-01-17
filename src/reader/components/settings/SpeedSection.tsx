@@ -1,6 +1,6 @@
 import type { ReaderSettings } from '@/types';
 import { SliderField, CheckboxField } from '@/components/ui';
-import { WPM, TARGET_WPM } from '@/constants/settings';
+import { WPM, TARGET_WPM, RAMP_STEP, RAMP_INTERVAL } from '@/constants/settings';
 
 interface SpeedSectionProps {
   settings: ReaderSettings;
@@ -38,11 +38,24 @@ export function SpeedSection({ settings, onUpdate }: SpeedSectionProps) {
               unit=" WPM"
               onChange={(value) => onUpdate({ targetWPM: value })}
             />
-            <div>
-              <label className="block text-sm mb-1 opacity-70">
-                Increase by {settings.rampStep} WPM every {settings.rampInterval}s
-              </label>
-            </div>
+            <SliderField
+              label="Increase by"
+              value={settings.rampStep}
+              min={RAMP_STEP.min}
+              max={RAMP_STEP.max}
+              step={RAMP_STEP.step}
+              unit=" WPM"
+              onChange={(value) => onUpdate({ rampStep: value })}
+            />
+            <SliderField
+              label="Every"
+              value={settings.rampInterval}
+              min={RAMP_INTERVAL.min}
+              max={RAMP_INTERVAL.max}
+              step={RAMP_INTERVAL.step}
+              unit=" seconds"
+              onChange={(value) => onUpdate({ rampInterval: value })}
+            />
           </>
         )}
       </div>
