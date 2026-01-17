@@ -5,8 +5,20 @@ import { extractFromEpub, EpubExtractionError } from '@/lib/epub-handler';
 import { extractFromMobi, MobiExtractionError } from '@/lib/mobi-handler';
 import { extractFromPaste } from '@/lib/extraction';
 import { getRecentDocuments } from '@/lib/storage';
+import { addRecent, mapSourceToType, getSourceLabel } from '@/lib/recents-service';
 import { useReaderStore } from '../store';
-import type { RecentDocument } from '@/types';
+import type { RecentDocument, FlowDocument } from '@/types';
+
+interface ImportProgress {
+  current: number;
+  total: number;
+  currentFileName: string;
+}
+
+interface ImportResult {
+  successCount: number;
+  failed: { name: string; error: string }[];
+}
 
 // Supported file extensions
 const SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.epub', '.mobi', '.azw', '.azw3'];
@@ -39,6 +51,8 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
   const [pasteText, setPasteText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [recentDocs, setRecentDocs] = useState<RecentDocument[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,62 +60,132 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
   useEffect(() => {
     if (isOpen) {
       getRecentDocuments().then(setRecentDocs);
+      // Reset import result when opening
+      setImportResult(null);
     }
   }, [isOpen]);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Helper to extract a single file based on type
+  const extractFile = async (file: File): Promise<FlowDocument> => {
+    const fileType = getFileType(file.name);
+    
+    switch (fileType) {
+      case 'pdf':
+        return await extractFromPdf(file);
+      case 'docx':
+        return await extractFromDocx(file);
+      case 'epub':
+        return await extractFromEpub(file);
+      case 'mobi':
+        return await extractFromMobi(file);
+      default:
+        throw new Error(`Unsupported file type "${file.name}"`);
+    }
+  };
 
+  // Helper to get user-friendly error message
+  const getErrorMessage = (err: unknown): string => {
+    if (err instanceof EpubExtractionError || err instanceof MobiExtractionError) {
+      if (err.errorType === 'drm-protected') {
+        return 'DRM-protected';
+      }
+      return err.message;
+    }
+    return err instanceof Error ? err.message : 'Failed to import';
+  };
+
+  // Process multiple files
+  const processFiles = async (files: File[]) => {
+    const supportedFiles = files.filter(f => isSupportedFile(f.name));
+    const unsupportedFiles = files.filter(f => !isSupportedFile(f.name));
+    
+    if (supportedFiles.length === 0 && unsupportedFiles.length > 0) {
+      setImportError(`Unsupported file type(s). Please use PDF, DOCX, EPUB, or MOBI files.`);
+      return;
+    }
+    
+    if (supportedFiles.length === 0) return;
+    
     setIsImporting(true);
     setImportError(null);
-
-    try {
-      // Check if it's a supported file type
-      if (!isSupportedFile(file.name)) {
-        throw new Error(`Unsupported file type "${file.name}". Please use PDF, DOCX, EPUB, or MOBI files.`);
-      }
-
-      const fileType = getFileType(file.name);
-      let doc;
-
-      switch (fileType) {
-        case 'pdf':
-          doc = await extractFromPdf(file);
-          break;
-        case 'docx':
-          doc = await extractFromDocx(file);
-          break;
-        case 'epub':
-          doc = await extractFromEpub(file);
-          break;
-        case 'mobi':
-          doc = await extractFromMobi(file);
-          break;
-        default:
-          throw new Error(`Unsupported file type "${file.name}". Please use PDF, DOCX, EPUB, or MOBI files.`);
-      }
-
-      setDocument(doc);
-      onClose();
-    } catch (err) {
-      // Handle specific error types with better messages
-      if (err instanceof EpubExtractionError || err instanceof MobiExtractionError) {
-        if (err.errorType === 'drm-protected') {
-          setImportError('This file is DRM-protected. FlowReader only supports DRM-free e-books. Please use a DRM-free version of this book.');
-        } else {
-          setImportError(err.message);
+    setImportResult(null);
+    
+    let firstDoc: FlowDocument | null = null;
+    const failed: { name: string; error: string }[] = [];
+    
+    // Add unsupported files to failed list
+    unsupportedFiles.forEach(f => {
+      failed.push({ name: f.name, error: 'Unsupported file type' });
+    });
+    
+    for (let i = 0; i < supportedFiles.length; i++) {
+      const file = supportedFiles[i];
+      setImportProgress({
+        current: i + 1,
+        total: supportedFiles.length,
+        currentFileName: file.name,
+      });
+      
+      try {
+        const doc = await extractFile(file);
+        
+        // Add to archive
+        await addRecent({
+          type: mapSourceToType(doc.metadata.source),
+          title: doc.metadata.title,
+          author: doc.metadata.author,
+          sourceLabel: getSourceLabel(doc.metadata),
+          url: doc.metadata.url,
+          fileHash: doc.metadata.fileHash,
+          cachedDocument: doc,
+        });
+        
+        // Keep first successfully imported document
+        if (!firstDoc) {
+          firstDoc = doc;
         }
-      } else {
-        setImportError(err instanceof Error ? err.message : 'Failed to import file');
-      }
-    } finally {
-      setIsImporting(false);
-      // Reset input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      } catch (err) {
+        failed.push({ name: file.name, error: getErrorMessage(err) });
       }
     }
+    
+    setImportProgress(null);
+    setIsImporting(false);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    
+    // Handle results
+    const successCount = supportedFiles.length - (failed.length - unsupportedFiles.length);
+    
+    if (firstDoc) {
+      // Open the first successfully imported document
+      setDocument(firstDoc);
+      
+      if (failed.length > 0) {
+        // Show result summary before closing (will be visible briefly)
+        setImportResult({ successCount, failed });
+        // Still close and open reader, but with a slight delay to show the result
+        setTimeout(() => onClose(), 1500);
+      } else {
+        onClose();
+      }
+    } else if (failed.length > 0) {
+      // All failed - show errors
+      if (failed.length === 1) {
+        setImportError(`Failed to import "${failed[0].name}": ${failed[0].error}`);
+      } else {
+        setImportResult({ successCount: 0, failed });
+      }
+    }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    await processFiles(files);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -113,55 +197,9 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
     e.preventDefault();
     e.stopPropagation();
 
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-
-    // Check if it's a supported file type
-    if (!isSupportedFile(file.name)) {
-      setImportError(`Unsupported file type "${file.name}". Please use PDF, DOCX, EPUB, or MOBI files.`);
-      return;
-    }
-
-    setIsImporting(true);
-    setImportError(null);
-
-    try {
-      const fileType = getFileType(file.name);
-      let doc;
-
-      switch (fileType) {
-        case 'pdf':
-          doc = await extractFromPdf(file);
-          break;
-        case 'docx':
-          doc = await extractFromDocx(file);
-          break;
-        case 'epub':
-          doc = await extractFromEpub(file);
-          break;
-        case 'mobi':
-          doc = await extractFromMobi(file);
-          break;
-        default:
-          throw new Error('Unsupported file type');
-      }
-
-      setDocument(doc);
-      onClose();
-    } catch (err) {
-      // Handle specific error types with better messages
-      if (err instanceof EpubExtractionError || err instanceof MobiExtractionError) {
-        if (err.errorType === 'drm-protected') {
-          setImportError('This file is DRM-protected. FlowReader only supports DRM-free e-books.');
-        } else {
-          setImportError(err.message);
-        }
-      } else {
-        setImportError(err instanceof Error ? err.message : 'Failed to import file');
-      }
-    } finally {
-      setIsImporting(false);
-    }
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+    await processFiles(files);
   };
 
   const handleRecentDocClick = async (doc: RecentDocument) => {
@@ -264,36 +302,77 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
             </div>
           )}
 
+          {/* Import results (for multiple files with some failures) */}
+          {importResult && (
+            <div className="mb-4 p-3 rounded-lg text-sm"
+              style={{
+                backgroundColor: importResult.successCount > 0 
+                  ? 'rgba(34, 197, 94, 0.1)' 
+                  : 'rgba(220, 38, 38, 0.1)',
+                color: 'var(--reader-text)',
+                border: `1px solid ${importResult.successCount > 0 
+                  ? 'rgba(34, 197, 94, 0.3)' 
+                  : 'rgba(220, 38, 38, 0.3)'}`,
+              }}
+              role="status"
+            >
+              {importResult.successCount > 0 && (
+                <p className="mb-1">Imported {importResult.successCount} file{importResult.successCount !== 1 ? 's' : ''} successfully.</p>
+              )}
+              {importResult.failed.length > 0 && (
+                <div>
+                  <p className="font-medium">Failed to import {importResult.failed.length} file{importResult.failed.length !== 1 ? 's' : ''}:</p>
+                  <ul className="mt-1 ml-4 list-disc">
+                    {importResult.failed.slice(0, 5).map((f, i) => (
+                      <li key={i} className="opacity-80">{f.name}: {f.error}</li>
+                    ))}
+                    {importResult.failed.length > 5 && (
+                      <li className="opacity-60">...and {importResult.failed.length - 5} more</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* File upload */}
           <div className="mb-6">
-            <h3 className="text-sm font-medium mb-2 opacity-80" id="upload-label">Upload File</h3>
+            <h3 className="text-sm font-medium mb-2 opacity-80" id="upload-label">Upload Files</h3>
             <div
               className="border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer"
               style={{
                 borderColor: 'rgba(128, 128, 128, 0.4)',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--reader-link)'}
+              onMouseEnter={(e) => !isImporting && (e.currentTarget.style.borderColor = 'var(--reader-link)')}
               onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(128, 128, 128, 0.4)'}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => !isImporting && fileInputRef.current?.click()}
               onDragOver={handleDragOver}
               onDrop={handleDrop}
               role="button"
               tabIndex={0}
               aria-labelledby="upload-label"
-              onKeyDown={(e) => e.key === 'Enter' && fileInputRef.current?.click()}
+              onKeyDown={(e) => e.key === 'Enter' && !isImporting && fileInputRef.current?.click()}
             >
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf,.docx,.epub,.mobi,.azw,.azw3"
+                multiple
                 onChange={handleFileSelect}
                 className="hidden"
-                aria-label="Select file to upload"
+                aria-label="Select files to upload"
               />
               {isImporting ? (
-                <div className="flex items-center justify-center gap-2">
+                <div className="flex flex-col items-center justify-center gap-2">
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2" style={{ borderColor: 'var(--reader-link)' }} />
-                  <span>Importing...</span>
+                  {importProgress ? (
+                    <>
+                      <span>Importing {importProgress.current} of {importProgress.total}...</span>
+                      <span className="text-sm opacity-60 truncate max-w-full">{importProgress.currentFileName}</span>
+                    </>
+                  ) : (
+                    <span>Importing...</span>
+                  )}
                 </div>
               ) : (
                 <>
@@ -301,7 +380,7 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                   <p className="font-medium">Click to upload or drag and drop</p>
-                  <p className="text-sm opacity-60 mt-1">PDF, DOCX, EPUB, or MOBI files</p>
+                  <p className="text-sm opacity-60 mt-1">PDF, DOCX, EPUB, or MOBI files (multiple allowed)</p>
                 </>
               )}
             </div>

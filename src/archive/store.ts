@@ -68,6 +68,7 @@ export interface ArchiveState {
   removeItem: (id: string) => Promise<void>;
   clearHistory: () => Promise<void>;
   importFile: (file: File) => Promise<void>;
+  importFiles: (files: File[]) => Promise<void>;
   importPaste: (text: string) => Promise<void>;
   setPasteModalOpen: (open: boolean) => void;
   setClearDialogOpen: (open: boolean) => void;
@@ -251,6 +252,87 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
         error: error instanceof Error ? error.message : 'Failed to import file',
         isLoading: false,
       });
+    }
+  },
+  
+  importFiles: async (files: File[]) => {
+    const supportedFiles = files.filter(f => isSupportedFile(f.name));
+    const unsupportedFiles = files.filter(f => !isSupportedFile(f.name));
+    
+    if (supportedFiles.length === 0) {
+      if (unsupportedFiles.length > 0) {
+        set({ error: 'No supported files found. Supported: PDF, DOCX, EPUB, MOBI.' });
+      }
+      return;
+    }
+    
+    set({ isLoading: true, error: null });
+    
+    let firstDoc: FlowDocument | null = null;
+    const errors: string[] = [];
+    
+    // Add unsupported files to errors
+    unsupportedFiles.forEach(f => {
+      errors.push(`${f.name}: Unsupported file type`);
+    });
+    
+    for (const file of supportedFiles) {
+      try {
+        const fileType = getFileType(file.name);
+        let doc: FlowDocument;
+        
+        switch (fileType) {
+          case 'pdf':
+            doc = await extractFromPdf(file);
+            break;
+          case 'docx':
+            doc = await extractFromDocx(file);
+            break;
+          case 'epub':
+            doc = await extractFromEpub(file);
+            break;
+          case 'mobi':
+            doc = await extractFromMobi(file);
+            break;
+          default:
+            throw new Error('Unsupported file type');
+        }
+        
+        // Add to archive
+        await addRecent({
+          type: mapSourceToType(doc.metadata.source),
+          title: doc.metadata.title,
+          author: doc.metadata.author,
+          sourceLabel: getSourceLabel(doc.metadata),
+          url: doc.metadata.url,
+          fileHash: doc.metadata.fileHash,
+          cachedDocument: doc,
+        });
+        
+        // Keep first successfully imported document
+        if (!firstDoc) {
+          firstDoc = doc;
+        }
+      } catch (error) {
+        errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Failed to import'}`);
+      }
+    }
+    
+    set({ isLoading: false });
+    
+    // Show errors if any
+    if (errors.length > 0) {
+      const successCount = supportedFiles.length - (errors.length - unsupportedFiles.length);
+      if (successCount > 0) {
+        set({ error: `Imported ${successCount} file(s). ${errors.length} failed.` });
+      } else {
+        set({ error: `Failed to import ${errors.length} file(s): ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '...' : ''}` });
+      }
+    }
+    
+    // Open first successfully imported document
+    if (firstDoc) {
+      await chrome.runtime.sendMessage({ type: 'OPEN_READER', document: firstDoc });
     }
   },
   

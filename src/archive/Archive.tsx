@@ -52,7 +52,7 @@ export default function Archive() {
   const setFocusedItemIndex = useArchiveStore(state => state.setFocusedItemIndex);
   const openItem = useArchiveStore(state => state.openItem);
   const removeItem = useArchiveStore(state => state.removeItem);
-  const importFile = useArchiveStore(state => state.importFile);
+  const importFiles = useArchiveStore(state => state.importFiles);
   const importPaste = useArchiveStore(state => state.importPaste);
   const setDragging = useArchiveStore(state => state.setDragging);
   const setPasteModalOpen = useArchiveStore(state => state.setPasteModalOpen);
@@ -165,11 +165,11 @@ export default function Archive() {
     e.preventDefault();
     setDragging(false);
     
-    const file = e.dataTransfer?.files[0];
-    if (file) {
-      await importFile(file);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length > 0) {
+      await importFiles(files);
     }
-  }, [setDragging, importFile]);
+  }, [setDragging, importFiles]);
   
   // Set up drag and drop listeners
   useEffect(() => {
@@ -299,15 +299,15 @@ export default function Archive() {
   
   // File input handler
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      await importFile(file);
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      await importFiles(files);
     }
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  }, [importFile]);
+  }, [importFiles]);
   
   const handleImportClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -321,6 +321,7 @@ export default function Archive() {
         ref={fileInputRef}
         type="file"
         accept=".pdf,.docx,.epub,.mobi,.azw,.azw3"
+        multiple
         onChange={handleFileSelect}
         className="hidden"
         aria-hidden="true"
