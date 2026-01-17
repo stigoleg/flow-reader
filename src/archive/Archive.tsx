@@ -58,6 +58,7 @@ export default function Archive() {
   const setPasteModalOpen = useArchiveStore(state => state.setPasteModalOpen);
   const setClearDialogOpen = useArchiveStore(state => state.setClearDialogOpen);
   const hideContextMenu = useArchiveStore(state => state.hideContextMenu);
+  const startRenaming = useArchiveStore(state => state.startRenaming);
   const toggleSettings = useArchiveStore(state => state.toggleSettings);
   
   // Get filtered items
@@ -414,6 +415,7 @@ export default function Archive() {
           items={items}
           onOpen={openItem}
           onRemove={removeItem}
+          onRename={startRenaming}
           onClose={hideContextMenu}
         />
       )}

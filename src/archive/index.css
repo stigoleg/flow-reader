@@ -127,6 +127,25 @@
   white-space: nowrap;
 }
 
+.archive-item-title-input {
+  font-weight: 500;
+  font-size: inherit;
+  font-family: inherit;
+  width: 100%;
+  padding: 0.125rem 0.375rem;
+  margin: -0.125rem -0.375rem;
+  margin-bottom: 0.125rem;
+  border: 1px solid var(--reader-link);
+  border-radius: 4px;
+  background: var(--reader-bg);
+  color: var(--reader-text);
+  outline: none;
+}
+
+.archive-item-title-input:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--reader-link) 30%, transparent);
+}
+
 .archive-item-meta {
   display: flex;
   flex-wrap: wrap;

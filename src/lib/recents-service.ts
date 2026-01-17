@@ -547,6 +547,43 @@ export async function updateLastOpened(
 }
 
 /**
+ * Update an archive item's metadata (title, author, etc.)
+ */
+export async function updateArchiveItem(
+  id: string,
+  updates: Partial<Pick<ArchiveItem, 'title' | 'author' | 'sourceLabel'>>
+): Promise<ArchiveItem | null> {
+  const items = await getArchiveItems();
+  const index = items.findIndex(item => item.id === id);
+  
+  if (index < 0) {
+    return null; // Item not found
+  }
+  
+  const item = items[index];
+  const updated: ArchiveItem = {
+    ...item,
+    ...updates,
+  };
+  
+  // Also update the title in cachedDocument metadata if present
+  if (updates.title && updated.cachedDocument) {
+    updated.cachedDocument = {
+      ...updated.cachedDocument,
+      metadata: {
+        ...updated.cachedDocument.metadata,
+        title: updates.title,
+      },
+    };
+  }
+  
+  items[index] = updated;
+  await saveArchiveItems(items);
+  
+  return updated;
+}
+
+/**
  * Remove an item from the archive
  */
 export async function removeRecent(id: string): Promise<void> {

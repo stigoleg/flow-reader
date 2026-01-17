@@ -13,6 +13,7 @@ interface ContextMenuProps {
   items: ArchiveItem[];
   onOpen: (item: ArchiveItem) => void;
   onRemove: (id: string) => void;
+  onRename: (id: string) => void;
   onClose: () => void;
 }
 
@@ -22,6 +23,7 @@ export default function ContextMenu({
   items,
   onOpen,
   onRemove,
+  onRename,
   onClose,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -91,6 +93,19 @@ export default function ContextMenu({
           Copy Source Link
         </button>
       )}
+      
+      <button
+        className="context-menu-item"
+        onClick={() => {
+          onRename(item.id);
+          onClose();
+        }}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+        Rename
+      </button>
       
       <div className="context-menu-divider" />
       

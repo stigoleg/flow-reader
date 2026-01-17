@@ -15,6 +15,7 @@ import {
   getSourceLabel,
   deduplicateArchive,
   getRecent,
+  updateArchiveItem,
 } from '@/lib/recents-service';
 import { extractFromPdf } from '@/lib/pdf-handler';
 import { extractFromDocx } from '@/lib/docx-handler';
@@ -52,6 +53,9 @@ export interface ArchiveState {
   contextMenuItemId: string | null;
   contextMenuPosition: { x: number; y: number } | null;
   
+  // Renaming
+  renamingItemId: string | null;
+  
   // Settings
   isSettingsOpen: boolean;
   
@@ -70,6 +74,9 @@ export interface ArchiveState {
   setDragging: (dragging: boolean) => void;
   showContextMenu: (itemId: string, position: { x: number; y: number }) => void;
   hideContextMenu: () => void;
+  startRenaming: (itemId: string) => void;
+  finishRenaming: (newTitle: string) => Promise<void>;
+  cancelRenaming: () => void;
   focusSearch: () => void;
   toggleSettings: () => void;
 }
@@ -114,6 +121,7 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   isDragging: false,
   contextMenuItemId: null,
   contextMenuPosition: null,
+  renamingItemId: null,
   isSettingsOpen: false,
   
   // Actions
@@ -289,6 +297,40 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   
   hideContextMenu: () => {
     set({ contextMenuItemId: null, contextMenuPosition: null });
+  },
+  
+  startRenaming: (itemId: string) => {
+    set({ renamingItemId: itemId, contextMenuItemId: null, contextMenuPosition: null });
+  },
+  
+  finishRenaming: async (newTitle: string) => {
+    const { renamingItemId, items } = get();
+    if (!renamingItemId || !newTitle.trim()) {
+      set({ renamingItemId: null });
+      return;
+    }
+    
+    try {
+      const updated = await updateArchiveItem(renamingItemId, { title: newTitle.trim() });
+      if (updated) {
+        // Update local state
+        set({
+          items: items.map(item => item.id === renamingItemId ? updated : item),
+          renamingItemId: null,
+        });
+      } else {
+        set({ renamingItemId: null });
+      }
+    } catch (error) {
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to rename item',
+        renamingItemId: null,
+      });
+    }
+  },
+  
+  cancelRenaming: () => {
+    set({ renamingItemId: null });
   },
   
   focusSearch: () => {

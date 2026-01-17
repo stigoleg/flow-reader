@@ -4,7 +4,7 @@
  * Individual item in the archive list.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import type { ArchiveItem } from '@/types';
 import { formatRelativeTime, getTypeBadgeLabel } from '@/lib/recents-service';
 import { useArchiveStore, getItemSyncStatus } from '../store';
@@ -66,6 +66,26 @@ export default function ArchiveItemCard({
 }: ArchiveItemCardProps) {
   const showContextMenu = useArchiveStore(state => state.showContextMenu);
   const syncEnabled = useArchiveStore(state => state.syncEnabled);
+  const renamingItemId = useArchiveStore(state => state.renamingItemId);
+  const finishRenaming = useArchiveStore(state => state.finishRenaming);
+  const cancelRenaming = useArchiveStore(state => state.cancelRenaming);
+  
+  const isRenaming = renamingItemId === item.id;
+  const [editValue, setEditValue] = useState(item.title);
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Focus input when entering rename mode
+  useEffect(() => {
+    if (isRenaming && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isRenaming]);
+  
+  // Reset edit value when item changes
+  useEffect(() => {
+    setEditValue(item.title);
+  }, [item.title]);
   
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -81,6 +101,21 @@ export default function ArchiveItemCard({
     e.stopPropagation();
     onRemove();
   }, [onRemove]);
+  
+  const handleRenameKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finishRenaming(editValue);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelRenaming();
+      setEditValue(item.title);
+    }
+  }, [editValue, finishRenaming, cancelRenaming, item.title]);
+  
+  const handleRenameBlur = useCallback(() => {
+    finishRenaming(editValue);
+  }, [editValue, finishRenaming]);
   
   // Get sync status for this item (only relevant when sync is enabled)
   const syncStatus = syncEnabled ? getItemSyncStatus(item) : null;
@@ -106,7 +141,20 @@ export default function ArchiveItemCard({
       
       {/* Content */}
       <div className="archive-item-content">
-        <h3 className="archive-item-title">{item.title}</h3>
+        {isRenaming ? (
+          <input
+            ref={inputRef}
+            type="text"
+            className="archive-item-title-input"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={handleRenameKeyDown}
+            onBlur={handleRenameBlur}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <h3 className="archive-item-title">{item.title}</h3>
+        )}
         <div className="archive-item-meta">
           <span className="archive-item-source">{item.sourceLabel}</span>
           <span className="opacity-50">•</span>
