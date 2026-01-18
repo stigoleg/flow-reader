@@ -116,6 +116,36 @@ export default function ReaderView() {
     }
   }, [currentBlockIndex, document]);
 
+  // Viewport-aware scroll for word/sentence granularity in pacing mode
+  // This handles long blocks that are taller than the viewport by scrolling
+  // when the active word/sentence approaches the top or bottom of the screen
+  useEffect(() => {
+    if (!containerRef.current || !document) return;
+    if (settings.activeMode !== 'pacing') return;
+
+    // Determine which element to check based on granularity
+    let activeElement: Element | null = null;
+
+    if (settings.pacingGranularity === 'word') {
+      activeElement = containerRef.current.querySelector('.pacing-word-active');
+    } else if (settings.pacingGranularity === 'sentence') {
+      activeElement = containerRef.current.querySelector('.pacing-sentence-active');
+    }
+
+    if (!activeElement) return;
+
+    const rect = activeElement.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+
+    // Define thresholds - scroll if element is in top/bottom 15% of viewport
+    const bottomThreshold = viewportHeight * 0.85;
+    const topThreshold = viewportHeight * 0.15;
+
+    if (rect.bottom > bottomThreshold || rect.top < topThreshold) {
+      activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [currentWordIndex, currentSentenceIndex, settings.pacingGranularity, settings.activeMode, document]);
+
   if (!document) return null;
 
   const handleBlockClick = (index: number) => setPosition(index, 0);

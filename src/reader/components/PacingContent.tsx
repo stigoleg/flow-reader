@@ -79,6 +79,7 @@ export default function PacingContent({
           return (
             <span
               key={idx}
+              data-word-index={globalIdx}
               className={className}
               style={{ '--orp-position': `${orpPercent}%` } as React.CSSProperties}
               onClick={handleClick}
@@ -117,7 +118,7 @@ export default function PacingContent({
           };
 
           return (
-            <span key={idx} className={className} onClick={handleClick}>
+            <span key={idx} data-sentence-index={globalIdx} className={className} onClick={handleClick}>
               {sentence.text}{' '}
             </span>
           );
