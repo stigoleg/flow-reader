@@ -1,5 +1,5 @@
 import type { ReaderSettings } from '@/types';
-import { ButtonGroup, CheckboxField } from '@/components/ui';
+import { ButtonGroup, CheckboxField, SliderField } from '@/components/ui';
 import { GRANULARITY_OPTIONS, HIGHLIGHT_STYLE_OPTIONS } from '@/constants/ui-options';
 
 interface PacingSectionProps {
@@ -67,6 +67,15 @@ export function PacingSection({ settings, onUpdate }: PacingSectionProps) {
           label="Pause on punctuation"
           checked={settings.pacingPauseOnPunctuation}
           onChange={(checked) => onUpdate({ pacingPauseOnPunctuation: checked })}
+        />
+        <SliderField
+          label="Heading pause"
+          value={settings.pacingHeadingPause}
+          min={1.0}
+          max={5.0}
+          step={0.5}
+          unit="x"
+          onChange={(value) => onUpdate({ pacingHeadingPause: value })}
         />
       </div>
     </div>

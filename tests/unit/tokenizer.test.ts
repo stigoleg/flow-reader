@@ -4,6 +4,7 @@ import {
   calculateTokenDuration,
   findORP,
   getWordCount,
+  countWordsForTiming,
   estimateReadingTime,
   tokenizeIntoSentences,
   tokenizeIntoWords,
@@ -78,6 +79,22 @@ describe('RSVP Tokenizer', () => {
 
       expect(duration).toBe(200); // No multiplier
     });
+
+    it('counts hyphenated words for timing', () => {
+      const token = { text: 'large-scale', pauseMultiplier: 1, isEndOfSentence: false, isEndOfParagraph: false };
+      const duration = calculateTokenDuration(token, 300, false);
+
+      // 60000ms / 300wpm = 200ms per word, 2 hyphenated parts = 400ms
+      expect(duration).toBe(400);
+    });
+
+    it('counts multi-hyphenated words for timing', () => {
+      const token = { text: 'state-of-the-art', pauseMultiplier: 1, isEndOfSentence: false, isEndOfParagraph: false };
+      const duration = calculateTokenDuration(token, 300, false);
+
+      // 4 parts = 800ms
+      expect(duration).toBe(800);
+    });
   });
 
   describe('findORP', () => {
@@ -102,6 +119,51 @@ describe('RSVP Tokenizer', () => {
       expect(getWordCount('one two three')).toBe(3);
       expect(getWordCount('  spaced   words  ')).toBe(2);
       expect(getWordCount('')).toBe(0);
+    });
+  });
+
+  describe('countWordsForTiming', () => {
+    it('counts simple words', () => {
+      expect(countWordsForTiming('one two three')).toBe(3);
+      expect(countWordsForTiming('hello world')).toBe(2);
+    });
+
+    it('counts hyphenated words as multiple words', () => {
+      expect(countWordsForTiming('large-scale')).toBe(2);
+      expect(countWordsForTiming('self-aware')).toBe(2);
+      expect(countWordsForTiming('state-of-the-art')).toBe(4);
+    });
+
+    it('handles hyphenated words in sentences', () => {
+      expect(countWordsForTiming('This is a well-known fact')).toBe(6);
+      expect(countWordsForTiming('The large-scale self-aware system')).toBe(6);
+    });
+
+    it('does not count dashes at start or end of words', () => {
+      expect(countWordsForTiming('pre-')).toBe(1);
+      expect(countWordsForTiming('-ish')).toBe(1);
+      expect(countWordsForTiming('-')).toBe(1);
+    });
+
+    it('does not split numbers with hyphens', () => {
+      expect(countWordsForTiming('123-456')).toBe(1);
+      expect(countWordsForTiming('phone: 555-1234')).toBe(2);
+    });
+
+    it('handles Norwegian characters in hyphenated words', () => {
+      expect(countWordsForTiming('før-etter')).toBe(2);
+      expect(countWordsForTiming('blå-grønn')).toBe(2);
+    });
+
+    it('does not split on em-dashes or en-dashes', () => {
+      // Em-dash and en-dash are not hyphens for compound words
+      expect(countWordsForTiming('word—another')).toBe(1);
+      expect(countWordsForTiming('word–another')).toBe(1);
+    });
+
+    it('handles empty and whitespace-only strings', () => {
+      expect(countWordsForTiming('')).toBe(0);
+      expect(countWordsForTiming('   ')).toBe(0);
     });
   });
 
@@ -327,6 +389,45 @@ describe('RSVP Tokenizer', () => {
       expect(durationAdaptive).toBeGreaterThan(durationNormal);
       // Rare word (tier 5) + high complexity → multiplier ~1.3x → 260ms
       expect(durationAdaptive).toBeCloseTo(260, 0);
+    });
+
+    it('counts hyphenated words for timing', () => {
+      const word = {
+        text: 'large-scale',
+        startIndex: 0,
+        endIndex: 11,
+        pauseMultiplier: 1.0,
+        isEndOfSentence: false,
+      };
+      // At 300 WPM: 200ms per word, 2 parts = 400ms
+      const duration = calculateWordDuration(word, 300, false);
+      expect(duration).toBe(400);
+    });
+
+    it('counts multi-hyphenated words for timing', () => {
+      const word = {
+        text: 'state-of-the-art',
+        startIndex: 0,
+        endIndex: 16,
+        pauseMultiplier: 1.0,
+        isEndOfSentence: false,
+      };
+      // 4 parts = 800ms
+      const duration = calculateWordDuration(word, 300, false);
+      expect(duration).toBe(800);
+    });
+
+    it('applies pause multiplier to hyphenated words', () => {
+      const word = {
+        text: 'large-scale.',
+        startIndex: 0,
+        endIndex: 12,
+        pauseMultiplier: 2.0,
+        isEndOfSentence: true,
+      };
+      // 2 parts * 200ms * 2.0 pause = 800ms
+      const duration = calculateWordDuration(word, 300, true);
+      expect(duration).toBe(800);
     });
   });
 

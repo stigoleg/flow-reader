@@ -55,7 +55,7 @@ export default function PacingMode({
   onComplete,
 }: PacingModeProps) {
   const timerRef = useRef<number | null>(null);
-  const { pacingGranularity, pacingPauseOnPunctuation, pacingAdaptiveSpeed, pacingReadabilitySpeed } = settings;
+  const { pacingGranularity, pacingPauseOnPunctuation, pacingAdaptiveSpeed, pacingReadabilitySpeed, pacingHeadingPause } = settings;
   const { rampEnabled, rampStep, rampInterval, targetWPM } = settings;
 
   // Speed ramp-up effect (shared hook)
@@ -96,6 +96,9 @@ export default function PacingMode({
   // Get current token based on granularity
   const currentSentence: SentenceToken | undefined = sentences[currentSentenceIndex];
   const currentWord: WordToken | undefined = words[currentWordIndex];
+
+  // Check if current block is a heading
+  const isHeadingBlock = currentBlock?.type === 'heading';
 
   // Check if we're at the end of the document
   const isLastBlock = currentBlockIndex >= blocks.length - 1;
@@ -153,24 +156,41 @@ export default function PacingMode({
 
   // Calculate duration for current unit
   const getDuration = useCallback((): number => {
+    let duration: number;
+    let isLastTokenInBlock = false;
+    
     switch (pacingGranularity) {
       case 'word':
         if (currentWord) {
-          return calculateWordDuration(currentWord, effectiveWPM, pacingPauseOnPunctuation, pacingAdaptiveSpeed);
+          duration = calculateWordDuration(currentWord, effectiveWPM, pacingPauseOnPunctuation, pacingAdaptiveSpeed);
+          isLastTokenInBlock = currentWordIndex >= words.length - 1;
+        } else {
+          duration = 60000 / effectiveWPM; // Fallback: 1 word duration
         }
-        return 60000 / effectiveWPM; // Fallback: 1 word duration
+        break;
       case 'sentence':
         if (currentSentence) {
-          return calculateSentenceDuration(currentSentence, effectiveWPM, pacingPauseOnPunctuation);
+          duration = calculateSentenceDuration(currentSentence, effectiveWPM, pacingPauseOnPunctuation);
+          isLastTokenInBlock = currentSentenceIndex >= sentences.length - 1;
+        } else {
+          duration = 1000; // Fallback: 1 second
         }
-        return 1000; // Fallback: 1 second
+        break;
       default: { // block
         const wordCount = currentBlock ? getBlockWordCount(currentBlock) : 1;
-        const duration = (wordCount / effectiveWPM) * 60 * 1000;
-        return Math.max(500, duration); // Minimum 500ms per block
+        duration = (wordCount / effectiveWPM) * 60 * 1000;
+        duration = Math.max(500, duration); // Minimum 500ms per block
+        isLastTokenInBlock = true; // Always at end of block in block mode
       }
     }
-  }, [pacingGranularity, currentWord, currentSentence, currentBlock, effectiveWPM, pacingPauseOnPunctuation, pacingAdaptiveSpeed]);
+    
+    // Apply heading pause when at the last token of a heading block
+    if (isHeadingBlock && isLastTokenInBlock && pacingHeadingPause > 1.0) {
+      duration *= pacingHeadingPause;
+    }
+    
+    return duration;
+  }, [pacingGranularity, currentWord, currentSentence, currentBlock, effectiveWPM, pacingPauseOnPunctuation, pacingAdaptiveSpeed, currentWordIndex, words.length, currentSentenceIndex, sentences.length, isHeadingBlock, pacingHeadingPause]);
 
   // Auto-advance timer
   useEffect(() => {

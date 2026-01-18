@@ -56,7 +56,8 @@ export function tokenizeForRSVP(text: string, chunkSize: number = 1): RSVPToken[
 
 export function calculateTokenDuration(token: RSVPToken, wpm: number, pauseOnPunctuation: boolean): number {
   const baseMs = 60000 / wpm;
-  const wordCount = token.text.split(/\s+/).length;
+  // Use countWordsForTiming to count hyphenated words as multiple words
+  const wordCount = countWordsForTiming(token.text);
   let duration = baseMs * wordCount;
 
   if (pauseOnPunctuation) {
@@ -76,6 +77,21 @@ export function findORP(word: string): number {
 
 export function getWordCount(text: string): number {
   return text.split(/\s+/).filter((w) => w.length > 0).length;
+}
+
+/**
+ * Count words for timing purposes.
+ * Hyphenated words count as multiple words (e.g., "large-scale" = 2 words).
+ * Only counts parts separated by hyphens between alphabetic characters.
+ */
+export function countWordsForTiming(text: string): number {
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  return words.reduce((count, word) => {
+    // Count hyphen-separated parts between letters (e.g., "self-aware" → 2)
+    // This regex splits on hyphens that are between letters
+    const parts = word.split(/(?<=[a-zA-ZæøåÆØÅ])-(?=[a-zA-ZæøåÆØÅ])/);
+    return count + Math.max(1, parts.length);
+  }, 0);
 }
 
 export function estimateReadingTime(text: string, wpm: number): number {
@@ -152,7 +168,8 @@ export function tokenizeIntoWords(text: string): WordToken[] {
 
 export function calculateSentenceDuration(sentence: SentenceToken, wpm: number, pauseOnPunctuation: boolean): number {
   const baseMs = 60000 / wpm;
-  let duration = baseMs * sentence.wordCount;
+  // Use countWordsForTiming to count hyphenated words as multiple words
+  let duration = baseMs * countWordsForTiming(sentence.text);
 
   if (pauseOnPunctuation) {
     duration *= sentence.pauseMultiplier;
@@ -187,7 +204,12 @@ export function calculateWordDuration(
   language: SupportedLanguage = 'en'
 ): number {
   const baseMs = 60000 / wpm;
-  let duration = baseMs;
+  
+  // Count hyphenated parts for timing (e.g., "self-aware" = 2 words)
+  const hyphenParts = word.text.split(/(?<=[a-zA-ZæøåÆØÅ])-(?=[a-zA-ZæøåÆØÅ])/);
+  const wordMultiplier = Math.max(1, hyphenParts.length);
+  
+  let duration = baseMs * wordMultiplier;
 
   if (adaptiveSpeed) {
     // Combine structural complexity (length/syllables) with frequency-based speed

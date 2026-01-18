@@ -163,6 +163,7 @@ export interface ReaderSettings {
   pacingBoldFocusLetter: boolean;  // Bold the focus letter like bionic mode
   pacingAdaptiveSpeed: boolean;    // Adjust speed based on word complexity
   pacingReadabilitySpeed: boolean; // Adjust speed based on paragraph readability
+  pacingHeadingPause: number;      // Pause multiplier after headings (1.0 - 5.0)
 
   // Display settings
   showTimeRemaining: boolean;      // Show estimated time remaining to finish
@@ -350,6 +351,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   pacingBoldFocusLetter: false,
   pacingAdaptiveSpeed: true,
   pacingReadabilitySpeed: true,
+  pacingHeadingPause: 2.0,  // 2x pause after headings
 
   // Display settings
   showTimeRemaining: false,

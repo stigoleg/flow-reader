@@ -7,6 +7,9 @@ interface RSVPModeProps {
   text: string;
   wpm: number;
   isPlaying: boolean;
+  // Note: Heading pause (pacingHeadingPause) is not applied in RSVP mode
+  // because RSVP uses flattened plainText without block structure.
+  // This could be added in future by passing blocks instead of text.
 }
 
 export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
