@@ -14,6 +14,8 @@ import type {
   CustomTheme,
   ArchiveItemType,
   ArchiveProgress,
+  Collection,
+  Annotation,
 } from '@/types';
 
 
@@ -136,6 +138,8 @@ export interface SyncArchiveItem {
   fileHash?: string;
   /** Size-limited paste content only */
   pasteContent?: string;
+  /** Collection IDs this item belongs to */
+  collectionIds?: string[];
   // Note: cachedDocument is explicitly excluded
 }
 
@@ -158,6 +162,12 @@ export interface SyncStateDocument {
 
   // Reading positions
   positions: Record<string, ReadingPosition>;
+
+  // User-created collections for organizing archive items
+  collections: Collection[];
+
+  // Annotations (highlights and notes) per document
+  annotations: Record<string, Annotation[]>;
 
   // Content manifest (tracks synced document content)
   contentManifest?: ContentManifest;

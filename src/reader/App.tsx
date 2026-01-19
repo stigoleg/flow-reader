@@ -19,6 +19,7 @@ import CompletionOverlay from './components/CompletionOverlay';
 import Onboarding, { useOnboarding } from './components/Onboarding';
 import { useStorageSync } from './hooks/useStorageSync';
 import { getCurrentDocument } from '@/lib/storage';
+import { getAnnotations, getDocumentAnnotationKey } from '@/lib/annotations-service';
 import type { FlowDocument } from '@/types';
 
 export default function App() {
@@ -52,6 +53,7 @@ export default function App() {
   const setPosition = useReaderStore(state => state.setPosition);
   const restorePosition = useReaderStore(state => state.restorePosition);
   const saveCurrentPosition = useReaderStore(state => state.saveCurrentPosition);
+  const scrollToAnnotation = useReaderStore(state => state.scrollToAnnotation);
   
   const onboarding = useOnboarding();
   
@@ -61,6 +63,9 @@ export default function App() {
   // Track which document we've restored position for to prevent loops
   // (setChapter modifies document, which would re-trigger restorePosition)
   const restoredDocRef = useRef<string | null>(null);
+  
+  // Track annotation ID to navigate to after document loads
+  const pendingAnnotationIdRef = useRef<string | null>(null);
 
   // Load settings from storage on mount
   useEffect(() => {
@@ -73,8 +78,12 @@ export default function App() {
       try {
         // First, try to get pending document from background script
         const response = await chrome.runtime.sendMessage({ type: 'GET_PENDING_DOCUMENT' });
-        if (response) {
-          setDocument(response as FlowDocument);
+        if (response?.document) {
+          setDocument(response.document as FlowDocument);
+          // Store annotation ID for navigation after document loads
+          if (response.annotationId) {
+            pendingAnnotationIdRef.current = response.annotationId;
+          }
           return;
         }
         
@@ -108,10 +117,35 @@ export default function App() {
       // Only restore if we haven't already restored for this document
       if (restoredDocRef.current !== docKey) {
         restoredDocRef.current = docKey;
-        restorePosition();
+        
+        // Check if we need to navigate to a specific annotation
+        if (pendingAnnotationIdRef.current) {
+          const annotationId = pendingAnnotationIdRef.current;
+          pendingAnnotationIdRef.current = null; // Clear after use
+          
+          // First restore the saved reading position (for playback)
+          // Then scroll to the annotation (for viewing)
+          const documentKey = getDocumentAnnotationKey(document.metadata);
+          
+          // Restore position first, then scroll to annotation
+          restorePosition().then(() => {
+            getAnnotations(documentKey).then(annotations => {
+              const annotation = annotations.find(a => a.id === annotationId);
+              if (annotation) {
+                // Scroll to annotation without changing reading position
+                scrollToAnnotation(annotation);
+              }
+            }).catch(() => {
+              // Error loading annotations - position is already restored
+            });
+          });
+        } else {
+          // No pending annotation, restore normal position
+          restorePosition();
+        }
       }
     }
-  }, [document, settingsLoaded, restorePosition]);
+  }, [document, settingsLoaded, restorePosition, scrollToAnnotation]);
 
   // Save position when playback is paused
   useEffect(() => {

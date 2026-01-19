@@ -9,6 +9,8 @@ import { syncScheduler, setupSyncAlarmListener } from '@/lib/sync/sync-scheduler
 
 // Store extracted document temporarily for passing to reader page
 let pendingDocument: FlowDocument | null = null;
+// Store annotation ID to navigate to when opening reader
+let pendingAnnotationId: string | null = null;
 
 // Set up sync alarm listener
 setupSyncAlarmListener();
@@ -77,10 +79,12 @@ chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse
       // If document is provided, use it directly
       if (message.document) {
         pendingDocument = message.document;
+        pendingAnnotationId = message.navigateToAnnotationId || null;
         openReaderPage();
         sendResponse({ success: true });
       } else if (sender.tab?.id) {
         // If no document but sent from a content script, extract from that tab
+        pendingAnnotationId = null; // No annotation navigation for extracted content
         extractAndOpenReader(sender.tab.id).then(() => {
           sendResponse({ success: true });
         }).catch(error => {
@@ -93,8 +97,12 @@ chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse
       return false; // Synchronous response already sent
 
     case 'GET_PENDING_DOCUMENT':
-      sendResponse(pendingDocument);
+      sendResponse({ 
+        document: pendingDocument, 
+        annotationId: pendingAnnotationId 
+      });
       pendingDocument = null; // Clear after retrieval
+      pendingAnnotationId = null;
       return false; // Synchronous response
     
     case 'EXTRACT_FROM_URL':

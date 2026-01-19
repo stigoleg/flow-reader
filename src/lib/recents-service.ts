@@ -37,6 +37,7 @@ export interface AddRecentInput {
   pasteContent?: string;
   cachedDocument?: FlowDocument;
   fileHash?: string;
+  wordCount?: number;
 }
 
 
@@ -319,12 +320,14 @@ export async function addRecent(input: AddRecentInput): Promise<ArchiveItem> {
     const existing = items[existingIndex];
     const finalPasteContent = pasteContent ?? existing.pasteContent;
     const finalCachedDocument = input.cachedDocument ?? existing.cachedDocument;
+    const finalWordCount = input.wordCount ?? existing.wordCount;
     
     item = {
       ...existing,
       ...input,
       pasteContent: finalPasteContent,
       cachedDocument: finalCachedDocument,
+      wordCount: finalWordCount,
       id: existing.id,
       createdAt: existing.createdAt,
       lastOpenedAt: now,
@@ -448,6 +451,52 @@ export async function removeRecent(id: string): Promise<void> {
         console.error('Failed to delete synced content:', error);
       });
     }
+  }
+}
+
+/**
+ * Remove multiple archive items at once (bulk delete).
+ * More efficient than calling removeRecent() in a loop as it:
+ * - Reads/writes storage only once
+ * - Batches tombstone creation
+ */
+export async function removeRecents(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  
+  const idSet = new Set(ids);
+  const items = await getArchiveItems();
+  const itemsToRemove = items.filter(item => idSet.has(item.id));
+  const remaining = items.filter(item => !idSet.has(item.id));
+  
+  if (itemsToRemove.length === 0) return;
+  
+  // Save remaining items first
+  await flushArchiveItems(remaining);
+  
+  // Create tombstones for all deleted items
+  const tombstonePromises = itemsToRemove.map(async item => {
+    try {
+      await storageFacade.addDeletedItemTombstone({
+        id: item.id,
+        fileHash: item.fileHash,
+        url: item.url,
+      });
+    } catch (error) {
+      console.error('Failed to add deleted item tombstone:', error);
+    }
+  });
+  
+  await Promise.allSettled(tombstonePromises);
+  
+  // Content deletion is best-effort, fire-and-forget is acceptable
+  for (const item of itemsToRemove) {
+    syncService.deleteItemContent({
+      id: item.id,
+      fileHash: item.fileHash,
+      url: item.url,
+    }).catch(error => {
+      console.error('Failed to delete synced content:', error);
+    });
   }
 }
 

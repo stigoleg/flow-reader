@@ -6,7 +6,7 @@
  * and "last writer wins" for other settings.
  */
 
-import type { ReadingPosition } from '@/types';
+import type { ReadingPosition, Collection, Annotation } from '@/types';
 import type { 
   SyncStateDocument, 
   SyncArchiveItem, 
@@ -88,6 +88,12 @@ export function mergeStates(
   // Merge custom themes (union by name, remote wins on conflict)
   const mergedThemes = mergeCustomThemes(local.customThemes, remote.customThemes);
   
+  // Merge collections
+  const mergedCollections = mergeCollections(local.collections, remote.collections, remoteIsNewer);
+  
+  // Merge annotations
+  const mergedAnnotations = mergeAnnotations(local.annotations, remote.annotations, remoteIsNewer);
+  
   // Determine if there were actual changes
   const hasChanges = conflicts.length > 0 || 
     mergedArchive.length !== local.archiveItems.length ||
@@ -101,7 +107,9 @@ export function mergeStates(
     // Settings from winner
     settings: winner.settings,
     
-    // Merged collections
+    // Merged data
+    collections: mergedCollections,
+    annotations: mergedAnnotations,
     presets: mergedPresets,
     customThemes: mergedThemes,
     archiveItems: mergedArchive,
@@ -423,6 +431,98 @@ function mergePositions(
   }
   
   return { merged, conflicts };
+}
+
+
+/**
+ * Merge collections from local and remote.
+ * Uses updatedAt to determine winner for conflicts.
+ */
+function mergeCollections(
+  local: Collection[] | undefined,
+  remote: Collection[] | undefined,
+  remoteIsNewer: boolean
+): Collection[] {
+  const collectionMap = new Map<string, Collection>();
+  
+  // Add local collections
+  for (const collection of (local ?? [])) {
+    collectionMap.set(collection.id, collection);
+  }
+  
+  // Merge remote collections
+  for (const collection of (remote ?? [])) {
+    const existing = collectionMap.get(collection.id);
+    if (!existing) {
+      collectionMap.set(collection.id, collection);
+    } else {
+      // Use updatedAt to determine winner, fall back to remoteIsNewer
+      if (collection.updatedAt > existing.updatedAt || 
+          (collection.updatedAt === existing.updatedAt && remoteIsNewer)) {
+        collectionMap.set(collection.id, collection);
+      }
+    }
+  }
+  
+  return Array.from(collectionMap.values());
+}
+
+
+/**
+ * Merge annotations from local and remote.
+ * Uses updatedAt to determine winner for conflicts.
+ * Annotations are merged per-document, then per-annotation within each document.
+ */
+function mergeAnnotations(
+  local: Record<string, Annotation[]> | undefined,
+  remote: Record<string, Annotation[]> | undefined,
+  remoteIsNewer: boolean
+): Record<string, Annotation[]> {
+  const localAnnotations = local ?? {};
+  const remoteAnnotations = remote ?? {};
+  const result: Record<string, Annotation[]> = {};
+  
+  // Get all document keys from both local and remote
+  const allDocKeys = new Set([
+    ...Object.keys(localAnnotations),
+    ...Object.keys(remoteAnnotations),
+  ]);
+  
+  for (const docKey of allDocKeys) {
+    const localDocAnnotations = localAnnotations[docKey] ?? [];
+    const remoteDocAnnotations = remoteAnnotations[docKey] ?? [];
+    
+    // Merge annotations for this document
+    const annotationMap = new Map<string, Annotation>();
+    
+    // Add local annotations
+    for (const annotation of localDocAnnotations) {
+      annotationMap.set(annotation.id, annotation);
+    }
+    
+    // Merge remote annotations
+    for (const annotation of remoteDocAnnotations) {
+      const existing = annotationMap.get(annotation.id);
+      if (!existing) {
+        annotationMap.set(annotation.id, annotation);
+      } else {
+        // Use updatedAt to determine winner, fall back to remoteIsNewer
+        if (annotation.updatedAt > existing.updatedAt || 
+            (annotation.updatedAt === existing.updatedAt && remoteIsNewer)) {
+          annotationMap.set(annotation.id, annotation);
+        }
+      }
+    }
+    
+    // Only add to result if there are annotations
+    const mergedAnnotations = Array.from(annotationMap.values());
+    if (mergedAnnotations.length > 0) {
+      // Sort by createdAt for consistent ordering
+      result[docKey] = mergedAnnotations.sort((a, b) => a.createdAt - b.createdAt);
+    }
+  }
+  
+  return result;
 }
 
 

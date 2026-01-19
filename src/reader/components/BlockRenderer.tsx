@@ -1,6 +1,7 @@
 import { memo } from 'react';
-import type { Block } from '@/types';
+import type { Block, Annotation } from '@/types';
 import type { ModeConfig, BionicConfig, PacingConfig, PositionState, BlockHandlers } from './types';
+import type { SearchMatch } from '@/lib/search-utils';
 import BionicMode from '../modes/BionicMode';
 import PacingContent from './PacingContent';
 import ListItemRenderer from './ListItemRenderer';
@@ -14,6 +15,14 @@ export interface BlockRendererProps {
   pacingConfig: PacingConfig;
   position: PositionState;
   handlers: BlockHandlers;
+  /** Annotations for this document */
+  annotations?: Annotation[];
+  /** Callback when an annotated word is clicked */
+  onAnnotationClick?: (annotation: Annotation) => void;
+  /** Search results for highlighting */
+  searchResults?: SearchMatch[];
+  /** Index of the currently focused search result */
+  currentSearchIndex?: number;
 }
 
 /**
@@ -29,6 +38,10 @@ export default memo(function BlockRenderer({
   pacingConfig,
   position,
   handlers,
+  annotations = [],
+  onAnnotationClick,
+  searchResults = [],
+  currentSearchIndex = -1,
 }: BlockRendererProps) {
   const getDimClass = () => {
     if (!mode.isPacing || !pacingConfig.pacingDimContext) return '';
@@ -54,6 +67,11 @@ export default memo(function BlockRenderer({
           }
           pacingSettings={pacingConfig}
           onItemClick={pacingConfig.granularity === 'word' ? handlers.onWordClick : handlers.onSentenceClick}
+          blockIndex={index}
+          annotations={annotations}
+          onAnnotationClick={onAnnotationClick}
+          searchResults={searchResults}
+          currentSearchIndex={currentSearchIndex}
         />
       );
     }

@@ -29,8 +29,10 @@ export default defineConfig({
       },
       output: {
         manualChunks: (id) => {
-          // Split large vendor libraries into separate chunks
+          // Only split out large, self-contained vendor libraries
+          // Don't try to split react/zustand/vendor as this causes circular dependencies
           if (id.includes('node_modules')) {
+            // PDF.js - large and only used by reader for PDFs
             if (id.includes('pdfjs-dist')) {
               return 'pdf';
             }
@@ -50,17 +52,17 @@ export default defineConfig({
             if (id.includes('fflate')) {
               return 'compression';
             }
-            if (id.includes('react-dom')) {
-              return 'react-dom';
+            // recharts and its dependencies (only used in archive stats modal)
+            if (id.includes('recharts') || 
+                id.includes('victory-vendor') ||
+                id.includes('d3-') ||
+                id.includes('internmap') ||
+                id.includes('delaunator') ||
+                id.includes('robust-predicates')) {
+              return 'charts';
             }
-            if (id.includes('react')) {
-              return 'react';
-            }
-            if (id.includes('zustand')) {
-              return 'zustand';
-            }
-            // Group remaining node_modules into vendor chunk
-            return 'vendor';
+            // Let Rollup handle everything else automatically
+            // This avoids circular dependency issues
           }
         },
       },

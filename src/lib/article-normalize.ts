@@ -55,7 +55,8 @@ export const ALLOWED_BLOCK_TAGS = new Set([
 
 // Allowed inline tags (semantic formatting)
 export const ALLOWED_INLINE_TAGS = new Set([
-  'a', 'strong', 'em', 'code', 'b', 'i', 'sub', 'sup'
+  'a', 'strong', 'em', 'code', 'b', 'i', 'sub', 'sup',
+  'mark', 'del', 'ins', 's', 'u', 'abbr'
 ]);
 
 // Wrapper tags that should be unwrapped
@@ -69,6 +70,12 @@ const NON_CONTENT_SPAN_PATTERNS = [
   'related', 'recommended', 'tldr', 'summary', 'ai', 'takeaway', 
   'highlights', 'icon', 'badge', 'label', 'tag', 'meta',
 ];
+
+// Patterns indicating italic/emphasis styling
+const ITALIC_PATTERNS = ['italic', 'emphasis', 'em', 'emphasized', 'oblique'];
+
+// Patterns indicating bold/strong styling
+const BOLD_PATTERNS = ['bold', 'strong', 'fw-bold', 'font-bold', 'semibold', 'font-semibold'];
 
 /**
  * Unwrap an element, replacing it with its children
@@ -245,8 +252,71 @@ function stripPresentationalAttributes(root: HTMLElement): void {
  * Classify a span element to determine what action to take
  */
 interface SpanClassification {
-  action: 'keep' | 'unwrap' | 'remove';
+  action: 'keep' | 'unwrap' | 'remove' | 'convert';
   reason: string;
+  targetTag?: 'em' | 'strong';
+}
+
+/**
+ * Check if a span has italic styling indicators
+ */
+function hasItalicStyling(span: Element): boolean {
+  const className = (span.className || '').toLowerCase();
+  
+  // Check class patterns
+  if (ITALIC_PATTERNS.some(p => className.includes(p))) {
+    return true;
+  }
+  
+  // Check data attributes for italic indicators
+  for (const attr of Array.from(span.attributes)) {
+    const name = attr.name.toLowerCase();
+    const value = attr.value.toLowerCase();
+    if (name.includes('italic') || value === 'italic' || value === 'emphasis') {
+      return true;
+    }
+  }
+  
+  // Check inline style for font-style: italic
+  const style = span.getAttribute('style') || '';
+  if (style.includes('font-style') && style.includes('italic')) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if a span has bold styling indicators
+ */
+function hasBoldStyling(span: Element): boolean {
+  const className = (span.className || '').toLowerCase();
+  
+  // Check class patterns
+  if (BOLD_PATTERNS.some(p => className.includes(p))) {
+    return true;
+  }
+  
+  // Check data attributes for bold indicators
+  for (const attr of Array.from(span.attributes)) {
+    const name = attr.name.toLowerCase();
+    const value = attr.value.toLowerCase();
+    if (name.includes('bold') || name.includes('strong') || 
+        value === 'bold' || value === 'strong') {
+      return true;
+    }
+  }
+  
+  // Check inline style for font-weight: bold or 700+
+  const style = span.getAttribute('style') || '';
+  if (style.includes('font-weight')) {
+    if (style.includes('bold') || style.includes('700') || 
+        style.includes('800') || style.includes('900')) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 function classifySpan(span: Element): SpanClassification {
@@ -258,6 +328,16 @@ function classifySpan(span: Element): SpanClassification {
     if (className.includes(pattern) || id.includes(pattern)) {
       return { action: 'remove', reason: `matches non-content pattern: ${pattern}` };
     }
+  }
+  
+  // Check for italic styling - convert to <em>
+  if (hasItalicStyling(span)) {
+    return { action: 'convert', targetTag: 'em', reason: 'italic span detected' };
+  }
+  
+  // Check for bold styling - convert to <strong>
+  if (hasBoldStyling(span)) {
+    return { action: 'convert', targetTag: 'strong', reason: 'bold span detected' };
   }
   
   // Check if inside a semantic inline element (keep structure)
@@ -297,6 +377,12 @@ function processSpans(root: HTMLElement): void {
       
       if (classification.action === 'remove') {
         span.remove();
+        changed = true;
+      } else if (classification.action === 'convert' && classification.targetTag) {
+        // Convert span to semantic element (em or strong)
+        const newElement = document.createElement(classification.targetTag);
+        newElement.innerHTML = span.innerHTML;
+        span.replaceWith(newElement);
         changed = true;
       } else if (classification.action === 'unwrap') {
         unwrapElement(span);

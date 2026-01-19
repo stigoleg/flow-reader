@@ -64,6 +64,33 @@ body {
   text-decoration: underline;
 }
 
+/* Semantic inline formatting */
+.reader-content mark {
+  background-color: var(--reader-highlight, #fff3cd);
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+}
+
+.reader-content del,
+.reader-content s {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.reader-content ins {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+}
+
+.reader-content abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+.reader-content u {
+  text-decoration: underline;
+}
+
 .reader-content blockquote {
   border-left: 4px solid var(--reader-link);
   padding-left: 1em;
@@ -85,8 +112,16 @@ body {
   z-index: 1;
 }
 
-.reader-content ul,
+.reader-content ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin-bottom: var(--paragraph-spacing, 24px);
+  position: relative;
+  z-index: 1;
+}
+
 .reader-content ol {
+  list-style-type: decimal;
   padding-left: 1.5em;
   margin-bottom: var(--paragraph-spacing, 24px);
   position: relative;
@@ -95,6 +130,27 @@ body {
 
 .reader-content li {
   margin-bottom: 0.5em;
+  display: list-item;
+}
+
+/* Nested list styling */
+.reader-content ul ul,
+.reader-content ol ul {
+  list-style-type: circle;
+  margin-bottom: 0;
+  margin-top: 0.5em;
+}
+
+.reader-content ul ul ul,
+.reader-content ol ul ul {
+  list-style-type: square;
+}
+
+.reader-content ul ol,
+.reader-content ol ol {
+  list-style-type: lower-alpha;
+  margin-bottom: 0;
+  margin-top: 0.5em;
 }
 
 /* ============================================
@@ -568,5 +624,36 @@ input[type="checkbox"] {
   
   .fade-in {
     animation: none;
+  }
+}
+
+/* ============================================
+   In-Reader Search Highlighting
+   ============================================ */
+
+/* Search match - all matches have this style */
+.search-match {
+  background-color: rgba(255, 200, 0, 0.35);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 200, 0, 0.5);
+}
+
+/* Current search match - the one user navigated to */
+.search-match-current {
+  background-color: rgba(255, 140, 0, 0.5);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px rgba(255, 140, 0, 0.7);
+}
+
+/* Ensure search highlights work well with dark themes */
+@media (prefers-color-scheme: dark) {
+  .search-match {
+    background-color: rgba(255, 200, 0, 0.25);
+    box-shadow: 0 0 0 1px rgba(255, 200, 0, 0.4);
+  }
+  
+  .search-match-current {
+    background-color: rgba(255, 140, 0, 0.4);
+    box-shadow: 0 0 0 2px rgba(255, 140, 0, 0.6);
   }
 }

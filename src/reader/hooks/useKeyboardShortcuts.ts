@@ -20,6 +20,10 @@ interface KeyboardShortcutsOptions {
   nextChapter?: () => void;
   prevChapter?: () => void;
   toggleToc?: () => void;
+  // Notes panel
+  toggleNotesPanel?: () => void;
+  // Search
+  toggleSearch?: () => void;
   // Overlay state for Escape key handling
   overlays?: {
     isSettingsOpen: boolean;
@@ -31,6 +35,10 @@ interface KeyboardShortcutsOptions {
     closeHelp: () => void;
     isTocOpen?: boolean;
     closeToc?: () => void;
+    isNotesPanelOpen?: boolean;
+    closeNotesPanel?: () => void;
+    isSearchOpen?: boolean;
+    closeSearch?: () => void;
     closeReader: () => void;
   };
 }
@@ -93,14 +101,18 @@ const ACTIONS: Record<string, ActionHandler> = {
     }
   },
   'Escape': (_, { overlays }) => {
-    // Close overlays in priority order: help > import > settings > toc
+    // Close overlays in priority order: search > help > import > settings > notes > toc
     // Only close reader if no overlays are open
-    if (overlays?.isHelpOpen) {
+    if (overlays?.isSearchOpen) {
+      overlays.closeSearch?.();
+    } else if (overlays?.isHelpOpen) {
       overlays.closeHelp();
     } else if (overlays?.isImportOpen) {
       overlays.closeImport();
     } else if (overlays?.isSettingsOpen) {
       overlays.closeSettings();
+    } else if (overlays?.isNotesPanelOpen) {
+      overlays.closeNotesPanel?.();
     } else if (overlays?.isTocOpen) {
       overlays.closeToc?.();
     } else {
@@ -120,12 +132,43 @@ const ACTIONS: Record<string, ActionHandler> = {
   ']': (_, { nextChapter }) => nextChapter?.(),
   't': (_, { toggleToc }) => toggleToc?.(),
   'T': (_, { toggleToc }) => toggleToc?.(),
+  // Notes panel
+  'n': (_, { toggleNotesPanel }) => toggleNotesPanel?.(),
+  'N': (_, { toggleNotesPanel }) => toggleNotesPanel?.(),
 };
 
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Allow keyboard input in search bar, but handle Escape specially
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      // Only handle Escape in text inputs - let it close search
+      if (e.key === 'Escape') {
+        const action = ACTIONS[e.key];
+        if (action) {
+          e.preventDefault();
+          action(e, options);
+        }
+      }
       return;
+    }
+
+    // Handle Ctrl/Cmd+F to open search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      options.toggleSearch?.();
+      return;
+    }
+
+    // Handle F3 for next search result (also Ctrl+G)
+    if (e.key === 'F3' || ((e.ctrlKey || e.metaKey) && e.key === 'g')) {
+      if (options.overlays?.isSearchOpen) {
+        e.preventDefault();
+        // F3/Ctrl+G navigates to next result
+        // Shift+F3/Ctrl+Shift+G navigates to previous result
+        // This is handled by the SearchBar component itself via store actions
+        // The store's nextSearchResult/prevSearchResult are called from SearchBar
+        return;
+      }
     }
 
     const action = ACTIONS[e.key];

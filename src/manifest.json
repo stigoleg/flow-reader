@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FlowReader",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "Read faster while maintaining comprehension. A distraction-free reader mode with pacing aids.",
   "icons": {
     "16": "icons/icon16.png",

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { extractFromPaste } from '@/lib/extraction';
+import { extractFromPaste } from '@/lib/paste-utils';
 
 export default function Popup() {
   const [pasteText, setPasteText] = useState('');

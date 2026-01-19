@@ -1,6 +1,6 @@
 {
   "name": "flowreader",
-  "version": "1.0.0",
+  "version": "1.5.0",
   "description": "Read faster while maintaining comprehension. A Chrome extension with reader mode and pacing aids.",
   "type": "module",
   "scripts": {
@@ -26,6 +26,7 @@
     "pdfjs-dist": "^5.4.530",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "recharts": "^3.6.0",
     "zustand": "^5.0.10"
   },
   "devDependencies": {

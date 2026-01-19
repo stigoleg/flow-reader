@@ -4,7 +4,7 @@ import { extractFromDocx } from '@/lib/docx-handler';
 import { extractFromEpub, EpubExtractionError } from '@/lib/epub-handler';
 import { extractFromMobi, MobiExtractionError } from '@/lib/mobi-handler';
 import { extractFromPaste } from '@/lib/extraction';
-import { isSupportedFile, getFileType } from '@/lib/file-utils';
+import { isSupportedFile, getFileType, countWords } from '@/lib/file-utils';
 import { getRecentDocuments } from '@/lib/storage';
 import { addRecent, mapSourceToType, getSourceLabel } from '@/lib/recents-service';
 import { useReaderStore } from '../store';
@@ -118,6 +118,7 @@ export default function ImportPanel({ isOpen, onClose }: ImportPanelProps) {
           url: doc.metadata.url,
           fileHash: doc.metadata.fileHash,
           cachedDocument: doc,
+          wordCount: countWords(doc.plainText),
         });
         
         // Keep first successfully imported document

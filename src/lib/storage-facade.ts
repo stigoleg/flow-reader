@@ -11,8 +11,10 @@ import type {
   CustomTheme,
   ArchiveItemType,
   ArchiveProgress,
+  Collection,
+  Annotation,
 } from '@/types';
-import { DEFAULT_SETTINGS } from '@/types';
+import { DEFAULT_SETTINGS, DEFAULT_COLLECTIONS } from '@/types';
 import { CURRENT_STORAGE_VERSION, runMigrations } from './migrations';
 import { normalizeUrl } from './url-utils';
 import * as chromeStorage from './chrome-storage';
@@ -28,6 +30,8 @@ export interface ExtendedStorageSchema extends StorageSchema {
   lastSyncTime: number | null;
   lastSyncError: string | null;
   deletedItems: Record<string, number>;
+  collections: Collection[];
+  annotations: Record<string, Annotation[]>;
 }
 
 export type SyncProviderType = 'dropbox' | 'folder';
@@ -46,6 +50,12 @@ export interface SyncStateDocument {
   archiveItems: SyncArchiveItem[];
   
   positions: Record<string, ReadingPosition>;
+  
+  /** User-created collections for organizing archive items */
+  collections: Collection[];
+  
+  /** Annotations (highlights and notes) per document */
+  annotations: Record<string, Annotation[]>;
   
   /** Deleted items tombstones - maps identifier to deletion timestamp */
   deletedItems?: Record<string, number>;
@@ -68,6 +78,7 @@ export interface SyncArchiveItem {
   lastPosition?: ReadingPosition;
   fileHash?: string;
   pasteContent?: string; // Size-limited paste content only
+  collectionIds?: string[]; // Collection assignments
 }
 
 export type StorageChangeCallback = (changes: Partial<ExtendedStorageSchema>) => void;
@@ -106,6 +117,8 @@ class StorageFacadeImpl {
         archiveItems: [],
         recentDocuments: [],
         customThemes: [],
+        collections: DEFAULT_COLLECTIONS,
+        annotations: {},
         onboardingCompleted: false,
         exitConfirmationDismissed: false,
         deviceId: this.getOrCreateDeviceId(),
@@ -132,6 +145,8 @@ class StorageFacadeImpl {
       archiveItems: (data.archiveItems || []) as ArchiveItem[],
       recentDocuments: (data.recentDocuments || []) as StorageSchema['recentDocuments'],
       customThemes: (data.customThemes || []) as CustomTheme[],
+      collections: (data.collections || DEFAULT_COLLECTIONS) as Collection[],
+      annotations: (data.annotations || {}) as Record<string, Annotation[]>,
       onboardingCompleted: (data.onboardingCompleted || false) as boolean,
       exitConfirmationDismissed: (data.exitConfirmationDismissed || false) as boolean,
       deviceId: (data.deviceId || this.getOrCreateDeviceId()) as string,
@@ -227,6 +242,14 @@ class StorageFacadeImpl {
     return this.setValues({ customThemes: themes });
   }
 
+  async updateCollections(collections: Collection[]): Promise<void> {
+    return this.setValues({ collections });
+  }
+
+  async updateAnnotations(annotations: Record<string, Annotation[]>): Promise<void> {
+    return this.setValues({ annotations });
+  }
+
   async updatePresets(presets: Record<string, Partial<ReaderSettings>>): Promise<void> {
     return this.setValues({ presets });
   }
@@ -265,6 +288,7 @@ class StorageFacadeImpl {
       lastPosition: item.lastPosition,
       fileHash: item.fileHash,
       pasteContent: item.pasteContent,
+      collectionIds: item.collectionIds,
     }));
 
     return {
@@ -276,6 +300,8 @@ class StorageFacadeImpl {
       customThemes: state.customThemes,
       archiveItems: syncArchiveItems,
       positions: state.positions,
+      collections: state.collections,
+      annotations: state.annotations,
       deletedItems: state.deletedItems,
       onboardingCompleted: state.onboardingCompleted,
       exitConfirmationDismissed: state.exitConfirmationDismissed,
@@ -310,6 +336,8 @@ class StorageFacadeImpl {
         customThemes: remote.customThemes,
         archiveItems: mergedArchiveItems,
         positions: remote.positions,
+        collections: remote.collections,
+        annotations: remote.annotations,
         onboardingCompleted: remote.onboardingCompleted,
         exitConfirmationDismissed: remote.exitConfirmationDismissed,
         lastSyncTime: Date.now(),
@@ -368,7 +396,7 @@ class StorageFacadeImpl {
 
   /** Keys that represent user data (should update dataUpdatedAt when modified) */
   private static readonly SYNC_RELEVANT_KEYS: readonly string[] = [
-    'settings', 'presets', 'customThemes', 'archiveItems', 'positions', 'deletedItems'
+    'settings', 'presets', 'customThemes', 'archiveItems', 'positions', 'deletedItems', 'collections', 'annotations'
   ];
 
   private async setValues(values: Record<string, unknown>): Promise<void> {

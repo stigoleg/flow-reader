@@ -331,7 +331,12 @@ export class ContentSyncManager {
           await provider.deleteContentFile(filename);
           delete updatedManifest.items[fileHash];
         } catch (error) {
-          console.error(`Failed to delete orphaned content ${fileHash}:`, error);
+          // Non-critical: log only in dev mode, still remove from manifest
+          if (import.meta.env.DEV) {
+            console.warn(`[Sync] Could not delete orphaned content ${fileHash}:`, error);
+          }
+          // Remove from manifest anyway - file may not exist or be inaccessible
+          delete updatedManifest.items[fileHash];
         }
       }
     }

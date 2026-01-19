@@ -375,8 +375,16 @@ export class FolderAdapter implements SyncProvider {
       await contentFolder.removeEntry(filename);
     } catch (error) {
       // File or folder doesn't exist - that's OK
-      if (error instanceof DOMException && error.name === 'NotFoundError') {
-        return;
+      // Also handle other non-critical DOMExceptions gracefully
+      if (error instanceof DOMException) {
+        // NotFoundError: file doesn't exist
+        // InvalidStateError: handle may have been invalidated
+        // NotAllowedError: permission may have been revoked
+        if (error.name === 'NotFoundError' || 
+            error.name === 'InvalidStateError' ||
+            error.name === 'NotAllowedError') {
+          return;
+        }
       }
       throw error;
     }

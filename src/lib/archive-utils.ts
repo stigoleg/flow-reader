@@ -77,6 +77,24 @@ export function furtherProgress(
 
 
 /**
+ * Merge collection IDs from two items (union of both).
+ * Used when merging duplicate items to preserve all collection memberships.
+ */
+function mergeCollectionIds(
+  a: string[] | undefined,
+  b: string[] | undefined
+): string[] | undefined {
+  if (!a && !b) return undefined;
+  if (!a) return b;
+  if (!b) return a;
+  
+  // Union of both arrays
+  const merged = new Set([...a, ...b]);
+  return merged.size > 0 ? Array.from(merged) : undefined;
+}
+
+
+/**
  * Base type for items that can be merged.
  * Works with both ArchiveItem and SyncArchiveItem.
  */
@@ -90,6 +108,7 @@ interface MergeableItem {
   fileHash?: string;
   url?: string;
   pasteContent?: string;
+  collectionIds?: string[];
 }
 
 /**
@@ -138,6 +157,9 @@ export function mergeArchiveItemPair<T extends MergeableItem>(
   // Get the better progress
   const mergedProgress = furtherProgress(primary.progress, secondary.progress);
   
+  // Merge collectionIds (union of both)
+  const mergedCollectionIds = mergeCollectionIds(primary.collectionIds, secondary.collectionIds);
+  
   return {
     ...newerMetadata,
     id: primary.id, // Keep the ID from the item with most progress
@@ -149,6 +171,8 @@ export function mergeArchiveItemPair<T extends MergeableItem>(
     url: primary.url || secondary.url,
     // Preserve cached data
     pasteContent: primary.pasteContent || secondary.pasteContent,
+    // Merged collection membership
+    collectionIds: mergedCollectionIds,
   };
 }
 

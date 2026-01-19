@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
-import type { PacingGranularity, PacingSettings } from '@/types';
+import type { PacingGranularity, PacingSettings, Annotation } from '@/types';
 import { tokenizeIntoSentences, tokenizeIntoWords, findORP } from '@/lib/tokenizer';
+import { getWordHighlightColor } from '@/lib/annotations-service';
+import { getSearchMatchForWord, type SearchMatch } from '@/lib/search-utils';
 
 interface PacingContentProps {
   text: string;
@@ -9,6 +11,16 @@ interface PacingContentProps {
   indexOffset?: number;
   pacingSettings: PacingSettings;
   onItemClick: (index: number) => void;
+  /** Block index for annotation lookup */
+  blockIndex?: number;
+  /** Annotations for this document */
+  annotations?: Annotation[];
+  /** Callback when an annotated word is clicked */
+  onAnnotationClick?: (annotation: Annotation) => void;
+  /** Search results for highlighting */
+  searchResults?: SearchMatch[];
+  /** Index of the currently focused search result */
+  currentSearchIndex?: number;
 }
 
 export default function PacingContent({
@@ -18,8 +30,16 @@ export default function PacingContent({
   indexOffset = 0,
   pacingSettings,
   onItemClick,
+  blockIndex = 0,
+  annotations = [],
+  onAnnotationClick,
+  searchResults = [],
+  currentSearchIndex = -1,
 }: PacingContentProps) {
   const { pacingHighlightStyle, pacingDimContext, pacingShowGuide, pacingBoldFocusLetter } = pacingSettings;
+
+  // Convert blockIndex to string for annotation lookup
+  const blockId = String(blockIndex);
 
   const words = useMemo(() => {
     if (granularity !== 'word') return [];
@@ -39,6 +59,21 @@ export default function PacingContent({
           const isCurrent = globalIdx === currentIndex;
           const isPast = globalIdx < currentIndex;
 
+          // Check if this word is part of an annotation
+          const highlightColor = getWordHighlightColor(blockId, idx, annotations);
+          const isAnnotated = highlightColor !== null;
+
+          // Check if this word is part of a search match
+          const searchMatch = getSearchMatchForWord(blockIndex, idx, searchResults);
+          const isSearchMatch = searchMatch !== null;
+          
+          // Check if this is the current search result (the one user navigated to)
+          const isCurrentSearchMatch = isSearchMatch && 
+            currentSearchIndex >= 0 &&
+            searchResults[currentSearchIndex]?.blockIndex === blockIndex &&
+            idx >= searchResults[currentSearchIndex]?.startWordIndex &&
+            idx <= searchResults[currentSearchIndex]?.endWordIndex;
+
           let className = 'pacing-word cursor-pointer';
           if (isCurrent) {
             className += ` pacing-word-active pacing-style-${pacingHighlightStyle}`;
@@ -47,6 +82,11 @@ export default function PacingContent({
             className += ' pacing-word-past';
           } else if (!isPast && pacingDimContext) {
             className += ' pacing-word-future';
+          }
+          
+          // Add search highlight classes
+          if (isSearchMatch && !isCurrent) {
+            className += isCurrentSearchMatch ? ' search-match-current' : ' search-match';
           }
 
           const space = idx < words.length - 1 ? ' ' : '';
@@ -64,6 +104,18 @@ export default function PacingContent({
 
           const handleClick = (e: React.MouseEvent) => {
             e.stopPropagation();
+            // If annotated and we have a callback, trigger annotation click
+            if (isAnnotated && onAnnotationClick) {
+              const annotation = annotations.find(a => 
+                a.anchor.blockId === blockId &&
+                idx >= a.anchor.startWordIndex &&
+                idx <= a.anchor.endWordIndex
+              );
+              if (annotation) {
+                onAnnotationClick(annotation);
+                return;
+              }
+            }
             onItemClick(globalIdx);
           };
 
@@ -73,6 +125,17 @@ export default function PacingContent({
             ? 'pacing-orp-letter pacing-orp-bold' 
             : 'pacing-orp-letter';
 
+          // Build style object with optional highlight
+          const spanStyle: React.CSSProperties = {
+            '--orp-position': `${orpPercent}%`,
+          } as React.CSSProperties;
+          
+          if (isAnnotated && !isCurrent) {
+            // Apply annotation highlight (but not when pacing highlight is active)
+            spanStyle.backgroundColor = highlightColor;
+            spanStyle.borderRadius = '2px';
+          }
+
           // Always render with consistent 3-span structure to prevent layout shifts
           // The structure is: beforeORP + orpLetter + afterORP
           // This ensures DOM consistency whether word is active or not
@@ -81,7 +144,7 @@ export default function PacingContent({
               key={idx}
               data-word-index={globalIdx}
               className={className}
-              style={{ '--orp-position': `${orpPercent}%` } as React.CSSProperties}
+              style={spanStyle}
               onClick={handleClick}
             >
               <span className="pacing-word-before">{beforeORP}</span>

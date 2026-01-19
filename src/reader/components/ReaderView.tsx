@@ -1,12 +1,18 @@
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useCallback, useState } from 'react';
 import { useReaderStore } from '../store';
 import PacingMode from '../modes/PacingMode';
 import RSVPMode from '../modes/RSVPMode';
 import BlockRenderer from './BlockRenderer';
 import ExitConfirmDialog from './ExitConfirmDialog';
+import AnnotationToolbar from './AnnotationToolbar';
+import NoteEditorModal from './NoteEditorModal';
+import NotesPanel from './NotesPanel';
+import SearchBar from './SearchBar';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useSwipeGestures } from '../hooks/useSwipeGestures';
+import { useTextSelection } from '../hooks/useTextSelection';
 import type { ModeConfig, BionicConfig, PacingConfig, PositionState, BlockHandlers } from './types';
+import type { Annotation, AnnotationAnchor } from '@/types';
 
 export default function ReaderView() {
   const {
@@ -55,6 +61,30 @@ export default function ReaderView() {
     setExitConfirmOpen,
     closeReader,
     confirmCloseReader,
+    // Annotations
+    annotations,
+    loadAnnotations,
+    addAnnotation,
+    updateAnnotationNote,
+    changeAnnotationColor,
+    removeAnnotation,
+    editingAnnotationId,
+    setEditingAnnotation,
+    activeHighlightColor,
+    // Notes panel
+    isNotesPanelOpen,
+    setNotesPanelOpen,
+    toggleNotesPanel,
+    navigateToAnnotation,
+    // Scroll-only navigation
+    scrollToBlockIndex,
+    clearScrollToBlock,
+    // Search
+    isSearchOpen,
+    searchResults,
+    currentSearchIndex,
+    toggleSearch,
+    closeSearch,
   } = useReaderStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,6 +106,8 @@ export default function ReaderView() {
     nextChapter,
     prevChapter,
     toggleToc,
+    toggleNotesPanel,
+    toggleSearch,
     overlays: {
       isSettingsOpen,
       closeSettings: toggleSettings,
@@ -86,6 +118,10 @@ export default function ReaderView() {
       closeHelp: () => setHelpOpen(false),
       isTocOpen,
       closeToc: () => setTocOpen(false),
+      isNotesPanelOpen,
+      closeNotesPanel: () => setNotesPanelOpen(false),
+      isSearchOpen,
+      closeSearch,
       closeReader,
     },
   });
@@ -107,6 +143,22 @@ export default function ReaderView() {
 
   useSwipeGestures(containerRef, swipeHandlers);
 
+  // Load annotations when document loads
+  useEffect(() => {
+    if (document) {
+      loadAnnotations();
+    }
+  }, [document, loadAnnotations]);
+
+  // Text selection for annotation creation
+  // Only enable when not playing (to avoid interference with reading)
+  const { selection, clearSelection } = useTextSelection(containerRef, {
+    enabled: !isPlaying && settings.activeMode !== 'rsvp',
+  });
+
+  // Track pending annotation for "Add Note" flow (selection -> note editor)
+  const [pendingAnnotation, setPendingAnnotation] = useState<Annotation | null>(null);
+
   useEffect(() => {
     if (containerRef.current && document) {
       const blockElement = containerRef.current.querySelector(`[data-block-index="${currentBlockIndex}"]`);
@@ -115,6 +167,20 @@ export default function ReaderView() {
       }
     }
   }, [currentBlockIndex, document]);
+
+  // Scroll-only navigation for annotations (doesn't change reading position)
+  // Used when opening a document from Archive to view a specific annotation
+  useEffect(() => {
+    if (containerRef.current && document && scrollToBlockIndex !== null) {
+      const blockElement = containerRef.current.querySelector(
+        `[data-block-index="${scrollToBlockIndex}"]`
+      );
+      if (blockElement) {
+        blockElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      clearScrollToBlock();
+    }
+  }, [scrollToBlockIndex, document, clearScrollToBlock]);
 
   // Viewport-aware scroll for word/sentence granularity in pacing mode
   // This handles long blocks that are taller than the viewport by scrolling
@@ -160,6 +226,86 @@ export default function ReaderView() {
     setSentenceIndex(sentenceIndex);
   };
 
+  // Create anchor from selection range
+  const createAnchorFromSelection = useCallback((): AnnotationAnchor | null => {
+    if (!selection) return null;
+    return {
+      blockId: String(selection.startBlockIndex),
+      startWordIndex: selection.startWordIndex,
+      endBlockId: String(selection.endBlockIndex),
+      endWordIndex: selection.endWordIndex,
+      textContent: selection.textContent,
+    };
+  }, [selection]);
+
+  // Handle highlight creation from toolbar
+  const handleHighlight = useCallback(async (color: string) => {
+    const anchor = createAnchorFromSelection();
+    if (!anchor) return;
+    
+    await addAnnotation(anchor, color);
+    clearSelection();
+  }, [createAnchorFromSelection, addAnnotation, clearSelection]);
+
+  // Handle "Add Note" from toolbar - creates annotation and opens editor
+  const handleAddNote = useCallback(async () => {
+    const anchor = createAnchorFromSelection();
+    if (!anchor) return;
+    
+    // Create annotation with default color
+    const annotation = await addAnnotation(anchor, activeHighlightColor);
+    clearSelection();
+    
+    // Open the note editor for the new annotation
+    setPendingAnnotation(annotation);
+    setEditingAnnotation(annotation.id);
+  }, [createAnchorFromSelection, addAnnotation, activeHighlightColor, clearSelection, setEditingAnnotation]);
+
+  // Handle clicking on an existing annotation
+  const handleAnnotationClick = useCallback((annotation: Annotation) => {
+    setEditingAnnotation(annotation.id);
+  }, [setEditingAnnotation]);
+
+  // Get the annotation being edited
+  const editingAnnotation = editingAnnotationId 
+    ? annotations.find(a => a.id === editingAnnotationId) 
+    : pendingAnnotation;
+
+  // Handle note save
+  const handleNoteSave = useCallback(async (note: string) => {
+    if (editingAnnotationId) {
+      await updateAnnotationNote(editingAnnotationId, note);
+    }
+    setPendingAnnotation(null);
+    setEditingAnnotation(null);
+  }, [editingAnnotationId, updateAnnotationNote, setEditingAnnotation]);
+
+  // Handle color change in note editor
+  const handleColorChange = useCallback(async (color: string) => {
+    if (editingAnnotationId) {
+      await changeAnnotationColor(editingAnnotationId, color);
+    }
+  }, [editingAnnotationId, changeAnnotationColor]);
+
+  // Handle annotation delete
+  const handleAnnotationDelete = useCallback(async () => {
+    if (editingAnnotationId) {
+      await removeAnnotation(editingAnnotationId);
+    }
+    setPendingAnnotation(null);
+  }, [editingAnnotationId, removeAnnotation]);
+
+  // Handle closing the toolbar
+  const handleToolbarClose = useCallback(() => {
+    clearSelection();
+  }, [clearSelection]);
+
+  // Handle closing the note editor
+  const handleNoteEditorClose = useCallback(() => {
+    setPendingAnnotation(null);
+    setEditingAnnotation(null);
+  }, [setEditingAnnotation]);
+
   if (settings.activeMode === 'rsvp') {
     return (
       <>
@@ -202,6 +348,9 @@ export default function ReaderView() {
 
   return (
     <>
+      {/* Search Bar - fixed at top when search is open */}
+      <SearchBar />
+      
       <main
         ref={containerRef}
         className="reader-content pt-20 pb-16 px-4"
@@ -256,6 +405,10 @@ export default function ReaderView() {
                 pacingConfig={pacingConfig}
                 position={position}
                 handlers={handlers}
+                annotations={annotations}
+                onAnnotationClick={handleAnnotationClick}
+                searchResults={searchResults}
+                currentSearchIndex={currentSearchIndex}
               />
             );
           })}
@@ -266,6 +419,39 @@ export default function ReaderView() {
         isOpen={isExitConfirmOpen}
         onCancel={() => setExitConfirmOpen(false)}
         onConfirm={confirmCloseReader}
+      />
+
+      {/* Annotation Toolbar - appears when text is selected */}
+      {selection && (
+        <AnnotationToolbar
+          selection={selection}
+          containerRef={containerRef}
+          onHighlight={handleHighlight}
+          onAddNote={handleAddNote}
+          onClose={handleToolbarClose}
+        />
+      )}
+
+      {/* Note Editor Modal - appears when editing an annotation */}
+      {editingAnnotation && (
+        <NoteEditorModal
+          annotation={editingAnnotation}
+          onSave={handleNoteSave}
+          onChangeColor={handleColorChange}
+          onDelete={handleAnnotationDelete}
+          onClose={handleNoteEditorClose}
+        />
+      )}
+
+      {/* Notes Panel - slide-in panel showing all annotations */}
+      <NotesPanel
+        isOpen={isNotesPanelOpen}
+        onClose={() => setNotesPanelOpen(false)}
+        annotations={annotations}
+        documentTitle={document?.metadata.title}
+        onNavigateToAnnotation={navigateToAnnotation}
+        onEditAnnotation={(annotation) => setEditingAnnotation(annotation.id)}
+        onDeleteAnnotation={removeAnnotation}
       />
     </>
   );

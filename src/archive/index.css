@@ -355,6 +355,34 @@
   background-color: rgba(128, 128, 128, 0.2);
 }
 
+/* Context submenu */
+.context-submenu {
+  background-color: var(--reader-bg);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  padding: 0.25rem;
+  min-width: 160px;
+  margin-left: 0.25rem;
+}
+
+/* Collection badge (for archive items) */
+.collection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  background-color: rgba(128, 128, 128, 0.1);
+  color: var(--reader-text);
+  opacity: 0.8;
+}
+
+.collection-badge-icon {
+  font-size: 0.625rem;
+}
+
 /* Sync status indicator */
 .sync-status-indicator {
   display: inline-flex;
@@ -370,4 +398,217 @@
 .sync-status-indicator.not-synced {
   color: #f59e0b; /* amber-500 */
   opacity: 0.5;
+}
+
+/* Selection checkbox */
+.selection-checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  min-width: 1.25rem;
+  border-radius: 50%;
+  border: 2px solid rgba(128, 128, 128, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0;
+  margin-right: -0.5rem;
+  pointer-events: none;
+}
+
+.selection-checkbox.visible,
+.archive-item:hover .selection-checkbox {
+  opacity: 1;
+  margin-right: 0;
+  pointer-events: auto;
+}
+
+.selection-checkbox:hover {
+  border-color: var(--reader-link);
+}
+
+.selection-checkbox.checked {
+  background-color: var(--reader-link);
+  border-color: var(--reader-link);
+  color: white;
+}
+
+/* Selected archive item */
+.archive-item.selected {
+  background-color: rgba(var(--reader-link-rgb, 0, 102, 204), 0.08);
+  border-color: var(--reader-link);
+}
+
+.archive-item.selected .selection-checkbox {
+  opacity: 1;
+  margin-right: 0;
+  pointer-events: auto;
+}
+
+/* Bulk Action Toolbar */
+.bulk-action-toolbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  padding: 1rem;
+  background: linear-gradient(to top, var(--reader-bg) 80%, transparent);
+  animation: slide-up 0.2s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.bulk-action-toolbar-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0.75rem 1rem;
+  background-color: var(--reader-bg);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 0.75rem;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  backdrop-filter: blur(8px);
+}
+
+.bulk-action-count {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.bulk-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.bulk-action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  background-color: transparent;
+  color: var(--reader-text);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.bulk-action-button:hover {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+
+.bulk-action-button.danger {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.bulk-action-button.danger:hover {
+  background-color: #dc2626;
+  color: white;
+}
+
+.bulk-action-button.secondary {
+  opacity: 0.7;
+}
+
+.bulk-action-button.secondary:hover {
+  opacity: 1;
+}
+
+/* Collection dropdown menu in bulk toolbar */
+.bulk-action-collection-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 0.25rem;
+  min-width: 160px;
+  background-color: var(--reader-bg);
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  border-radius: 0.5rem;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  padding: 0.25rem;
+  z-index: 50;
+}
+
+.bulk-action-collection-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--reader-text);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.bulk-action-collection-item:hover {
+  background-color: rgba(128, 128, 128, 0.1);
+}
+
+.bulk-action-collection-item.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Context menu checkbox */
+.context-menu-checkbox {
+  width: 1rem;
+  height: 1rem;
+  min-width: 1rem;
+  border: 2px solid rgba(128, 128, 128, 0.4);
+  border-radius: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  color: transparent;
+}
+
+.context-menu-checkbox.checked {
+  background-color: var(--reader-link);
+  border-color: var(--reader-link);
+  color: white;
+}
+
+.context-menu-checkbox.indeterminate {
+  background-color: rgba(128, 128, 128, 0.3);
+  border-color: rgba(128, 128, 128, 0.5);
+  color: var(--reader-text);
+}
+
+/* Add padding to bottom of archive content when toolbar is visible */
+.archive-container:has(.bulk-action-toolbar) .archive-content {
+  padding-bottom: 6rem;
+}
+
+/* For browsers that don't support :has() */
+@supports not selector(:has(*)) {
+  .archive-content {
+    padding-bottom: 1.5rem;
+  }
 }

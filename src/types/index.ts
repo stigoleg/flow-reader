@@ -231,6 +231,10 @@ export interface StorageSchema {
   /** @deprecated Use archiveItems instead. Kept for migration. */
   recentDocuments: RecentDocument[];
   customThemes: CustomTheme[];
+  /** User-created collections for organizing archive items */
+  collections?: Collection[];
+  /** Annotations (highlights and notes) per document - documentKey -> annotations */
+  annotations?: Record<string, Annotation[]>;
   onboardingCompleted: boolean;
   exitConfirmationDismissed: boolean;
   /** Deleted items tombstones for sync - maps identifier to deletion timestamp */
@@ -294,14 +298,100 @@ export interface ArchiveItem {
   cachedDocument?: FlowDocument;
   /** File hash for stable identification */
   fileHash?: string;
+  /** Collection IDs this item belongs to (tags-like, can be in multiple) */
+  collectionIds?: string[];
+  /** Word count for statistics tracking */
+  wordCount?: number;
 }
+
+// COLLECTIONS (for organizing archive items)
+
+/** A user-created collection for organizing archive items */
+export interface Collection {
+  /** Unique identifier (UUID) */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Emoji or icon identifier */
+  icon?: string;
+  /** Theme color (hex) */
+  color?: string;
+  /** Whether this is a default collection (cannot be deleted) */
+  isDefault?: boolean;
+  /** When the collection was created */
+  createdAt: number;
+  /** When the collection was last modified */
+  updatedAt: number;
+}
+
+/** Default collections provided out of the box */
+export const DEFAULT_COLLECTIONS: Collection[] = [
+  {
+    id: 'favorites',
+    name: 'Favorites',
+    icon: '⭐',
+    createdAt: 0,
+    updatedAt: 0,
+  },
+  {
+    id: 'reading-list',
+    name: 'Reading List',
+    icon: '📚',
+    createdAt: 0,
+    updatedAt: 0,
+  },
+];
+
+// ANNOTATIONS (for highlighting and notes)
+
+/** Text annotation (highlight or note) */
+export interface Annotation {
+  id: string;
+  type: 'highlight' | 'note';
+  color: string;
+
+  // Position anchor
+  anchor: AnnotationAnchor;
+
+  // Optional note content
+  note?: string;
+
+  // Metadata
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Anchor point for an annotation in the document */
+export interface AnnotationAnchor {
+  /** Block ID where annotation starts */
+  blockId: string;
+  /** Word index within the starting block */
+  startWordIndex: number;
+  /** Block ID where annotation ends (same as blockId for single-block) */
+  endBlockId: string;
+  /** Word index within the ending block */
+  endWordIndex: number;
+  /** Selected text for recovery if DOM changes */
+  textContent: string;
+}
+
+/** Available highlight colors */
+export const HIGHLIGHT_COLORS = [
+  { id: 'yellow', color: '#fef08a', label: 'Yellow' },
+  { id: 'green', color: '#bbf7d0', label: 'Green' },
+  { id: 'blue', color: '#bfdbfe', label: 'Blue' },
+  { id: 'pink', color: '#fbcfe8', label: 'Pink' },
+  { id: 'orange', color: '#fed7aa', label: 'Orange' },
+] as const;
+
+export type HighlightColorId = typeof HIGHLIGHT_COLORS[number]['id'];
 
 // Message types for communication between scripts
 export type MessageType =
   | { type: 'EXTRACT_CONTENT' }
   | { type: 'CONTENT_EXTRACTED'; payload: FlowDocument }
   | { type: 'EXTRACTION_FAILED'; error: string }
-  | { type: 'OPEN_READER'; document: FlowDocument }
+  | { type: 'OPEN_READER'; document?: FlowDocument; navigateToAnnotationId?: string }
   | { type: 'GET_PENDING_DOCUMENT' }
   | { type: 'CONTENT_SCRIPT_READY' }
   | { type: 'GET_SETTINGS' }
@@ -450,3 +540,6 @@ export const THEME_PRESETS: Record<ThemePreset, ThemeColors> = {
     highlightColor: '#fff3cd',
   },
 };
+
+// Re-export statistics types
+export * from './stats';
