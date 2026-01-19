@@ -507,6 +507,13 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const state = get();
     const sessionTime = state.playStartTime ? Date.now() - state.playStartTime : 0;
     
+    // Cancel any pending position save to prevent it from overwriting 100% progress
+    if (positionSaveTimer) {
+      clearTimeout(positionSaveTimer);
+      positionSaveTimer = null;
+    }
+    pendingSavePosition = null;
+    
     // Record session stats with completion flag
     recordSessionStats({
       sessionTimeMs: sessionTime,

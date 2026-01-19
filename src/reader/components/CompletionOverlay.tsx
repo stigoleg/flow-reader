@@ -147,14 +147,25 @@ export default function CompletionOverlay({
               </button>
             )}
             
+            {/* Close Page - closes the reader tab */}
             <button
-              onClick={onReadAgain}
+              onClick={() => window.close()}
               className="w-full py-3 rounded-lg font-medium transition-colors"
               style={{
                 backgroundColor: hasNextChapter 
                   ? 'rgba(128, 128, 128, 0.15)' 
                   : 'var(--reader-link)',
                 color: hasNextChapter ? undefined : '#ffffff',
+              }}
+            >
+              Close Page
+            </button>
+            
+            <button
+              onClick={onReadAgain}
+              className="w-full py-3 rounded-lg font-medium transition-colors"
+              style={{
+                backgroundColor: 'rgba(128, 128, 128, 0.15)',
               }}
             >
               {isBook ? 'Read Chapter Again' : 'Read Again'}
