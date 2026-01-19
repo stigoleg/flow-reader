@@ -462,10 +462,25 @@ describe('Recents Service', () => {
   });
 
   describe('calculateProgress', () => {
-    it('calculates percentage', () => {
+    it('calculates percentage based on blocks completed', () => {
+      // Block 50 of 100 means 51 blocks read (0-50), so 51%
       const progress = calculateProgress(50, 100);
-      expect(progress.percent).toBe(50);
-      expect(progress.label).toBe('50%');
+      expect(progress.percent).toBe(51);
+      expect(progress.label).toBe('51%');
+    });
+
+    it('returns 100% when on the last block', () => {
+      // Block 99 of 100 means all 100 blocks read, so 100%
+      const progress = calculateProgress(99, 100);
+      expect(progress.percent).toBe(100);
+      expect(progress.label).toBe('100%');
+    });
+
+    it('returns 1% when on the first block', () => {
+      // Block 0 of 100 means 1 block read, so 1%
+      const progress = calculateProgress(0, 100);
+      expect(progress.percent).toBe(1);
+      expect(progress.label).toBe('1%');
     });
 
     it('handles zero blocks', () => {
@@ -475,15 +490,17 @@ describe('Recents Service', () => {
     });
 
     it('includes chapter info for books', () => {
+      // Block 25 of 100 means 26 blocks read, so 26%
       const progress = calculateProgress(25, 100, { currentChapter: 2, totalChapters: 10 });
-      expect(progress.percent).toBe(25);
-      expect(progress.label).toBe('Ch 3 of 10 (25%)');
+      expect(progress.percent).toBe(26);
+      expect(progress.label).toBe('Ch 3 of 10 (26%)');
     });
 
-    it('handles first chapter with no progress', () => {
+    it('handles first chapter at first block', () => {
+      // Block 0 means 1% progress
       const progress = calculateProgress(0, 100, { currentChapter: 0, totalChapters: 5 });
-      expect(progress.percent).toBe(0);
-      expect(progress.label).toBe('Ch 1 of 5');
+      expect(progress.percent).toBe(1);
+      expect(progress.label).toBe('Ch 1 of 5 (1%)');
     });
   });
 

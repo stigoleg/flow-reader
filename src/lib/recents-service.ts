@@ -606,8 +606,11 @@ export function calculateProgress(
   totalBlocks: number,
   chapterInfo?: { currentChapter: number; totalChapters: number }
 ): ArchiveProgress {
+  // Use (currentBlockIndex + 1) to represent "blocks completed"
+  // Block 0 = 1/N complete, Block N-1 = N/N = 100% complete
+  // This ensures reading the last block gives 100% progress
   const percent = totalBlocks > 0 
-    ? Math.round((currentBlockIndex / totalBlocks) * 100)
+    ? Math.round(((currentBlockIndex + 1) / totalBlocks) * 100)
     : 0;
   
   let label = `${percent}%`;
