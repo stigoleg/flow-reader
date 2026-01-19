@@ -6,6 +6,8 @@
  * content that fails heuristic checks (low text density, high link density, boilerplate).
  */
 
+import { describeElement } from './dom-utils';
+
 // Configurable thresholds (exported for testing)
 export const MIN_TEXT_CHARS = 80;
 export const MAX_LINK_DENSITY = 0.5;
@@ -30,15 +32,6 @@ export function setCleanupDebug(enabled: boolean): void {
 
 export function getCleanupLogs(): RemovalLog[] {
   return [...removalLogs];
-}
-
-function describeElement(el: Element): string {
-  const tag = el.tagName.toLowerCase();
-  const id = el.id ? `#${el.id}` : '';
-  const className = el.className && typeof el.className === 'string' 
-    ? `.${el.className.split(' ').join('.')}` 
-    : '';
-  return `${tag}${id}${className}`;
 }
 
 function logRemoval(element: Element, reason: string): void {

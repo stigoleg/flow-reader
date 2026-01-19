@@ -25,11 +25,15 @@ import type {
   ReadingGoals,
 } from '@/types';
 import { DEFAULT_READING_STATS } from '@/types';
+import { AsyncMutex } from './async-mutex';
 
 const READING_STATS_KEY = 'readingStats';
 const MAX_DAILY_HISTORY_DAYS = 90;
 const MAX_WPM_HISTORY_ENTRIES = 90;
 const MAX_WEEKLY_HISTORY_WEEKS = 104; // ~2 years of weekly data
+
+/** Mutex for stats read-modify-write operations */
+const statsMutex = new AsyncMutex();
 
 /**
  * Get the current reading stats from storage
@@ -341,71 +345,75 @@ export async function recordReadingSession(params: RecordSessionParams): Promise
     return;
   }
   
-  const stats = await getReadingStats();
-  const today = getTodayDateString();
-  
-  // Update daily stats
-  const dailyStats = getOrCreateDailyStats(stats, today);
-  dailyStats.readingTimeMs += durationMs;
-  dailyStats.wordsRead += wordsRead;
-  
-  // Track documents opened (unique per day)
-  if (!dailyStats.documentsOpened.includes(documentId)) {
-    dailyStats.documentsOpened.push(documentId);
-  }
-  
-  // Track document completion
-  if (completed && !dailyStats.documentsCompleted.includes(documentId)) {
-    dailyStats.documentsCompleted.push(documentId);
-    stats.totalDocumentsCompleted += 1;
-  }
-  
-  stats.dailyStats[today] = dailyStats;
-  
-  // Update lifetime totals
-  stats.totalReadingTimeMs += durationMs;
-  stats.totalWordsRead += wordsRead;
-  
-  // Update streak
-  updateStreak(stats, today);
-  
-  // Update WPM history
-  if (wpm > 0) {
-    updateWpmHistory(stats, today, wpm);
-  }
-  
-  // Update hourly activity tracking
-  updateHourlyActivity(stats, durationMs);
-  
-  // Update personal bests
-  updatePersonalBests(stats, durationMs, wordsRead, wpm, today);
-  
-  // Cleanup old entries
-  cleanupOldDailyStats(stats);
-  
-  // Save
-  await saveReadingStats(stats);
+  return statsMutex.withLock(async () => {
+    const stats = await getReadingStats();
+    const today = getTodayDateString();
+    
+    // Update daily stats
+    const dailyStats = getOrCreateDailyStats(stats, today);
+    dailyStats.readingTimeMs += durationMs;
+    dailyStats.wordsRead += wordsRead;
+    
+    // Track documents opened (unique per day)
+    if (!dailyStats.documentsOpened.includes(documentId)) {
+      dailyStats.documentsOpened.push(documentId);
+    }
+    
+    // Track document completion
+    if (completed && !dailyStats.documentsCompleted.includes(documentId)) {
+      dailyStats.documentsCompleted.push(documentId);
+      stats.totalDocumentsCompleted += 1;
+    }
+    
+    stats.dailyStats[today] = dailyStats;
+    
+    // Update lifetime totals
+    stats.totalReadingTimeMs += durationMs;
+    stats.totalWordsRead += wordsRead;
+    
+    // Update streak
+    updateStreak(stats, today);
+    
+    // Update WPM history
+    if (wpm > 0) {
+      updateWpmHistory(stats, today, wpm);
+    }
+    
+    // Update hourly activity tracking
+    updateHourlyActivity(stats, durationMs);
+    
+    // Update personal bests
+    updatePersonalBests(stats, durationMs, wordsRead, wpm, today);
+    
+    // Cleanup old entries
+    cleanupOldDailyStats(stats);
+    
+    // Save
+    await saveReadingStats(stats);
+  });
 }
 
 /**
  * Record that an annotation was created
  */
 export async function recordAnnotationCreated(): Promise<void> {
-  const stats = await getReadingStats();
-  const today = getTodayDateString();
-  
-  // Update daily stats
-  const dailyStats = getOrCreateDailyStats(stats, today);
-  dailyStats.annotationsCreated += 1;
-  stats.dailyStats[today] = dailyStats;
-  
-  // Update lifetime total
-  stats.totalAnnotationsCreated += 1;
-  
-  // Update streak (creating annotations counts as reading activity)
-  updateStreak(stats, today);
-  
-  await saveReadingStats(stats);
+  return statsMutex.withLock(async () => {
+    const stats = await getReadingStats();
+    const today = getTodayDateString();
+    
+    // Update daily stats
+    const dailyStats = getOrCreateDailyStats(stats, today);
+    dailyStats.annotationsCreated += 1;
+    stats.dailyStats[today] = dailyStats;
+    
+    // Update lifetime total
+    stats.totalAnnotationsCreated += 1;
+    
+    // Update streak (creating annotations counts as reading activity)
+    updateStreak(stats, today);
+    
+    await saveReadingStats(stats);
+  });
 }
 
 /**
@@ -876,9 +884,11 @@ export function getHourlyActivityData(stats: ReadingStats): HourlyActivity[] {
  * Save reading goals
  */
 export async function saveReadingGoals(goals: ReadingGoals): Promise<void> {
-  const stats = await getReadingStats();
-  stats.goals = goals;
-  await saveReadingStats(stats);
+  return statsMutex.withLock(async () => {
+    const stats = await getReadingStats();
+    stats.goals = goals;
+    await saveReadingStats(stats);
+  });
 }
 
 /**

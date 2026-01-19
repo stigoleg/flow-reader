@@ -43,7 +43,9 @@ export async function runMigrations(): Promise<void> {
         return;
       }
 
-      console.log(`FlowReader: Migrating storage from v${currentVersion} to v${CURRENT_STORAGE_VERSION}`);
+      if (import.meta.env.DEV) {
+        console.log(`FlowReader: Migrating storage from v${currentVersion} to v${CURRENT_STORAGE_VERSION}`);
+      }
 
       let migratedData = { ...data };
 
@@ -52,7 +54,9 @@ export async function runMigrations(): Promise<void> {
         const migrationFn = migrations[version];
         if (migrationFn) {
           try {
-            console.log(`FlowReader: Running migration to v${version}`);
+            if (import.meta.env.DEV) {
+              console.log(`FlowReader: Running migration to v${version}`);
+            }
             migratedData = migrationFn(migratedData);
             migratedData.version = version;
             
@@ -62,7 +66,9 @@ export async function runMigrations(): Promise<void> {
                 if (chrome.runtime.lastError) {
                   rejectStep(new Error(chrome.runtime.lastError.message));
                 } else {
-                  console.log(`FlowReader: Migration to v${version} saved`);
+                  if (import.meta.env.DEV) {
+                    console.log(`FlowReader: Migration to v${version} saved`);
+                  }
                   resolveStep();
                 }
               });
@@ -75,7 +81,9 @@ export async function runMigrations(): Promise<void> {
         }
       }
 
-      console.log(`FlowReader: Migration complete. Now at v${CURRENT_STORAGE_VERSION}`);
+      if (import.meta.env.DEV) {
+        console.log(`FlowReader: Migration complete. Now at v${CURRENT_STORAGE_VERSION}`);
+      }
       resolve();
     });
   });
@@ -240,3 +248,11 @@ function generateDeviceId(): string {
   crypto.getRandomValues(array);
   return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
 }
+
+// Export internal functions for testing
+export const _testing = {
+  migrateV1ToV2,
+  migrateV2ToV3,
+  mapSourceToType,
+  extractSourceLabel,
+};

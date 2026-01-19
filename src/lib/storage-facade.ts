@@ -13,12 +13,14 @@ import type {
   ArchiveProgress,
   Collection,
   Annotation,
+  ReadingStats,
 } from '@/types';
 import { DEFAULT_SETTINGS, DEFAULT_COLLECTIONS } from '@/types';
 import { CURRENT_STORAGE_VERSION, runMigrations } from './migrations';
 import { normalizeUrl } from './url-utils';
 import * as chromeStorage from './chrome-storage';
 import { storageMutex } from './async-mutex';
+import { getReadingStats, saveReadingStats } from './stats-service';
 
 
 /** Extended storage schema with sync-related fields */
@@ -62,6 +64,9 @@ export interface SyncStateDocument {
   
   onboardingCompleted: boolean;
   exitConfirmationDismissed: boolean;
+
+  /** Reading statistics (aggregated reading data) */
+  readingStats?: ReadingStats;
 }
 
 /** Archive item for sync (excludes cachedDocument) */
@@ -274,6 +279,7 @@ class StorageFacadeImpl {
   async getStateForSync(): Promise<SyncStateDocument> {
     const state = await this.getState();
     const deviceId = await this.getDeviceId();
+    const readingStats = await getReadingStats();
 
     const syncArchiveItems: SyncArchiveItem[] = state.archiveItems.map(item => ({
       id: item.id,
@@ -305,6 +311,7 @@ class StorageFacadeImpl {
       deletedItems: state.deletedItems,
       onboardingCompleted: state.onboardingCompleted,
       exitConfirmationDismissed: state.exitConfirmationDismissed,
+      readingStats,
     };
   }
 
@@ -343,6 +350,11 @@ class StorageFacadeImpl {
         lastSyncTime: Date.now(),
         lastSyncError: null,
       });
+
+      // Save reading stats separately (stored in different storage key)
+      if (remote.readingStats) {
+        await saveReadingStats(remote.readingStats);
+      }
     });
   }
 

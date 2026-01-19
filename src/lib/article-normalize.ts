@@ -6,6 +6,8 @@
  * and normalizes inline elements while preserving semantic meaning.
  */
 
+import { describeElement } from './dom-utils';
+
 // Debug mode
 let debugEnabled = false;
 
@@ -26,15 +28,6 @@ export function setNormalizeDebug(enabled: boolean): void {
 
 export function getNormalizeLogs(): NormalizationLog[] {
   return [...normalizationLogs];
-}
-
-function describeElement(el: Element): string {
-  const tag = el.tagName.toLowerCase();
-  const id = el.id ? `#${el.id}` : '';
-  const className = el.className && typeof el.className === 'string'
-    ? `.${el.className.split(' ').join('.')}`
-    : '';
-  return `${tag}${id}${className}`;
 }
 
 function logNormalization(element: Element, action: string, reason: string): void {

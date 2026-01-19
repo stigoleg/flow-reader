@@ -16,6 +16,7 @@ import type {
   ArchiveProgress,
   Collection,
   Annotation,
+  ReadingStats,
 } from '@/types';
 
 
@@ -179,6 +180,9 @@ export interface SyncStateDocument {
   // Flags
   onboardingCompleted: boolean;
   exitConfirmationDismissed: boolean;
+
+  // Reading statistics (aggregated reading data)
+  readingStats?: ReadingStats;
 }
 
 

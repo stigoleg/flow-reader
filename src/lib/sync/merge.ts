@@ -6,7 +6,8 @@
  * and "last writer wins" for other settings.
  */
 
-import type { ReadingPosition, Collection, Annotation } from '@/types';
+import type { ReadingPosition, Collection, Annotation, ReadingStats } from '@/types';
+import { DEFAULT_READING_STATS } from '@/types';
 import type { 
   SyncStateDocument, 
   SyncArchiveItem, 
@@ -94,6 +95,9 @@ export function mergeStates(
   // Merge annotations
   const mergedAnnotations = mergeAnnotations(local.annotations, remote.annotations, remoteIsNewer);
   
+  // Merge reading stats (sum totals, keep highest streaks, merge histories)
+  const mergedReadingStats = mergeReadingStats(local.readingStats, remote.readingStats);
+  
   // Determine if there were actual changes
   const hasChanges = conflicts.length > 0 || 
     mergedArchive.length !== local.archiveItems.length ||
@@ -118,6 +122,9 @@ export function mergeStates(
     
     // Content manifest from remote (content sync will update this)
     contentManifest: remote.contentManifest || local.contentManifest,
+    
+    // Reading stats (merged from both devices)
+    readingStats: mergedReadingStats,
     
     // Flags from winner
     onboardingCompleted: winner.onboardingCompleted,
@@ -590,6 +597,164 @@ function positionsEqual(a: ReadingPosition, b: ReadingPosition): boolean {
   return a.blockIndex === b.blockIndex &&
     a.charOffset === b.charOffset &&
     a.chapterIndex === b.chapterIndex;
+}
+
+
+/**
+ * Merge reading statistics from local and remote.
+ * Strategy:
+ * - Totals: Take max values (they may overlap from same device syncing)
+ * - Streaks: Keep the highest values
+ * - Daily/Weekly stats: Merge by date, take max values for same dates
+ * - WPM history: Merge by date, prefer higher session count
+ * - Hourly activity: Take max values for same hours
+ * - Personal bests: Keep highest records
+ */
+function mergeReadingStats(
+  localStats: ReadingStats | undefined,
+  remoteStats: ReadingStats | undefined
+): ReadingStats {
+  const local = localStats || DEFAULT_READING_STATS;
+  const remote = remoteStats || DEFAULT_READING_STATS;
+  
+  // Merge daily stats (take max values for same dates to avoid double-counting)
+  const mergedDailyStats: Record<string, typeof local.dailyStats[string]> = {};
+  const allDates = new Set([...Object.keys(local.dailyStats), ...Object.keys(remote.dailyStats)]);
+  for (const date of allDates) {
+    const localDay = local.dailyStats[date];
+    const remoteDay = remote.dailyStats[date];
+    if (localDay && remoteDay) {
+      // Merge same-date entries
+      const mergedDocuments = new Set([...localDay.documentsOpened, ...remoteDay.documentsOpened]);
+      const mergedCompleted = new Set([...localDay.documentsCompleted, ...remoteDay.documentsCompleted]);
+      mergedDailyStats[date] = {
+        date,
+        readingTimeMs: Math.max(localDay.readingTimeMs, remoteDay.readingTimeMs),
+        wordsRead: Math.max(localDay.wordsRead, remoteDay.wordsRead),
+        documentsOpened: Array.from(mergedDocuments),
+        documentsCompleted: Array.from(mergedCompleted),
+        annotationsCreated: Math.max(localDay.annotationsCreated, remoteDay.annotationsCreated),
+      };
+    } else {
+      mergedDailyStats[date] = localDay || remoteDay;
+    }
+  }
+  
+  // Merge weekly stats (take max values for same weeks)
+  const mergedWeeklyStats: Record<string, typeof local.weeklyStats[string]> = {};
+  const allWeeks = new Set([...Object.keys(local.weeklyStats), ...Object.keys(remote.weeklyStats)]);
+  for (const weekStart of allWeeks) {
+    const localWeek = local.weeklyStats[weekStart];
+    const remoteWeek = remote.weeklyStats[weekStart];
+    if (localWeek && remoteWeek) {
+      mergedWeeklyStats[weekStart] = {
+        weekStart,
+        readingTimeMs: Math.max(localWeek.readingTimeMs, remoteWeek.readingTimeMs),
+        wordsRead: Math.max(localWeek.wordsRead, remoteWeek.wordsRead),
+        documentsCompleted: Math.max(localWeek.documentsCompleted, remoteWeek.documentsCompleted),
+        annotationsCreated: Math.max(localWeek.annotationsCreated, remoteWeek.annotationsCreated),
+        avgWpm: Math.round((localWeek.avgWpm + remoteWeek.avgWpm) / 2),
+        sessionCount: Math.max(localWeek.sessionCount, remoteWeek.sessionCount),
+        activeDays: Math.max(localWeek.activeDays, remoteWeek.activeDays),
+      };
+    } else {
+      mergedWeeklyStats[weekStart] = localWeek || remoteWeek;
+    }
+  }
+  
+  // Merge WPM history (prefer entries with higher session count for same dates)
+  const wpmByDate = new Map<string, typeof local.wpmHistory[number]>();
+  for (const entry of [...local.wpmHistory, ...remote.wpmHistory]) {
+    const existing = wpmByDate.get(entry.date);
+    if (!existing || entry.sessionCount > existing.sessionCount) {
+      wpmByDate.set(entry.date, entry);
+    }
+  }
+  const mergedWpmHistory = Array.from(wpmByDate.values())
+    .sort((a, b) => a.date.localeCompare(b.date));
+  
+  // Merge hourly activity (take max for each hour to avoid double-counting)
+  const mergedHourlyActivity = Array.from({ length: 24 }, (_, hour) => {
+    const localHour = local.hourlyActivity.find(h => h.hour === hour);
+    const remoteHour = remote.hourlyActivity.find(h => h.hour === hour);
+    return {
+      hour,
+      totalReadingTimeMs: Math.max(localHour?.totalReadingTimeMs || 0, remoteHour?.totalReadingTimeMs || 0),
+      sessionCount: Math.max(localHour?.sessionCount || 0, remoteHour?.sessionCount || 0),
+    };
+  }).filter(h => h.totalReadingTimeMs > 0 || h.sessionCount > 0);
+  
+  // Merge personal bests (keep the best records)
+  const mergedPersonalBests = {
+    longestSession: pickBestSessionRecord(local.personalBests.longestSession, remote.personalBests.longestSession),
+    mostWordsInDay: pickBestWordsRecord(local.personalBests.mostWordsInDay, remote.personalBests.mostWordsInDay),
+    fastestWpm: pickBestWpmRecord(local.personalBests.fastestWpm, remote.personalBests.fastestWpm),
+  };
+  
+  // Determine the most recent reading date
+  const lastReadingDate = [local.lastReadingDate, remote.lastReadingDate]
+    .filter(Boolean)
+    .sort()
+    .pop() || null;
+  
+  return {
+    // Take max of totals to avoid double-counting from same device
+    totalReadingTimeMs: Math.max(local.totalReadingTimeMs, remote.totalReadingTimeMs),
+    totalWordsRead: Math.max(local.totalWordsRead, remote.totalWordsRead),
+    totalDocumentsCompleted: Math.max(local.totalDocumentsCompleted, remote.totalDocumentsCompleted),
+    totalAnnotationsCreated: Math.max(local.totalAnnotationsCreated, remote.totalAnnotationsCreated),
+    
+    // Streaks - keep the highest
+    currentStreak: Math.max(local.currentStreak, remote.currentStreak),
+    longestStreak: Math.max(local.longestStreak, remote.longestStreak),
+    lastReadingDate,
+    
+    // Merged histories
+    dailyStats: mergedDailyStats,
+    weeklyStats: mergedWeeklyStats,
+    wpmHistory: mergedWpmHistory,
+    hourlyActivity: mergedHourlyActivity,
+    personalBests: mergedPersonalBests,
+    
+    // Goals from the device with most recent reading
+    goals: (local.lastReadingDate || '') >= (remote.lastReadingDate || '') ? local.goals : remote.goals,
+  };
+}
+
+/**
+ * Pick the better of two longest session records
+ */
+function pickBestSessionRecord(
+  a: { date: string; durationMs: number } | null,
+  b: { date: string; durationMs: number } | null
+): { date: string; durationMs: number } | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a.durationMs >= b.durationMs ? a : b;
+}
+
+/**
+ * Pick the better of two most words in day records
+ */
+function pickBestWordsRecord(
+  a: { date: string; words: number } | null,
+  b: { date: string; words: number } | null
+): { date: string; words: number } | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a.words >= b.words ? a : b;
+}
+
+/**
+ * Pick the better of two fastest WPM records
+ */
+function pickBestWpmRecord(
+  a: { date: string; wpm: number } | null,
+  b: { date: string; wpm: number } | null
+): { date: string; wpm: number } | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a.wpm >= b.wpm ? a : b;
 }
 
 

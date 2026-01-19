@@ -412,16 +412,17 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   columnWidth: 680,
   margins: 40,
 
-  backgroundColor: '#ffffff',
-  textColor: '#1a1a1a',
-  linkColor: '#b58900',  // Golden amber - matches warm yellow highlight
-  selectionColor: '#b4d5fe',
-  highlightColor: '#fff3cd',
+  // Soft Focus theme as default
+  backgroundColor: '#f5f5f0',
+  textColor: '#404040',
+  linkColor: '#4a7c59',
+  selectionColor: '#d4e5d8',
+  highlightColor: '#d4e8c8',
 
   textAlign: 'left',
   hyphenation: false,
 
-  baseWPM: 200,
+  baseWPM: 260,
   targetWPM: 300,
   rampEnabled: false,
   rampStep: 10,

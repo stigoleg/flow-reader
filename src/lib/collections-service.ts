@@ -8,6 +8,7 @@
 import type { Collection, ArchiveItem } from '@/types';
 import { DEFAULT_COLLECTIONS } from '@/types';
 import { storageFacade } from './storage-facade';
+import { storageMutex } from './async-mutex';
 
 
 /**
@@ -35,21 +36,23 @@ export async function createCollection(
   name: string,
   options?: { icon?: string; color?: string }
 ): Promise<Collection> {
-  const collections = await getCollections();
-  
-  const newCollection: Collection = {
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    icon: options?.icon,
-    color: options?.color,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  };
-  
-  collections.push(newCollection);
-  await saveCollections(collections);
-  
-  return newCollection;
+  return storageMutex.withLock(async () => {
+    const collections = await getCollections();
+    
+    const newCollection: Collection = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      icon: options?.icon,
+      color: options?.color,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    
+    collections.push(newCollection);
+    await saveCollections(collections);
+    
+    return newCollection;
+  });
 }
 
 
@@ -60,25 +63,27 @@ export async function updateCollection(
   id: string,
   updates: Partial<Pick<Collection, 'name' | 'icon' | 'color'>>
 ): Promise<Collection | null> {
-  const collections = await getCollections();
-  const index = collections.findIndex(c => c.id === id);
-  
-  if (index < 0) {
-    return null;
-  }
-  
-  const collection = collections[index];
-  
-  const updated: Collection = {
-    ...collection,
-    ...updates,
-    updatedAt: Date.now(),
-  };
-  
-  collections[index] = updated;
-  await saveCollections(collections);
-  
-  return updated;
+  return storageMutex.withLock(async () => {
+    const collections = await getCollections();
+    const index = collections.findIndex(c => c.id === id);
+    
+    if (index < 0) {
+      return null;
+    }
+    
+    const collection = collections[index];
+    
+    const updated: Collection = {
+      ...collection,
+      ...updates,
+      updatedAt: Date.now(),
+    };
+    
+    collections[index] = updated;
+    await saveCollections(collections);
+    
+    return updated;
+  });
 }
 
 
@@ -87,39 +92,41 @@ export async function updateCollection(
  * Also removes the collection ID from all archive items.
  */
 export async function deleteCollection(id: string): Promise<boolean> {
-  const collections = await getCollections();
-  const collection = collections.find(c => c.id === id);
-  
-  if (!collection) {
-    return false;
-  }
-  
-  // Remove from collections list
-  const filtered = collections.filter(c => c.id !== id);
-  await saveCollections(filtered);
-  
-  // Remove collection ID from all archive items
-  const state = await storageFacade.getState();
-  const updatedItems = state.archiveItems.map(item => {
-    if (item.collectionIds?.includes(id)) {
-      return {
-        ...item,
-        collectionIds: item.collectionIds.filter(cid => cid !== id),
-      };
+  return storageMutex.withLock(async () => {
+    const collections = await getCollections();
+    const collection = collections.find(c => c.id === id);
+    
+    if (!collection) {
+      return false;
     }
-    return item;
+    
+    // Remove from collections list
+    const filtered = collections.filter(c => c.id !== id);
+    await saveCollections(filtered);
+    
+    // Remove collection ID from all archive items
+    const state = await storageFacade.getState();
+    const updatedItems = state.archiveItems.map(item => {
+      if (item.collectionIds?.includes(id)) {
+        return {
+          ...item,
+          collectionIds: item.collectionIds.filter(cid => cid !== id),
+        };
+      }
+      return item;
+    });
+    
+    // Only save if there were changes
+    const hasChanges = updatedItems.some((item, i) => 
+      item.collectionIds !== state.archiveItems[i].collectionIds
+    );
+    
+    if (hasChanges) {
+      await storageFacade.updateArchiveItems(updatedItems);
+    }
+    
+    return true;
   });
-  
-  // Only save if there were changes
-  const hasChanges = updatedItems.some((item, i) => 
-    item.collectionIds !== state.archiveItems[i].collectionIds
-  );
-  
-  if (hasChanges) {
-    await storageFacade.updateArchiveItems(updatedItems);
-  }
-  
-  return true;
 }
 
 
@@ -144,33 +151,35 @@ export async function addItemToCollection(
   itemId: string,
   collectionId: string
 ): Promise<ArchiveItem | null> {
-  const state = await storageFacade.getState();
-  const items = state.archiveItems;
-  const index = items.findIndex(item => item.id === itemId);
-  
-  if (index < 0) {
-    return null;
-  }
-  
-  const item = items[index];
-  const collectionIds = new Set(item.collectionIds ?? []);
-  
-  // Already in collection
-  if (collectionIds.has(collectionId)) {
-    return item;
-  }
-  
-  collectionIds.add(collectionId);
-  
-  const updated: ArchiveItem = {
-    ...item,
-    collectionIds: Array.from(collectionIds),
-  };
-  
-  items[index] = updated;
-  await storageFacade.updateArchiveItems(items);
-  
-  return updated;
+  return storageMutex.withLock(async () => {
+    const state = await storageFacade.getState();
+    const items = state.archiveItems;
+    const index = items.findIndex(item => item.id === itemId);
+    
+    if (index < 0) {
+      return null;
+    }
+    
+    const item = items[index];
+    const collectionIds = new Set(item.collectionIds ?? []);
+    
+    // Already in collection
+    if (collectionIds.has(collectionId)) {
+      return item;
+    }
+    
+    collectionIds.add(collectionId);
+    
+    const updated: ArchiveItem = {
+      ...item,
+      collectionIds: Array.from(collectionIds),
+    };
+    
+    items[index] = updated;
+    await storageFacade.updateArchiveItems(items);
+    
+    return updated;
+  });
 }
 
 
@@ -181,35 +190,37 @@ export async function removeItemFromCollection(
   itemId: string,
   collectionId: string
 ): Promise<ArchiveItem | null> {
-  const state = await storageFacade.getState();
-  const items = state.archiveItems;
-  const index = items.findIndex(item => item.id === itemId);
-  
-  if (index < 0) {
-    return null;
-  }
-  
-  const item = items[index];
-  
-  // Not in collection
-  if (!item.collectionIds?.includes(collectionId)) {
-    return item;
-  }
-  
-  const updated: ArchiveItem = {
-    ...item,
-    collectionIds: item.collectionIds.filter(id => id !== collectionId),
-  };
-  
-  // Clean up empty array
-  if (updated.collectionIds?.length === 0) {
-    delete updated.collectionIds;
-  }
-  
-  items[index] = updated;
-  await storageFacade.updateArchiveItems(items);
-  
-  return updated;
+  return storageMutex.withLock(async () => {
+    const state = await storageFacade.getState();
+    const items = state.archiveItems;
+    const index = items.findIndex(item => item.id === itemId);
+    
+    if (index < 0) {
+      return null;
+    }
+    
+    const item = items[index];
+    
+    // Not in collection
+    if (!item.collectionIds?.includes(collectionId)) {
+      return item;
+    }
+    
+    const updated: ArchiveItem = {
+      ...item,
+      collectionIds: item.collectionIds.filter(id => id !== collectionId),
+    };
+    
+    // Clean up empty array
+    if (updated.collectionIds?.length === 0) {
+      delete updated.collectionIds;
+    }
+    
+    items[index] = updated;
+    await storageFacade.updateArchiveItems(items);
+    
+    return updated;
+  });
 }
 
 
@@ -220,24 +231,26 @@ export async function setItemCollections(
   itemId: string,
   collectionIds: string[]
 ): Promise<ArchiveItem | null> {
-  const state = await storageFacade.getState();
-  const items = state.archiveItems;
-  const index = items.findIndex(item => item.id === itemId);
-  
-  if (index < 0) {
-    return null;
-  }
-  
-  const item = items[index];
-  const updated: ArchiveItem = {
-    ...item,
-    collectionIds: collectionIds.length > 0 ? collectionIds : undefined,
-  };
-  
-  items[index] = updated;
-  await storageFacade.updateArchiveItems(items);
-  
-  return updated;
+  return storageMutex.withLock(async () => {
+    const state = await storageFacade.getState();
+    const items = state.archiveItems;
+    const index = items.findIndex(item => item.id === itemId);
+    
+    if (index < 0) {
+      return null;
+    }
+    
+    const item = items[index];
+    const updated: ArchiveItem = {
+      ...item,
+      collectionIds: collectionIds.length > 0 ? collectionIds : undefined,
+    };
+    
+    items[index] = updated;
+    await storageFacade.updateArchiveItems(items);
+    
+    return updated;
+  });
 }
 
 
@@ -248,40 +261,42 @@ export async function toggleItemInCollection(
   itemId: string,
   collectionId: string
 ): Promise<{ item: ArchiveItem; added: boolean } | null> {
-  const state = await storageFacade.getState();
-  const items = state.archiveItems;
-  const index = items.findIndex(item => item.id === itemId);
-  
-  if (index < 0) {
-    return null;
-  }
-  
-  const item = items[index];
-  const isInCollection = item.collectionIds?.includes(collectionId) ?? false;
-  
-  let updated: ArchiveItem;
-  
-  if (isInCollection) {
-    // Remove from collection
-    updated = {
-      ...item,
-      collectionIds: item.collectionIds?.filter(id => id !== collectionId),
-    };
-    if (updated.collectionIds?.length === 0) {
-      delete updated.collectionIds;
+  return storageMutex.withLock(async () => {
+    const state = await storageFacade.getState();
+    const items = state.archiveItems;
+    const index = items.findIndex(item => item.id === itemId);
+    
+    if (index < 0) {
+      return null;
     }
-  } else {
-    // Add to collection
-    updated = {
-      ...item,
-      collectionIds: [...(item.collectionIds ?? []), collectionId],
-    };
-  }
-  
-  items[index] = updated;
-  await storageFacade.updateArchiveItems(items);
-  
-  return { item: updated, added: !isInCollection };
+    
+    const item = items[index];
+    const isInCollection = item.collectionIds?.includes(collectionId) ?? false;
+    
+    let updated: ArchiveItem;
+    
+    if (isInCollection) {
+      // Remove from collection
+      updated = {
+        ...item,
+        collectionIds: item.collectionIds?.filter(id => id !== collectionId),
+      };
+      if (updated.collectionIds?.length === 0) {
+        delete updated.collectionIds;
+      }
+    } else {
+      // Add to collection
+      updated = {
+        ...item,
+        collectionIds: [...(item.collectionIds ?? []), collectionId],
+      };
+    }
+    
+    items[index] = updated;
+    await storageFacade.updateArchiveItems(items);
+    
+    return { item: updated, added: !isInCollection };
+  });
 }
 
 
@@ -303,34 +318,36 @@ export async function addItemsToCollection(
   itemIds: string[],
   collectionId: string
 ): Promise<void> {
-  const state = await storageFacade.getState();
-  const items = state.archiveItems;
-  const itemIdSet = new Set(itemIds);
-  
-  let hasChanges = false;
-  
-  const updatedItems = items.map(item => {
-    if (!itemIdSet.has(item.id)) {
-      return item;
+  return storageMutex.withLock(async () => {
+    const state = await storageFacade.getState();
+    const items = state.archiveItems;
+    const itemIdSet = new Set(itemIds);
+    
+    let hasChanges = false;
+    
+    const updatedItems = items.map(item => {
+      if (!itemIdSet.has(item.id)) {
+        return item;
+      }
+      
+      const collectionIds = new Set(item.collectionIds ?? []);
+      if (collectionIds.has(collectionId)) {
+        return item;
+      }
+      
+      collectionIds.add(collectionId);
+      hasChanges = true;
+      
+      return {
+        ...item,
+        collectionIds: Array.from(collectionIds),
+      };
+    });
+    
+    if (hasChanges) {
+      await storageFacade.updateArchiveItems(updatedItems);
     }
-    
-    const collectionIds = new Set(item.collectionIds ?? []);
-    if (collectionIds.has(collectionId)) {
-      return item;
-    }
-    
-    collectionIds.add(collectionId);
-    hasChanges = true;
-    
-    return {
-      ...item,
-      collectionIds: Array.from(collectionIds),
-    };
   });
-  
-  if (hasChanges) {
-    await storageFacade.updateArchiveItems(updatedItems);
-  }
 }
 
 
@@ -341,31 +358,33 @@ export async function removeItemsFromCollection(
   itemIds: string[],
   collectionId: string
 ): Promise<void> {
-  const state = await storageFacade.getState();
-  const items = state.archiveItems;
-  const itemIdSet = new Set(itemIds);
-  
-  let hasChanges = false;
-  
-  const updatedItems = items.map(item => {
-    if (!itemIdSet.has(item.id)) {
-      return item;
+  return storageMutex.withLock(async () => {
+    const state = await storageFacade.getState();
+    const items = state.archiveItems;
+    const itemIdSet = new Set(itemIds);
+    
+    let hasChanges = false;
+    
+    const updatedItems = items.map(item => {
+      if (!itemIdSet.has(item.id)) {
+        return item;
+      }
+      
+      if (!item.collectionIds?.includes(collectionId)) {
+        return item;
+      }
+      
+      hasChanges = true;
+      const newCollectionIds = item.collectionIds.filter(id => id !== collectionId);
+      
+      return {
+        ...item,
+        collectionIds: newCollectionIds.length > 0 ? newCollectionIds : undefined,
+      };
+    });
+    
+    if (hasChanges) {
+      await storageFacade.updateArchiveItems(updatedItems);
     }
-    
-    if (!item.collectionIds?.includes(collectionId)) {
-      return item;
-    }
-    
-    hasChanges = true;
-    const newCollectionIds = item.collectionIds.filter(id => id !== collectionId);
-    
-    return {
-      ...item,
-      collectionIds: newCollectionIds.length > 0 ? newCollectionIds : undefined,
-    };
   });
-  
-  if (hasChanges) {
-    await storageFacade.updateArchiveItems(updatedItems);
-  }
 }

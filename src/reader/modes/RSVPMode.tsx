@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { tokenizeForRSVP, calculateTokenDuration, findORP, getWordCount } from '@/lib/tokenizer';
 import { useReaderStore } from '../store';
 import { useSpeedRamp } from '../hooks/useSpeedRamp';
@@ -21,7 +21,6 @@ export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
     setRsvpTokenCount,
     rsvpAdvance,
   } = useReaderStore();
-  const [showWarning, setShowWarning] = useState(true);
   const timerRef = useRef<number | null>(null);
 
   const tokens = tokenizeForRSVP(text, settings.rsvpChunkSize);
@@ -68,9 +67,6 @@ export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
     };
   }, [isPlaying, currentRsvpIndex, currentToken, wpm, settings.rsvpPauseOnPunctuation, rsvpAdvance]);
 
-  // Dismiss warning
-  const dismissWarning = () => setShowWarning(false);
-
   if (!currentToken) {
     return (
       <div className="rsvp-container">
@@ -100,44 +96,6 @@ export default function RSVPMode({ text, wpm, isPlaying }: RSVPModeProps) {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center pt-16 pb-8 px-4">
-      {/* Warning modal */}
-      {showWarning && (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 bg-black/50 z-50" />
-
-          {/* Modal */}
-          <div
-            className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-md rounded-xl shadow-2xl z-50 overflow-hidden"
-            style={{
-              backgroundColor: 'var(--reader-bg)',
-              color: 'var(--reader-text)',
-              border: '1px solid rgba(128, 128, 128, 0.3)',
-            }}
-          >
-            <div className="p-6">
-              <h2 className="text-lg font-semibold mb-3">RSVP Mode</h2>
-              <p className="text-sm opacity-80 mb-4">
-                Rapid Serial Visual Presentation shows one word at a time at high speed.
-                While this can help train reading speed, research suggests it may reduce
-                comprehension for long-form reading. Use this mode for training exercises
-                rather than important content.
-              </p>
-              <button
-                onClick={dismissWarning}
-                className="w-full py-2 rounded-lg font-medium transition-colors"
-                style={{
-                  backgroundColor: 'var(--reader-link)',
-                  color: '#ffffff',
-                }}
-              >
-                I understand, continue
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
       {/* RSVP display */}
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">

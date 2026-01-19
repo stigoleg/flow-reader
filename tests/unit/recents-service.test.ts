@@ -490,17 +490,35 @@ describe('Recents Service', () => {
     });
 
     it('includes chapter info for books', () => {
-      // Block 25 of 100 means 26 blocks read, so 26%
-      const progress = calculateProgress(25, 100, { currentChapter: 2, totalChapters: 10 });
-      expect(progress.percent).toBe(26);
-      expect(progress.label).toBe('Ch 3 of 10 (26%)');
+      // Book with 10 chapters, each with 1000 words = 10000 total words
+      // Currently on chapter 2 (0-indexed), block 25 of 100 in that chapter
+      // Words in prev chapters: 2 * 1000 = 2000
+      // Words in current chapter: 1000 * (26/100) = 260
+      // Total progress: (2000 + 260) / 10000 = 22.6% -> 23%
+      const chapterWordCounts = Array(10).fill(1000);
+      const progress = calculateProgress(25, 100, { 
+        currentChapter: 2, 
+        totalChapters: 10,
+        chapterWordCounts,
+      });
+      expect(progress.percent).toBe(23);
+      expect(progress.label).toBe('Ch 3 of 10 (23%)');
     });
 
     it('handles first chapter at first block', () => {
-      // Block 0 means 1% progress
-      const progress = calculateProgress(0, 100, { currentChapter: 0, totalChapters: 5 });
-      expect(progress.percent).toBe(1);
-      expect(progress.label).toBe('Ch 1 of 5 (1%)');
+      // Book with 5 chapters, each with 1000 words = 5000 total words
+      // Currently on chapter 0, block 0 of 100
+      // Words in prev chapters: 0
+      // Words in current chapter: 1000 * (1/100) = 10
+      // Total progress: 10 / 5000 = 0.2% -> 0%
+      const chapterWordCounts = Array(5).fill(1000);
+      const progress = calculateProgress(0, 100, { 
+        currentChapter: 0, 
+        totalChapters: 5,
+        chapterWordCounts,
+      });
+      expect(progress.percent).toBe(0);
+      expect(progress.label).toBe('Ch 1 of 5 (0%)');
     });
   });
 

@@ -137,7 +137,9 @@ export function SyncSettingsSection() {
       
       debounceTimer = setTimeout(async () => {
         debounceTimer = null;
-        console.log('SyncSettingsSection: Auto-syncing after storage change');
+        if (import.meta.env.DEV) {
+          console.log('SyncSettingsSection: Auto-syncing after storage change');
+        }
         try {
           await syncService.syncNow();
         } catch (error) {

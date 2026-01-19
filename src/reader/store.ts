@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { FlowDocument, ReaderSettings, ReadingMode, Annotation, AnnotationAnchor } from '@/types';
 import { DEFAULT_SETTINGS, HIGHLIGHT_COLORS } from '@/types';
 import { getSettings, saveSettings, savePosition, getPosition, isExitConfirmationDismissed, dismissExitConfirmation, saveCurrentDocument } from '@/lib/storage';
-import { addRecent, mapSourceToType, getSourceLabel, shouldCacheDocument, calculateProgress, updateLastOpened, updateArchiveItem } from '@/lib/recents-service';
+import { addRecent, mapSourceToType, getSourceLabel, shouldCacheDocument, calculateProgress, updateLastOpened, updateArchiveItem, flushPendingArchiveWrites, type BookProgressInfo } from '@/lib/recents-service';
 import { pacingToWordCount, wordCountToRsvpIndex, rsvpIndexToWordCount, wordCountToPacing } from '@/lib/position-utils';
 import { 
   getAnnotations, 
@@ -25,6 +25,50 @@ let pendingSavePosition: (() => Promise<void>) | null = null;
 
 let settingsSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingSettings: ReaderSettings | null = null;
+
+/**
+ * Flush any pending debounced saves immediately.
+ * Call this before page unload to prevent data loss.
+ * Uses synchronous storage where possible since beforeunload has limited async support.
+ */
+function flushPendingReaderWrites(): void {
+  // Flush pending position save
+  if (positionSaveTimer) {
+    clearTimeout(positionSaveTimer);
+    positionSaveTimer = null;
+  }
+  if (pendingSavePosition) {
+    // Fire off the save - can't truly await in beforeunload but this gives it the best chance
+    pendingSavePosition().catch(err => {
+      console.error('[ReaderStore] Failed to flush position on unload:', err);
+    });
+    pendingSavePosition = null;
+  }
+  
+  // Flush pending settings save
+  if (settingsSaveTimer) {
+    clearTimeout(settingsSaveTimer);
+    settingsSaveTimer = null;
+  }
+  if (pendingSettings) {
+    saveSettings(pendingSettings).catch(err => {
+      console.error('[ReaderStore] Failed to flush settings on unload:', err);
+    });
+    pendingSettings = null;
+  }
+  
+  // Flush pending archive item writes (position/progress updates)
+  flushPendingArchiveWrites().catch(err => {
+    console.error('[ReaderStore] Failed to flush archive writes on unload:', err);
+  });
+}
+
+// Register beforeunload handler to flush pending writes when tab closes
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    flushPendingReaderWrites();
+  });
+}
 
 /**
  * Debounced settings save to prevent storage thrashing when rapidly adjusting WPM.
@@ -321,10 +365,16 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     if (state.isPlaying) {
       const sessionTime = state.playStartTime ? Date.now() - state.playStartTime : 0;
       
-      // Record session stats
-      const progress = state.document 
-        ? calculateProgress(state.currentBlockIndex, state.document.blocks.length).percent
-        : 0;
+      // Record session stats with book-aware progress
+      let progress = 0;
+      if (state.document) {
+        const bookInfo: BookProgressInfo | undefined = state.document.book ? {
+          currentChapter: state.currentChapterIndex,
+          totalChapters: state.document.book.chapters.length,
+          chapterWordCounts: state.document.book.chapters.map(ch => ch.wordCount),
+        } : undefined;
+        progress = calculateProgress(state.currentBlockIndex, state.document.blocks.length, bookInfo).percent;
+      }
       recordSessionStats({
         sessionTimeMs: sessionTime,
         wpm: state.currentWPM,
@@ -352,10 +402,16 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     } else if (!playing && state.isPlaying) {
       const sessionTime = state.playStartTime ? Date.now() - state.playStartTime : 0;
       
-      // Record session stats
-      const progress = state.document 
-        ? calculateProgress(state.currentBlockIndex, state.document.blocks.length).percent
-        : 0;
+      // Record session stats with book-aware progress
+      let progress = 0;
+      if (state.document) {
+        const bookInfo: BookProgressInfo | undefined = state.document.book ? {
+          currentChapter: state.currentChapterIndex,
+          totalChapters: state.document.book.chapters.length,
+          chapterWordCounts: state.document.book.chapters.map(ch => ch.wordCount),
+        } : undefined;
+        progress = calculateProgress(state.currentBlockIndex, state.document.blocks.length, bookInfo).percent;
+      }
       recordSessionStats({
         sessionTimeMs: sessionTime,
         wpm: state.currentWPM,
@@ -577,15 +633,16 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         
         // Also update the archive item with progress
         if (freshState.archiveItemId) {
-          const chapterInfo = freshState.document.book ? {
+          const bookInfo = freshState.document.book ? {
             currentChapter: freshState.currentChapterIndex,
             totalChapters: freshState.document.book.chapters.length,
+            chapterWordCounts: freshState.document.book.chapters.map(ch => ch.wordCount),
           } : undefined;
           
           const progress = calculateProgress(
             freshState.currentBlockIndex,
             freshState.document.blocks.length,
-            chapterInfo
+            bookInfo
           );
           
           updateLastOpened(freshState.archiveItemId, position, progress).catch((err) => {

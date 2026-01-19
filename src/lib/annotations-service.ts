@@ -10,6 +10,7 @@ import { HIGHLIGHT_COLORS } from '@/types';
 import { storageFacade } from './storage-facade';
 import { normalizeUrl } from './url-utils';
 import { recordAnnotationCreated } from './stats-service';
+import { storageMutex } from './async-mutex';
 
 
 /**
@@ -118,32 +119,37 @@ export async function saveAnnotation(
   documentKey: string,
   annotation: Annotation
 ): Promise<Annotation> {
-  const allAnnotations = await getAllAnnotations();
-  const docAnnotations = allAnnotations[documentKey] ?? [];
-  
-  // Check if annotation already exists
-  const existingIndex = docAnnotations.findIndex(a => a.id === annotation.id);
-  
-  if (existingIndex >= 0) {
-    // Update existing
-    docAnnotations[existingIndex] = {
-      ...annotation,
-      updatedAt: Date.now(),
-    };
-  } else {
-    // Add new
-    docAnnotations.push(annotation);
+  return storageMutex.withLock(async () => {
+    const allAnnotations = await getAllAnnotations();
+    const docAnnotations = allAnnotations[documentKey] ?? [];
     
-    // Record new annotation creation for stats (fire-and-forget)
-    recordAnnotationCreated().catch(err => {
-      console.error('[Annotations] Failed to record annotation stat:', err);
-    });
-  }
-  
-  allAnnotations[documentKey] = docAnnotations;
-  await storageFacade.updateAnnotations(allAnnotations);
-  
-  return annotation;
+    // Check if annotation already exists
+    const existingIndex = docAnnotations.findIndex(a => a.id === annotation.id);
+    
+    if (existingIndex >= 0) {
+      // Update existing
+      docAnnotations[existingIndex] = {
+        ...annotation,
+        updatedAt: Date.now(),
+      };
+    } else {
+      // Add new
+      docAnnotations.push(annotation);
+      
+      // Record new annotation creation for stats (fire-and-forget, outside lock)
+      // Schedule this to run after lock release
+      setTimeout(() => {
+        recordAnnotationCreated().catch(err => {
+          console.error('[Annotations] Failed to record annotation stat:', err);
+        });
+      }, 0);
+    }
+    
+    allAnnotations[documentKey] = docAnnotations;
+    await storageFacade.updateAnnotations(allAnnotations);
+    
+    return annotation;
+  });
 }
 
 
@@ -155,33 +161,35 @@ export async function updateAnnotation(
   id: string,
   updates: Partial<Pick<Annotation, 'color' | 'note'>>
 ): Promise<Annotation | null> {
-  const allAnnotations = await getAllAnnotations();
-  const docAnnotations = allAnnotations[documentKey];
-  
-  if (!docAnnotations) {
-    return null;
-  }
-  
-  const index = docAnnotations.findIndex(a => a.id === id);
-  
-  if (index < 0) {
-    return null;
-  }
-  
-  const annotation = docAnnotations[index];
-  const updated: Annotation = {
-    ...annotation,
-    ...updates,
-    // Update type based on whether there's a note
-    type: (updates.note !== undefined ? (updates.note ? 'note' : 'highlight') : annotation.type),
-    updatedAt: Date.now(),
-  };
-  
-  docAnnotations[index] = updated;
-  allAnnotations[documentKey] = docAnnotations;
-  await storageFacade.updateAnnotations(allAnnotations);
-  
-  return updated;
+  return storageMutex.withLock(async () => {
+    const allAnnotations = await getAllAnnotations();
+    const docAnnotations = allAnnotations[documentKey];
+    
+    if (!docAnnotations) {
+      return null;
+    }
+    
+    const index = docAnnotations.findIndex(a => a.id === id);
+    
+    if (index < 0) {
+      return null;
+    }
+    
+    const annotation = docAnnotations[index];
+    const updated: Annotation = {
+      ...annotation,
+      ...updates,
+      // Update type based on whether there's a note
+      type: (updates.note !== undefined ? (updates.note ? 'note' : 'highlight') : annotation.type),
+      updatedAt: Date.now(),
+    };
+    
+    docAnnotations[index] = updated;
+    allAnnotations[documentKey] = docAnnotations;
+    await storageFacade.updateAnnotations(allAnnotations);
+    
+    return updated;
+  });
 }
 
 
@@ -192,31 +200,33 @@ export async function deleteAnnotation(
   documentKey: string,
   id: string
 ): Promise<boolean> {
-  const allAnnotations = await getAllAnnotations();
-  const docAnnotations = allAnnotations[documentKey];
-  
-  if (!docAnnotations) {
-    return false;
-  }
-  
-  const index = docAnnotations.findIndex(a => a.id === id);
-  
-  if (index < 0) {
-    return false;
-  }
-  
-  docAnnotations.splice(index, 1);
-  
-  // Remove document key if no annotations left
-  if (docAnnotations.length === 0) {
-    delete allAnnotations[documentKey];
-  } else {
-    allAnnotations[documentKey] = docAnnotations;
-  }
-  
-  await storageFacade.updateAnnotations(allAnnotations);
-  
-  return true;
+  return storageMutex.withLock(async () => {
+    const allAnnotations = await getAllAnnotations();
+    const docAnnotations = allAnnotations[documentKey];
+    
+    if (!docAnnotations) {
+      return false;
+    }
+    
+    const index = docAnnotations.findIndex(a => a.id === id);
+    
+    if (index < 0) {
+      return false;
+    }
+    
+    docAnnotations.splice(index, 1);
+    
+    // Remove document key if no annotations left
+    if (docAnnotations.length === 0) {
+      delete allAnnotations[documentKey];
+    } else {
+      allAnnotations[documentKey] = docAnnotations;
+    }
+    
+    await storageFacade.updateAnnotations(allAnnotations);
+    
+    return true;
+  });
 }
 
 
@@ -224,16 +234,18 @@ export async function deleteAnnotation(
  * Delete all annotations for a document.
  */
 export async function deleteDocumentAnnotations(documentKey: string): Promise<boolean> {
-  const allAnnotations = await getAllAnnotations();
-  
-  if (!allAnnotations[documentKey]) {
-    return false;
-  }
-  
-  delete allAnnotations[documentKey];
-  await storageFacade.updateAnnotations(allAnnotations);
-  
-  return true;
+  return storageMutex.withLock(async () => {
+    const allAnnotations = await getAllAnnotations();
+    
+    if (!allAnnotations[documentKey]) {
+      return false;
+    }
+    
+    delete allAnnotations[documentKey];
+    await storageFacade.updateAnnotations(allAnnotations);
+    
+    return true;
+  });
 }
 
 

@@ -601,25 +601,54 @@ export function shouldCacheDocument(source: string): boolean {
   return ['pdf', 'docx', 'epub', 'mobi'].includes(source);
 }
 
+export interface BookProgressInfo {
+  currentChapter: number;
+  totalChapters: number;
+  /** Word count for each chapter, in order */
+  chapterWordCounts: number[];
+}
+
 export function calculateProgress(
   currentBlockIndex: number,
   totalBlocks: number,
-  chapterInfo?: { currentChapter: number; totalChapters: number }
+  bookInfo?: BookProgressInfo
 ): ArchiveProgress {
-  // Use (currentBlockIndex + 1) to represent "blocks completed"
-  // Block 0 = 1/N complete, Block N-1 = N/N = 100% complete
-  // This ensures reading the last block gives 100% progress
-  const percent = totalBlocks > 0 
-    ? Math.round(((currentBlockIndex + 1) / totalBlocks) * 100)
-    : 0;
+  let percent: number;
+  let label: string;
   
-  let label = `${percent}%`;
-  
-  if (chapterInfo && chapterInfo.totalChapters > 1) {
-    label = `Ch ${chapterInfo.currentChapter + 1} of ${chapterInfo.totalChapters}`;
-    if (percent > 0) {
-      label += ` (${percent}%)`;
+  if (bookInfo && bookInfo.totalChapters > 1 && bookInfo.chapterWordCounts.length > 0) {
+    // Book: calculate progress across all chapters using word counts
+    const totalWords = bookInfo.chapterWordCounts.reduce((sum, wc) => sum + wc, 0);
+    
+    if (totalWords > 0) {
+      // Words completed in previous chapters
+      const wordsInPrevChapters = bookInfo.chapterWordCounts
+        .slice(0, bookInfo.currentChapter)
+        .reduce((sum, wc) => sum + wc, 0);
+      
+      // Approximate words completed in current chapter based on block progress
+      const currentChapterWords = bookInfo.chapterWordCounts[bookInfo.currentChapter] || 0;
+      const chapterProgress = totalBlocks > 0 ? (currentBlockIndex + 1) / totalBlocks : 0;
+      const wordsInCurrentChapter = currentChapterWords * chapterProgress;
+      
+      percent = Math.round(((wordsInPrevChapters + wordsInCurrentChapter) / totalWords) * 100);
+    } else {
+      // Fallback to block-based progress if no word counts
+      percent = totalBlocks > 0 
+        ? Math.round(((currentBlockIndex + 1) / totalBlocks) * 100)
+        : 0;
     }
+    
+    // Label shows chapter info with total book progress
+    label = `Ch ${bookInfo.currentChapter + 1} of ${bookInfo.totalChapters} (${percent}%)`;
+  } else {
+    // Regular document: progress by blocks
+    // Use (currentBlockIndex + 1) to represent "blocks completed"
+    // Block 0 = 1/N complete, Block N-1 = N/N = 100% complete
+    percent = totalBlocks > 0 
+      ? Math.round(((currentBlockIndex + 1) / totalBlocks) * 100)
+      : 0;
+    label = `${percent}%`;
   }
   
   return { percent, label };
@@ -679,4 +708,18 @@ export function getTypeBadgeLabel(type: ArchiveItemType): string {
     default:
       return type;
   }
+}
+
+/**
+ * Flush any pending debounced archive writes immediately.
+ * Call this before page unload to prevent data loss.
+ * Returns true if there was pending data to flush.
+ */
+export async function flushPendingArchiveWrites(): Promise<boolean> {
+  if (!pendingItems) {
+    return false;
+  }
+  
+  await flushArchiveItems(pendingItems);
+  return true;
 }
