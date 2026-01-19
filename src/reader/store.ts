@@ -515,6 +515,17 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       progress: 100, // Completed
     });
     
+    // Update archive item with 100% progress
+    // This ensures the archive shows 100% when reading is complete
+    if (state.archiveItemId) {
+      updateLastOpened(state.archiveItemId, undefined, { 
+        percent: 100, 
+        label: '100%' 
+      }).catch((err) => {
+        console.error('Failed to update archive completion progress:', err);
+      });
+    }
+    
     // Stop playback immediately
     set({
       isPlaying: false,
