@@ -39,6 +39,9 @@ const StatisticsModal = lazy(() =>
   })
 );
 
+// Lazy load AllAnnotationsModal
+const AllAnnotationsModal = lazy(() => import('./components/AllAnnotationsModal'));
+
 /**
  * Apply theme settings to the document (CSS variables and body styles)
  */
@@ -60,6 +63,7 @@ export default function Archive() {
   // Local settings state (for theme colors)
   const [settings, setSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isAllAnnotationsOpen, setIsAllAnnotationsOpen] = useState(false);
   
   // Store state
   const items = useArchiveStore(state => state.items);
@@ -448,6 +452,7 @@ export default function Archive() {
         onPasteClick={() => setPasteModalOpen(true)}
         onSettingsClick={toggleSettings}
         onStatsClick={() => setIsStatsOpen(true)}
+        onAllAnnotationsClick={() => setIsAllAnnotationsOpen(true)}
         settings={settings}
       />
       
@@ -632,6 +637,26 @@ export default function Archive() {
             />
           </Suspense>
         </ErrorBoundary>
+      )}
+      
+      {/* All Annotations Modal - lazy loaded */}
+      {isAllAnnotationsOpen && (
+        <Suspense fallback={
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div 
+              className="animate-spin rounded-full h-8 w-8 border-b-2" 
+              style={{ borderColor: settings.linkColor }} 
+            />
+          </div>
+        }>
+          <AllAnnotationsModal
+            onClose={() => setIsAllAnnotationsOpen(false)}
+            onOpenDocument={(item, annotationId) => {
+              setIsAllAnnotationsOpen(false);
+              openItem(item, annotationId);
+            }}
+          />
+        </Suspense>
       )}
       
       {/* Bulk Action Toolbar (fixed at bottom when items are selected) */}

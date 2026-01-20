@@ -90,6 +90,31 @@ export async function getAllAnnotations(): Promise<Record<string, Annotation[]>>
 
 
 /**
+ * Get all unique tags used across all annotations.
+ * Returns tags sorted by frequency (most used first).
+ */
+export async function getAllUsedTags(): Promise<string[]> {
+  const allAnnotations = await getAllAnnotations();
+  const tagCounts = new Map<string, number>();
+  
+  for (const docAnnotations of Object.values(allAnnotations)) {
+    for (const annotation of docAnnotations) {
+      if (annotation.tags) {
+        for (const tag of annotation.tags) {
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+        }
+      }
+    }
+  }
+  
+  // Sort by frequency (descending)
+  return Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([tag]) => tag);
+}
+
+
+/**
  * Create a new annotation.
  */
 export function createAnnotation(
@@ -159,7 +184,7 @@ export async function saveAnnotation(
 export async function updateAnnotation(
   documentKey: string,
   id: string,
-  updates: Partial<Pick<Annotation, 'color' | 'note'>>
+  updates: Partial<Pick<Annotation, 'color' | 'note' | 'isFavorite' | 'tags'>>
 ): Promise<Annotation | null> {
   return storageMutex.withLock(async () => {
     const allAnnotations = await getAllAnnotations();
@@ -245,6 +270,80 @@ export async function deleteDocumentAnnotations(documentKey: string): Promise<bo
     await storageFacade.updateAnnotations(allAnnotations);
     
     return true;
+  });
+}
+
+
+/**
+ * Import annotations from exported data.
+ * Mode 'merge' adds non-duplicate annotations, 'replace' clears existing first.
+ * Note: Imported annotations won't have proper anchor positions since they're
+ * text-based, so they're stored as "imported" annotations for reference.
+ */
+export async function importAnnotations(
+  documentKey: string,
+  importData: Array<{
+    text: string;
+    note: string | null;
+    color: string;
+    isFavorite?: boolean;
+    tags?: string[];
+    createdAt: string;
+  }>,
+  mode: 'merge' | 'replace' = 'merge'
+): Promise<{ imported: number; skipped: number }> {
+  return storageMutex.withLock(async () => {
+    const allAnnotations = await getAllAnnotations();
+    let docAnnotations = allAnnotations[documentKey] ?? [];
+    
+    // For replace mode, clear existing annotations
+    if (mode === 'replace') {
+      docAnnotations = [];
+    }
+    
+    let imported = 0;
+    let skipped = 0;
+    
+    for (const item of importData) {
+      // Check for duplicate by text content
+      const isDuplicate = docAnnotations.some(
+        a => a.anchor.textContent === item.text
+      );
+      
+      if (isDuplicate && mode === 'merge') {
+        skipped++;
+        continue;
+      }
+      
+      // Create annotation with placeholder anchor
+      // (actual position would need to be matched in the document)
+      const now = Date.now();
+      const annotation: Annotation = {
+        id: crypto.randomUUID(),
+        type: item.note ? 'note' : 'highlight',
+        color: item.color,
+        anchor: {
+          blockId: 'imported',
+          startWordIndex: 0,
+          endBlockId: 'imported',
+          endWordIndex: 0,
+          textContent: item.text,
+        },
+        note: item.note || undefined,
+        isFavorite: item.isFavorite || false,
+        tags: item.tags || undefined,
+        createdAt: new Date(item.createdAt).getTime() || now,
+        updatedAt: now,
+      };
+      
+      docAnnotations.push(annotation);
+      imported++;
+    }
+    
+    allAnnotations[documentKey] = docAnnotations;
+    await storageFacade.updateAnnotations(allAnnotations);
+    
+    return { imported, skipped };
   });
 }
 

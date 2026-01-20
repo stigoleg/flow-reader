@@ -1,7 +1,7 @@
 /**
  * ExportDropdown Component
  * 
- * Reusable dropdown for exporting annotations in various formats.
+ * Reusable dropdown for exporting and importing annotations in various formats.
  * Copies the exported content to clipboard.
  */
 
@@ -12,6 +12,7 @@ import {
   copyToClipboard, 
   downloadAsFile,
   getFileInfoForFormat,
+  promptImportFile,
   type ExportFormat 
 } from '@/lib/annotations-export';
 
@@ -19,12 +20,15 @@ interface ExportDropdownProps {
   annotations: Annotation[];
   documentTitle: string;
   buttonClassName?: string;
+  /** Callback when annotations are imported. Receives the imported data. */
+  onImport?: (data: { text: string; note: string | null; color: string; isFavorite?: boolean; tags?: string[]; createdAt: string }[]) => Promise<{ imported: number; skipped: number }>;
 }
 
 const EXPORT_OPTIONS: { format: ExportFormat; label: string; description: string }[] = [
   { format: 'markdown', label: 'Markdown', description: 'Formatted with headers and quotes' },
   { format: 'text', label: 'Plain Text', description: 'Simple text format' },
   { format: 'json', label: 'JSON', description: 'Structured data format' },
+  { format: 'html', label: 'HTML', description: 'Styled page with colors' },
 ];
 
 type ExportAction = 'copy' | 'download';
@@ -33,10 +37,12 @@ export default function ExportDropdown({
   annotations,
   documentTitle,
   buttonClassName = '',
+  onImport,
 }: ExportDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<ExportAction>('copy');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -94,17 +100,31 @@ export default function ExportDropdown({
     }
   };
 
+  const handleImport = async () => {
+    if (!onImport) return;
+    
+    const result = await promptImportFile();
+    if (!result) {
+      setImportStatus('Invalid file');
+      setIsOpen(false);
+      setTimeout(() => setImportStatus(null), 2000);
+      return;
+    }
+    
+    const { data } = result;
+    const importResult = await onImport(data.annotations);
+    
+    setImportStatus(`Imported ${importResult.imported}${importResult.skipped > 0 ? `, ${importResult.skipped} skipped` : ''}`);
+    setIsOpen(false);
+    setTimeout(() => setImportStatus(null), 2500);
+  };
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        disabled={!hasAnnotations}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors ${
-          hasAnnotations
-            ? 'hover:bg-reader-text/10'
-            : 'opacity-40 cursor-not-allowed'
-        } ${buttonClassName}`}
-        title={hasAnnotations ? 'Export annotations' : 'No annotations to export'}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded transition-colors hover:bg-reader-text/10 ${buttonClassName}`}
+        title="Export/Import annotations"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
@@ -121,6 +141,13 @@ export default function ExportDropdown({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             <span className="text-green-500">Downloaded!</span>
+          </>
+        ) : importStatus ? (
+          <>
+            <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-green-500">{importStatus}</span>
           </>
         ) : (
           <>
@@ -163,7 +190,7 @@ export default function ExportDropdown({
           </div>
           
           {/* Format options */}
-          {EXPORT_OPTIONS.map(option => (
+          {hasAnnotations && EXPORT_OPTIONS.map(option => (
             <button
               key={option.format}
               onClick={() => handleExport(option.format, activeAction)}
@@ -174,6 +201,32 @@ export default function ExportDropdown({
               <div className="text-xs opacity-60">{option.description}</div>
             </button>
           ))}
+          
+          {!hasAnnotations && (
+            <div className="px-3 py-2 text-sm opacity-60">
+              No annotations to export
+            </div>
+          )}
+          
+          {/* Import option */}
+          {onImport && (
+            <>
+              <div className="border-t border-reader-text/10 my-1" />
+              <button
+                onClick={handleImport}
+                className="w-full text-left px-3 py-2 hover:bg-reader-text/10 transition-colors"
+                role="menuitem"
+              >
+                <div className="text-sm font-medium flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Import from JSON
+                </div>
+                <div className="text-xs opacity-60">Restore from backup file</div>
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

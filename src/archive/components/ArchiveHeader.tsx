@@ -16,6 +16,7 @@ interface ArchiveHeaderProps {
   onPasteClick: () => void;
   onSettingsClick: () => void;
   onStatsClick: () => void;
+  onAllAnnotationsClick: () => void;
   settings: ReaderSettings;
 }
 
@@ -27,6 +28,7 @@ export default function ArchiveHeader({
   onPasteClick,
   onSettingsClick,
   onStatsClick,
+  onAllAnnotationsClick,
   settings,
 }: ArchiveHeaderProps) {
   return (
@@ -133,6 +135,18 @@ export default function ArchiveHeader({
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </button>
+
+            {/* All Annotations */}
+            <button
+              onClick={onAllAnnotationsClick}
+              className="hidden md:flex w-8 h-8 items-center justify-center rounded opacity-60 hover:opacity-100"
+              title="All annotations"
+              aria-label="View all annotations"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
               </svg>
             </button>
 

@@ -365,6 +365,10 @@ export interface Annotation {
   // Optional note content
   note?: string;
 
+  // Organization
+  isFavorite?: boolean;
+  tags?: string[];
+
   // Metadata
   createdAt: number;
   updatedAt: number;

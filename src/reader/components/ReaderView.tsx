@@ -70,6 +70,8 @@ export default function ReaderView() {
     addAnnotation,
     updateAnnotationNote,
     changeAnnotationColor,
+    toggleAnnotationFavorite,
+    updateAnnotationTags,
     removeAnnotation,
     editingAnnotationId,
     setEditingAnnotation,
@@ -79,6 +81,7 @@ export default function ReaderView() {
     setNotesPanelOpen,
     toggleNotesPanel,
     navigateToAnnotation,
+    importAnnotationsFromData,
     // Scroll-only navigation
     scrollToBlockIndex,
     clearScrollToBlock,
@@ -100,7 +103,7 @@ export default function ReaderView() {
   const { showToast } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Check for and display goal completion notifications
+  // Check for and display goal completion notifications on mount
   useEffect(() => {
     const goals = consumeGoalNotifications();
     for (const goal of goals) {
@@ -108,7 +111,7 @@ export default function ReaderView() {
       const message = `${emoji} ${goal.type.charAt(0).toUpperCase() + goal.type.slice(1)} goal reached! (${goal.target} ${goal.unit})`;
       showToast(message, 'success', 5000);
     }
-  });
+  }, []);
 
   useKeyboardShortcuts({
     settings,
@@ -320,6 +323,13 @@ export default function ReaderView() {
     }
   }, [editingAnnotationId, changeAnnotationColor]);
 
+  // Handle tags change in note editor
+  const handleTagsChange = useCallback(async (tags: string[]) => {
+    if (editingAnnotationId) {
+      await updateAnnotationTags(editingAnnotationId, tags);
+    }
+  }, [editingAnnotationId, updateAnnotationTags]);
+
   // Handle annotation delete
   const handleAnnotationDelete = useCallback(async () => {
     if (editingAnnotationId) {
@@ -470,8 +480,10 @@ export default function ReaderView() {
       {editingAnnotation && (
         <NoteEditorModal
           annotation={editingAnnotation}
+          tagSuggestions={Array.from(new Set(annotations.flatMap(a => a.tags || [])))}
           onSave={handleNoteSave}
           onChangeColor={handleColorChange}
+          onChangeTags={handleTagsChange}
           onDelete={handleAnnotationDelete}
           onClose={handleNoteEditorClose}
         />
@@ -486,6 +498,8 @@ export default function ReaderView() {
         onNavigateToAnnotation={navigateToAnnotation}
         onEditAnnotation={(annotation) => setEditingAnnotation(annotation.id)}
         onDeleteAnnotation={removeAnnotation}
+        onToggleFavorite={toggleAnnotationFavorite}
+        onImportAnnotations={importAnnotationsFromData}
       />
 
       {/* TTS Controls - floating controls when TTS is enabled */}

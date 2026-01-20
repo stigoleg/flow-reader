@@ -11,6 +11,7 @@ import {
   deleteAnnotation, 
   createAnnotation,
   getDocumentAnnotationKey,
+  importAnnotations,
 } from '@/lib/annotations-service';
 import { recordReadingSession, type RecordSessionResult } from '@/lib/stats-service';
 import { countWords } from '@/lib/file-utils';
@@ -244,6 +245,9 @@ interface ReaderState {
   addAnnotation: (anchor: AnnotationAnchor, color: string, note?: string) => Promise<Annotation>;
   updateAnnotationNote: (id: string, note: string) => Promise<void>;
   changeAnnotationColor: (id: string, color: string) => Promise<void>;
+  toggleAnnotationFavorite: (id: string) => Promise<void>;
+  updateAnnotationTags: (id: string, tags: string[]) => Promise<void>;
+  importAnnotationsFromData: (data: { text: string; note: string | null; color: string; isFavorite?: boolean; tags?: string[]; createdAt: string }[]) => Promise<{ imported: number; skipped: number }>;
   removeAnnotation: (id: string) => Promise<void>;
   setActiveHighlightColor: (color: string) => void;
   setEditingAnnotation: (id: string | null) => void;
@@ -945,6 +949,47 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         annotations: annotations.map(a => a.id === id ? updated : a),
       });
     }
+  },
+
+  toggleAnnotationFavorite: async (id) => {
+    const { documentKey, annotations } = get();
+    if (!documentKey) return;
+    
+    const annotation = annotations.find(a => a.id === id);
+    if (!annotation) return;
+    
+    const updated = await updateAnnotation(documentKey, id, { 
+      isFavorite: !annotation.isFavorite 
+    });
+    if (updated) {
+      set({
+        annotations: annotations.map(a => a.id === id ? updated : a),
+      });
+    }
+  },
+
+  updateAnnotationTags: async (id, tags) => {
+    const { documentKey, annotations } = get();
+    if (!documentKey) return;
+    
+    const updated = await updateAnnotation(documentKey, id, { tags });
+    if (updated) {
+      set({
+        annotations: annotations.map(a => a.id === id ? updated : a),
+      });
+    }
+  },
+
+  importAnnotationsFromData: async (data) => {
+    const { documentKey, loadAnnotations } = get();
+    if (!documentKey) return { imported: 0, skipped: 0 };
+    
+    const result = await importAnnotations(documentKey, data, 'merge');
+    
+    // Reload annotations to get the updated list
+    await loadAnnotations();
+    
+    return result;
   },
 
   removeAnnotation: async (id) => {

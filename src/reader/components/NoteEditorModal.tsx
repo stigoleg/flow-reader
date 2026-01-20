@@ -7,28 +7,36 @@
 import { useState, useEffect, useRef } from 'react';
 import { HIGHLIGHT_COLORS } from '@/types';
 import type { Annotation } from '@/types';
+import TagInput from '@/components/TagInput';
 
 interface NoteEditorModalProps {
   /** The annotation being edited */
   annotation: Annotation;
+  /** Available tag suggestions for autocomplete */
+  tagSuggestions?: string[];
   /** Callback to save the note */
-  onSave: (note: string) => void;
+  onSave: (note: string) => Promise<void> | void;
   /** Callback to change the highlight color */
-  onChangeColor: (color: string) => void;
+  onChangeColor: (color: string) => Promise<void> | void;
+  /** Callback to update tags */
+  onChangeTags: (tags: string[]) => Promise<void> | void;
   /** Callback to delete the annotation */
-  onDelete: () => void;
+  onDelete: () => Promise<void> | void;
   /** Callback to close the modal */
   onClose: () => void;
 }
 
 export default function NoteEditorModal({
   annotation,
+  tagSuggestions = [],
   onSave,
   onChangeColor,
+  onChangeTags,
   onDelete,
   onClose,
 }: NoteEditorModalProps) {
   const [note, setNote] = useState(annotation.note || '');
+  const [tags, setTags] = useState<string[]>(annotation.tags || []);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -66,14 +74,22 @@ export default function NoteEditorModal({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onClose]);
 
-  const handleSave = () => {
-    onSave(note);
+  const handleSave = async () => {
+    await onSave(note);
+    // Only call onChangeTags if tags actually changed
+    const oldTags = annotation.tags || [];
+    const tagsChanged = tags.length !== oldTags.length || 
+      tags.some((t, i) => oldTags[i] !== t);
+    if (tagsChanged) {
+      await onChangeTags(tags);
+    }
     onClose();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (showDeleteConfirm) {
-      onDelete();
+      await onDelete();
+      onClose();
     } else {
       setShowDeleteConfirm(true);
     }
@@ -152,6 +168,19 @@ export default function NoteEditorModal({
               onChange={(e) => setNote(e.target.value)}
               placeholder="Add your thoughts about this passage..."
               className="w-full h-32 p-3 rounded border border-reader-text/20 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-reader-link"
+            />
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-sm text-reader-text/70 mb-1">
+              Tags (optional)
+            </label>
+            <TagInput
+              tags={tags}
+              onChange={setTags}
+              suggestions={tagSuggestions}
+              placeholder="Add tags..."
             />
           </div>
         </div>
