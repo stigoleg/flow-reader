@@ -12,7 +12,7 @@ import { OverviewTab } from './statistics/tabs/OverviewTab';
 import { ActivityTab } from './statistics/tabs/ActivityTab';
 import { CompareTab } from './statistics/tabs/CompareTab';
 import { InsightsTab } from './statistics/tabs/InsightsTab';
-import { downloadStats } from '@/lib/stats-service';
+import { downloadStats, promptImportStats } from '@/lib/stats-service';
 
 interface StatisticsModalProps {
   onClose: () => void;
@@ -69,6 +69,7 @@ export default function StatisticsModal({
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const stats = useStatistics({ archiveItems });
 
@@ -109,6 +110,23 @@ export default function StatisticsModal({
     } finally {
       setExporting(false);
       setExportOpen(false);
+    }
+  };
+
+  const handleImport = async () => {
+    setImporting(true);
+    try {
+      const result = await promptImportStats();
+      if (result.success) {
+        // Refresh stats after successful import
+        stats.refresh();
+      } else if (result.error) {
+        console.error('[Statistics] Import failed:', result.error);
+      }
+    } catch (error) {
+      console.error('[Statistics] Import failed:', error);
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -197,54 +215,75 @@ export default function StatisticsModal({
 
         {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-reader-text/10">
-          {/* Export dropdown */}
-          <div className="relative" ref={exportRef}>
+          <div className="flex items-center gap-2">
+            {/* Import button */}
             <button
-              onClick={() => setExportOpen(!exportOpen)}
-              disabled={exporting}
+              onClick={handleImport}
+              disabled={importing}
               className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-reader-text/10 transition-colors disabled:opacity-50"
             >
-              {exporting ? (
+              {importing ? (
                 <div 
                   className="animate-spin rounded-full h-4 w-4 border-b-2" 
                   style={{ borderColor: accentColor }} 
                 />
               ) : (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m4-8l-4-4m0 0l-4 4m4-4v12" />
                 </svg>
               )}
-              <span>Export</span>
-              <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              <span>Import</span>
             </button>
-            
-            {exportOpen && (
-              <div 
-                className="absolute bottom-full left-0 mb-1 w-40 rounded-lg shadow-lg border border-reader-text/10 py-1 z-10"
-                style={{ backgroundColor: 'var(--reader-bg)' }}
+
+            {/* Export dropdown */}
+            <div className="relative" ref={exportRef}>
+              <button
+                onClick={() => setExportOpen(!exportOpen)}
+                disabled={exporting}
+                className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-reader-text/10 transition-colors disabled:opacity-50"
               >
-                <button
-                  onClick={() => handleExport('json')}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-reader-text/10 transition-colors"
-                >
+                {exporting ? (
+                  <div 
+                    className="animate-spin rounded-full h-4 w-4 border-b-2" 
+                    style={{ borderColor: accentColor }} 
+                  />
+                ) : (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Export as JSON
-                </button>
-                <button
-                  onClick={() => handleExport('csv')}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-reader-text/10 transition-colors"
+                )}
+                <span>Export</span>
+                <svg className="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {exportOpen && (
+                <div 
+                  className="absolute bottom-full left-0 mb-1 w-40 rounded-lg shadow-lg border border-reader-text/10 py-1 z-10"
+                  style={{ backgroundColor: 'var(--reader-bg)' }}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Export as CSV
-                </button>
-              </div>
-            )}
+                  <button
+                    onClick={() => handleExport('json')}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-reader-text/10 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    Export as JSON
+                  </button>
+                  <button
+                    onClick={() => handleExport('csv')}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-reader-text/10 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Export as CSV
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           
           <button

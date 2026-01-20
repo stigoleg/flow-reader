@@ -333,21 +333,37 @@ function updateWpmHistory(stats: ReadingStats, today: string, wpm: number): void
   cleanupOldWpmHistory(stats);
 }
 
+/** Result of recording a reading session, includes goal completion events */
+export interface RecordSessionResult {
+  /** Goals that were just completed during this session */
+  goalsCompleted: Array<{
+    type: 'daily' | 'weekly' | 'monthly';
+    target: number;
+    unit: string;
+  }>;
+}
+
 /**
  * Record a reading session
  * Called when the reader stops playing or when the document is closed
+ * Returns information about any goals that were just completed
  */
-export async function recordReadingSession(params: RecordSessionParams): Promise<void> {
+export async function recordReadingSession(params: RecordSessionParams): Promise<RecordSessionResult> {
   const { durationMs, wordsRead, documentId, completed, wpm } = params;
+  
+  const result: RecordSessionResult = { goalsCompleted: [] };
   
   // Skip very short sessions (less than 5 seconds)
   if (durationMs < 5000) {
-    return;
+    return result;
   }
   
   return statsMutex.withLock(async () => {
     const stats = await getReadingStats();
     const today = getTodayDateString();
+    
+    // Check goal progress BEFORE updating stats
+    const goalsBefore = checkGoalProgress(stats);
     
     // Update daily stats
     const dailyStats = getOrCreateDailyStats(stats, today);
@@ -390,6 +406,42 @@ export async function recordReadingSession(params: RecordSessionParams): Promise
     
     // Save
     await saveReadingStats(stats);
+    
+    // Check goal progress AFTER updating stats
+    const goalsAfter = checkGoalProgress(stats);
+    
+    // Detect newly completed goals (was <100%, now >=100%)
+    if (goalsBefore.daily && goalsAfter.daily) {
+      if (goalsBefore.daily.percent < 100 && goalsAfter.daily.percent >= 100) {
+        result.goalsCompleted.push({
+          type: 'daily',
+          target: goalsAfter.daily.target,
+          unit: 'minutes',
+        });
+      }
+    }
+    
+    if (goalsBefore.weekly && goalsAfter.weekly) {
+      if (goalsBefore.weekly.percent < 100 && goalsAfter.weekly.percent >= 100) {
+        result.goalsCompleted.push({
+          type: 'weekly',
+          target: goalsAfter.weekly.target,
+          unit: 'minutes',
+        });
+      }
+    }
+    
+    if (goalsBefore.monthly && goalsAfter.monthly) {
+      if (goalsBefore.monthly.percent < 100 && goalsAfter.monthly.percent >= 100) {
+        result.goalsCompleted.push({
+          type: 'monthly',
+          target: goalsAfter.monthly.target,
+          unit: 'documents',
+        });
+      }
+    }
+    
+    return result;
   });
 }
 
@@ -860,6 +912,290 @@ export function calculateFinishRate(stats: ReadingStats): { rate: number; comple
 }
 
 /**
+ * Calculate rolling averages for reading time
+ * Returns averages for 7-day and 30-day periods
+ */
+export interface RollingAverages {
+  sevenDay: {
+    readingTimeMinutes: number;
+    wordsRead: number;
+    sessionsPerDay: number;
+    avgWpm: number;
+  };
+  thirtyDay: {
+    readingTimeMinutes: number;
+    wordsRead: number;
+    sessionsPerDay: number;
+    avgWpm: number;
+  };
+  trend: 'improving' | 'declining' | 'stable'; // 7-day vs 30-day comparison
+}
+
+export function calculateRollingAverages(stats: ReadingStats): RollingAverages {
+  const sevenDayStats = getDailyStatsForRange(stats, 7);
+  const thirtyDayStats = getDailyStatsForRange(stats, 30);
+  
+  const calcAvg = (dailyStats: typeof sevenDayStats) => {
+    const activeDays = dailyStats.filter(d => d.readingTimeMs > 0).length;
+    const totalMs = dailyStats.reduce((sum, d) => sum + d.readingTimeMs, 0);
+    const totalWords = dailyStats.reduce((sum, d) => sum + d.wordsRead, 0);
+    
+    return {
+      readingTimeMinutes: activeDays > 0 ? Math.round(totalMs / activeDays / 60000) : 0,
+      wordsRead: activeDays > 0 ? Math.round(totalWords / activeDays) : 0,
+      sessionsPerDay: 0, // Will be calculated from WPM history
+      avgWpm: 0, // Will be calculated separately
+    };
+  };
+  
+  const sevenDay = calcAvg(sevenDayStats);
+  const thirtyDay = calcAvg(thirtyDayStats);
+  
+  // Calculate average WPM and sessions from wpmHistory
+  const now = Date.now();
+  const sevenDayAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const thirtyDayAgo = now - 30 * 24 * 60 * 60 * 1000;
+  
+  const sevenDayWpm = stats.wpmHistory.filter(w => {
+    const date = new Date(w.date).getTime();
+    return date >= sevenDayAgo;
+  });
+  const thirtyDayWpm = stats.wpmHistory.filter(w => {
+    const date = new Date(w.date).getTime();
+    return date >= thirtyDayAgo;
+  });
+  
+  if (sevenDayWpm.length > 0) {
+    const totalSessions = sevenDayWpm.reduce((sum, w) => sum + w.sessionCount, 0);
+    const weightedWpm = sevenDayWpm.reduce((sum, w) => sum + w.avgWpm * w.sessionCount, 0);
+    sevenDay.avgWpm = totalSessions > 0 ? Math.round(weightedWpm / totalSessions) : 0;
+    sevenDay.sessionsPerDay = Math.round((totalSessions / 7) * 10) / 10;
+  }
+  
+  if (thirtyDayWpm.length > 0) {
+    const totalSessions = thirtyDayWpm.reduce((sum, w) => sum + w.sessionCount, 0);
+    const weightedWpm = thirtyDayWpm.reduce((sum, w) => sum + w.avgWpm * w.sessionCount, 0);
+    thirtyDay.avgWpm = totalSessions > 0 ? Math.round(weightedWpm / totalSessions) : 0;
+    thirtyDay.sessionsPerDay = Math.round((totalSessions / 30) * 10) / 10;
+  }
+  
+  // Determine trend: compare 7-day to 30-day average
+  let trend: 'improving' | 'declining' | 'stable' = 'stable';
+  if (thirtyDay.readingTimeMinutes > 0) {
+    const ratio = sevenDay.readingTimeMinutes / thirtyDay.readingTimeMinutes;
+    if (ratio > 1.15) {
+      trend = 'improving'; // 7-day is 15%+ higher than 30-day
+    } else if (ratio < 0.85) {
+      trend = 'declining'; // 7-day is 15%+ lower than 30-day
+    }
+  }
+  
+  return { sevenDay, thirtyDay, trend };
+}
+
+/**
+ * Calculate reading pattern insights
+ * Returns weekend vs weekday analysis, best day, and consistency metrics
+ */
+export interface PatternInsights {
+  weekdayVsWeekend: {
+    weekdayAvgMinutes: number;
+    weekendAvgMinutes: number;
+    weekendPercent: number; // % of total reading on weekends
+    preference: 'weekday' | 'weekend' | 'balanced';
+  };
+  bestDay: {
+    dayIndex: number; // 0 = Sunday, 6 = Saturday
+    dayName: string;
+    avgMinutes: number;
+  };
+  worstDay: {
+    dayIndex: number;
+    dayName: string;
+    avgMinutes: number;
+  };
+  dayOfWeekBreakdown: Array<{
+    dayIndex: number;
+    dayName: string;
+    avgMinutes: number;
+    totalMinutes: number;
+    daysCount: number;
+  }>;
+  consistency: {
+    activeDaysPercent: number; // % of days with reading in last 30 days
+    streakStatus: 'on-fire' | 'consistent' | 'sporadic' | 'inactive';
+  };
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+export function calculatePatternInsights(stats: ReadingStats): PatternInsights {
+  const dailyStats = getDailyStatsForRange(stats, 90); // Last 90 days for patterns
+  
+  // Group by day of week
+  const dayTotals: Array<{ totalMs: number; count: number }> = Array(7).fill(null).map(() => ({ totalMs: 0, count: 0 }));
+  
+  for (const day of dailyStats) {
+    const date = new Date(day.date);
+    const dayOfWeek = date.getDay();
+    dayTotals[dayOfWeek].totalMs += day.readingTimeMs;
+    dayTotals[dayOfWeek].count += 1;
+  }
+  
+  // Calculate averages per day of week
+  const dayOfWeekBreakdown = dayTotals.map((d, i) => ({
+    dayIndex: i,
+    dayName: DAY_NAMES[i],
+    avgMinutes: d.count > 0 ? Math.round(d.totalMs / d.count / 60000) : 0,
+    totalMinutes: Math.round(d.totalMs / 60000),
+    daysCount: d.count,
+  }));
+  
+  // Find best and worst days
+  const sortedDays = [...dayOfWeekBreakdown].sort((a, b) => b.avgMinutes - a.avgMinutes);
+  const bestDay = sortedDays[0];
+  const worstDay = sortedDays[sortedDays.length - 1];
+  
+  // Calculate weekday vs weekend
+  const weekdayDays = dayOfWeekBreakdown.filter(d => d.dayIndex >= 1 && d.dayIndex <= 5);
+  const weekendDays = dayOfWeekBreakdown.filter(d => d.dayIndex === 0 || d.dayIndex === 6);
+  
+  const totalWeekdayMinutes = weekdayDays.reduce((sum, d) => sum + d.totalMinutes, 0);
+  const totalWeekendMinutes = weekendDays.reduce((sum, d) => sum + d.totalMinutes, 0);
+  const totalWeekdayCount = weekdayDays.reduce((sum, d) => sum + d.daysCount, 0);
+  const totalWeekendCount = weekendDays.reduce((sum, d) => sum + d.daysCount, 0);
+  
+  const weekdayAvgMinutes = totalWeekdayCount > 0 ? Math.round(totalWeekdayMinutes / totalWeekdayCount) : 0;
+  const weekendAvgMinutes = totalWeekendCount > 0 ? Math.round(totalWeekendMinutes / totalWeekendCount) : 0;
+  
+  const totalMinutes = totalWeekdayMinutes + totalWeekendMinutes;
+  const weekendPercent = totalMinutes > 0 ? Math.round((totalWeekendMinutes / totalMinutes) * 100) : 0;
+  
+  let preference: 'weekday' | 'weekend' | 'balanced' = 'balanced';
+  if (weekendAvgMinutes > weekdayAvgMinutes * 1.3) {
+    preference = 'weekend';
+  } else if (weekdayAvgMinutes > weekendAvgMinutes * 1.3) {
+    preference = 'weekday';
+  }
+  
+  // Calculate consistency (last 30 days)
+  const last30Days = getDailyStatsForRange(stats, 30);
+  const activeDays = last30Days.filter(d => d.readingTimeMs > 0).length;
+  const activeDaysPercent = Math.round((activeDays / 30) * 100);
+  
+  let streakStatus: 'on-fire' | 'consistent' | 'sporadic' | 'inactive';
+  if (stats.currentStreak >= 7) {
+    streakStatus = 'on-fire';
+  } else if (activeDaysPercent >= 50) {
+    streakStatus = 'consistent';
+  } else if (activeDaysPercent >= 20) {
+    streakStatus = 'sporadic';
+  } else {
+    streakStatus = 'inactive';
+  }
+  
+  return {
+    weekdayVsWeekend: {
+      weekdayAvgMinutes,
+      weekendAvgMinutes,
+      weekendPercent,
+      preference,
+    },
+    bestDay,
+    worstDay,
+    dayOfWeekBreakdown,
+    consistency: {
+      activeDaysPercent,
+      streakStatus,
+    },
+  };
+}
+
+/**
+ * Calculate reading projections based on current pace
+ * Estimates future reading achievements
+ */
+export interface ReadingProjections {
+  booksPerYear: {
+    estimate: number;
+    basedOn: 'completion-rate' | 'reading-pace';
+    confidence: 'high' | 'medium' | 'low';
+  };
+  wordsPerYear: number;
+  hoursPerYear: number;
+  daysToFinishBacklog: number | null; // null if not enough data
+  milestones: {
+    nextBook: number | null; // days until next book completion
+    oneHundredBooks: number | null; // days until 100 books total
+    oneMillionWords: number | null; // days until 1M words total
+  };
+}
+
+export function calculateProjections(
+  stats: ReadingStats, 
+  archiveItems: { completed: number; inProgress: number; notStarted: number }
+): ReadingProjections {
+  // Get rolling averages for more stable projections
+  const rollingAvg = calculateRollingAverages(stats);
+  
+  // Use 30-day averages as baseline
+  const avgMinutesPerDay = rollingAvg.thirtyDay.readingTimeMinutes;
+  const avgWordsPerDay = rollingAvg.thirtyDay.wordsRead;
+  
+  // Calculate yearly projections
+  const hoursPerYear = Math.round((avgMinutesPerDay * 365) / 60);
+  const wordsPerYear = avgWordsPerDay * 365;
+  
+  // Calculate books per year based on completion rate
+  const last90Days = getDailyStatsForRange(stats, 90);
+  const completedLast90Days = last90Days.reduce((sum, d) => sum + d.documentsCompleted.length, 0);
+  const completionRate = completedLast90Days / 90; // books per day
+  const booksPerYearFromCompletions = Math.round(completionRate * 365);
+  
+  // Alternative: estimate based on reading pace (assumes 50,000 words per book)
+  const WORDS_PER_BOOK = 50000;
+  const booksPerYearFromPace = Math.round(wordsPerYear / WORDS_PER_BOOK);
+  
+  // Use completion rate if we have enough data, otherwise use pace
+  const useCompletionRate = completedLast90Days >= 3;
+  const booksPerYear: ReadingProjections['booksPerYear'] = {
+    estimate: useCompletionRate ? booksPerYearFromCompletions : booksPerYearFromPace,
+    basedOn: useCompletionRate ? 'completion-rate' : 'reading-pace',
+    confidence: avgMinutesPerDay >= 15 
+      ? (useCompletionRate ? 'high' : 'medium')
+      : 'low',
+  };
+  
+  // Calculate days to finish backlog
+  const backlogSize = archiveItems.inProgress + archiveItems.notStarted;
+  const daysToFinishBacklog = completionRate > 0 
+    ? Math.round(backlogSize / completionRate)
+    : null;
+  
+  // Calculate milestones
+  const totalBooksCompleted = stats.totalDocumentsCompleted;
+  const totalWordsRead = stats.totalWordsRead;
+  
+  const milestones = {
+    nextBook: completionRate > 0 ? Math.round(1 / completionRate) : null,
+    oneHundredBooks: completionRate > 0 && totalBooksCompleted < 100
+      ? Math.round((100 - totalBooksCompleted) / completionRate)
+      : null,
+    oneMillionWords: avgWordsPerDay > 0 && totalWordsRead < 1000000
+      ? Math.round((1000000 - totalWordsRead) / avgWordsPerDay)
+      : null,
+  };
+  
+  return {
+    booksPerYear,
+    wordsPerYear,
+    hoursPerYear,
+    daysToFinishBacklog,
+    milestones,
+  };
+}
+
+/**
  * Get hourly activity data for "best time to read" visualization
  */
 export function getHourlyActivityData(stats: ReadingStats): HourlyActivity[] {
@@ -1186,4 +1522,247 @@ export async function downloadStats(format: 'json' | 'csv'): Promise<void> {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ============================================================================
+// IMPORT FUNCTIONS
+// ============================================================================
+
+/** Result of import validation */
+export interface ImportValidationResult {
+  valid: boolean;
+  version?: string;
+  exportedAt?: string;
+  error?: string;
+  stats?: {
+    totalReadingTime: string;
+    totalWordsRead: number;
+    documentsCompleted: number;
+    daysOfData: number;
+    weeksOfData: number;
+  };
+}
+
+/**
+ * Validate an imported stats JSON file
+ */
+export function validateStatsImport(content: string): ImportValidationResult {
+  try {
+    const data = JSON.parse(content);
+    
+    // Check for required fields
+    if (!data.version || !data.exportedAt || !data.lifetime) {
+      return { valid: false, error: 'Invalid file format: missing required fields' };
+    }
+    
+    // Check version compatibility
+    if (data.version !== '1.0') {
+      return { valid: false, error: `Unsupported version: ${data.version}` };
+    }
+    
+    // Basic validation passed
+    return {
+      valid: true,
+      version: data.version,
+      exportedAt: data.exportedAt,
+      stats: {
+        totalReadingTime: data.lifetime.totalReadingTimeFormatted || formatReadingTime(data.lifetime.totalReadingTimeMs || 0),
+        totalWordsRead: data.lifetime.totalWordsRead || 0,
+        documentsCompleted: data.lifetime.totalDocumentsCompleted || 0,
+        daysOfData: data.dailyStats?.length || 0,
+        weeksOfData: data.weeklyStats?.length || 0,
+      },
+    };
+  } catch (error) {
+    return { valid: false, error: 'Invalid JSON file' };
+  }
+}
+
+/**
+ * Import stats from a backup file
+ * Merges with existing data, preferring newer entries for conflicts
+ */
+export async function importStatsFromJSON(content: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const imported = JSON.parse(content) as ExportedStats;
+    
+    // Validate
+    const validation = validateStatsImport(content);
+    if (!validation.valid) {
+      return { success: false, error: validation.error };
+    }
+    
+    return statsMutex.withLock(async () => {
+      const existing = await getReadingStats();
+      
+      // Merge lifetime totals (take the higher values)
+      existing.totalReadingTimeMs = Math.max(
+        existing.totalReadingTimeMs,
+        imported.lifetime.totalReadingTimeMs
+      );
+      existing.totalWordsRead = Math.max(
+        existing.totalWordsRead,
+        imported.lifetime.totalWordsRead
+      );
+      existing.totalDocumentsCompleted = Math.max(
+        existing.totalDocumentsCompleted,
+        imported.lifetime.totalDocumentsCompleted
+      );
+      existing.totalAnnotationsCreated = Math.max(
+        existing.totalAnnotationsCreated,
+        imported.lifetime.totalAnnotationsCreated
+      );
+      existing.longestStreak = Math.max(
+        existing.longestStreak,
+        imported.lifetime.longestStreak
+      );
+      
+      // Merge daily stats (prefer existing if both have data for same day)
+      for (const day of imported.dailyStats) {
+        if (!existing.dailyStats[day.date]) {
+          // Reconstruct the full DailyStats object
+          existing.dailyStats[day.date] = {
+            date: day.date,
+            readingTimeMs: day.readingTimeMs,
+            wordsRead: day.wordsRead,
+            documentsOpened: [], // Can't restore individual IDs from export
+            documentsCompleted: [], // Can't restore individual IDs from export
+            annotationsCreated: day.annotationsCreated,
+          };
+        }
+      }
+      
+      // Merge weekly stats
+      for (const week of imported.weeklyStats) {
+        if (!existing.weeklyStats[week.weekStart]) {
+          existing.weeklyStats[week.weekStart] = {
+            weekStart: week.weekStart,
+            readingTimeMs: week.readingTimeMs,
+            wordsRead: week.wordsRead,
+            documentsCompleted: week.documentsCompleted,
+            annotationsCreated: week.annotationsCreated,
+            avgWpm: week.avgWpm,
+            sessionCount: week.sessionCount,
+            activeDays: week.activeDays,
+          };
+        }
+      }
+      
+      // Merge WPM history
+      const existingWpmDates = new Set(existing.wpmHistory.map(e => e.date));
+      for (const wpm of imported.wpmHistory) {
+        if (!existingWpmDates.has(wpm.date)) {
+          existing.wpmHistory.push(wpm);
+        }
+      }
+      existing.wpmHistory.sort((a, b) => a.date.localeCompare(b.date));
+      
+      // Merge hourly activity
+      if (imported.hourlyActivity && imported.hourlyActivity.length > 0) {
+        // Initialize if needed
+        if (!existing.hourlyActivity || existing.hourlyActivity.length === 0) {
+          existing.hourlyActivity = Array.from({ length: 24 }, (_, i) => ({
+            hour: i,
+            totalReadingTimeMs: 0,
+            sessionCount: 0,
+          }));
+        }
+        
+        for (const imported_hour of imported.hourlyActivity) {
+          const existing_hour = existing.hourlyActivity.find(h => h.hour === imported_hour.hour);
+          if (existing_hour) {
+            // Add imported values to existing (they represent different time periods)
+            existing_hour.totalReadingTimeMs += imported_hour.totalReadingTimeMs;
+            existing_hour.sessionCount += imported_hour.sessionCount;
+          }
+        }
+      }
+      
+      // Merge personal bests (take the better records)
+      if (imported.personalBests) {
+        if (!existing.personalBests) {
+          existing.personalBests = {
+            longestSession: null,
+            mostWordsInDay: null,
+            fastestWpm: null,
+          };
+        }
+        
+        if (imported.personalBests.longestSession) {
+          const importedDuration = imported.personalBests.longestSession.durationMs;
+          const existingDuration = existing.personalBests.longestSession?.durationMs ?? 0;
+          if (importedDuration > existingDuration) {
+            existing.personalBests.longestSession = {
+              date: imported.personalBests.longestSession.date,
+              durationMs: importedDuration,
+            };
+          }
+        }
+        
+        if (imported.personalBests.mostWordsInDay) {
+          const importedWords = imported.personalBests.mostWordsInDay.words;
+          const existingWords = existing.personalBests.mostWordsInDay?.words ?? 0;
+          if (importedWords > existingWords) {
+            existing.personalBests.mostWordsInDay = imported.personalBests.mostWordsInDay;
+          }
+        }
+        
+        if (imported.personalBests.fastestWpm) {
+          const importedWpm = imported.personalBests.fastestWpm.wpm;
+          const existingWpm = existing.personalBests.fastestWpm?.wpm ?? 0;
+          if (importedWpm > existingWpm) {
+            existing.personalBests.fastestWpm = imported.personalBests.fastestWpm;
+          }
+        }
+      }
+      
+      // Merge goals (prefer existing if set, otherwise use imported)
+      if (!existing.goals && imported.goals) {
+        existing.goals = imported.goals;
+      }
+      
+      await saveReadingStats(existing);
+      
+      return { success: true };
+    });
+  } catch (error) {
+    console.error('[Stats] Import failed:', error);
+    return { success: false, error: 'Failed to import statistics' };
+  }
+}
+
+/**
+ * Prompt user to select a file and import stats
+ */
+export function promptImportStats(): Promise<{ success: boolean; error?: string; validation?: ImportValidationResult }> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) {
+        resolve({ success: false, error: 'No file selected' });
+        return;
+      }
+      
+      try {
+        const content = await file.text();
+        const validation = validateStatsImport(content);
+        
+        if (!validation.valid) {
+          resolve({ success: false, error: validation.error, validation });
+          return;
+        }
+        
+        const result = await importStatsFromJSON(content);
+        resolve({ ...result, validation });
+      } catch (error) {
+        resolve({ success: false, error: 'Failed to read file' });
+      }
+    };
+    
+    input.click();
+  });
 }

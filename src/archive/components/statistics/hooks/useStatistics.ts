@@ -24,6 +24,12 @@ import {
   formatLargeNumber,
   getDailyStatsForRange,
   getWpmHistoryForRange,
+  calculateRollingAverages,
+  calculatePatternInsights,
+  calculateProjections,
+  type RollingAverages,
+  type PatternInsights,
+  type ReadingProjections,
 } from '@/lib/stats-service';
 
 interface UseStatisticsOptions {
@@ -74,6 +80,22 @@ interface UseStatisticsResult {
   
   // Goals
   goalProgress: ReturnType<typeof checkGoalProgress>;
+  
+  // Rolling averages
+  rollingAverages: RollingAverages;
+  
+  // Pattern insights
+  patternInsights: PatternInsights;
+  
+  // Sparkline data (last 7 days)
+  sparklines: {
+    readingTime: number[];  // minutes per day
+    wordsRead: number[];    // words per day
+    wpm: number[];          // average WPM per day
+  };
+  
+  // Reading projections
+  projections: ReadingProjections;
   
   // Chart data
   dailyChartData: Array<{ date: string; minutes: number; words: number }>;
@@ -203,6 +225,62 @@ export function useStatistics({ archiveItems }: UseStatisticsOptions): UseStatis
     return checkGoalProgress(stats);
   }, [stats]);
 
+  // Rolling averages
+  const rollingAverages = useMemo(() => {
+    if (!stats) {
+      return {
+        sevenDay: { readingTimeMinutes: 0, wordsRead: 0, sessionsPerDay: 0, avgWpm: 0 },
+        thirtyDay: { readingTimeMinutes: 0, wordsRead: 0, sessionsPerDay: 0, avgWpm: 0 },
+        trend: 'stable' as const,
+      };
+    }
+    return calculateRollingAverages(stats);
+  }, [stats]);
+
+  // Pattern insights
+  const patternInsights = useMemo(() => {
+    if (!stats) {
+      return {
+        weekdayVsWeekend: { weekdayAvgMinutes: 0, weekendAvgMinutes: 0, weekendPercent: 0, preference: 'balanced' as const },
+        bestDay: { dayIndex: 0, dayName: 'Sunday', avgMinutes: 0 },
+        worstDay: { dayIndex: 0, dayName: 'Sunday', avgMinutes: 0 },
+        dayOfWeekBreakdown: [],
+        consistency: { activeDaysPercent: 0, streakStatus: 'inactive' as const },
+      };
+    }
+    return calculatePatternInsights(stats);
+  }, [stats]);
+
+  // Sparkline data (last 7 days)
+  const sparklines = useMemo(() => {
+    if (!stats) {
+      return { readingTime: [], wordsRead: [], wpm: [] };
+    }
+    
+    const dailyStats = getDailyStatsForRange(stats, 7);
+    const wpmHistory = getWpmHistoryForRange(stats, 7);
+    
+    return {
+      readingTime: dailyStats.map(d => Math.round(d.readingTimeMs / 60000)),
+      wordsRead: dailyStats.map(d => d.wordsRead),
+      wpm: wpmHistory.map(w => w.avgWpm),
+    };
+  }, [stats]);
+
+  // Reading projections
+  const projections = useMemo(() => {
+    if (!stats) {
+      return {
+        booksPerYear: { estimate: 0, basedOn: 'reading-pace' as const, confidence: 'low' as const },
+        wordsPerYear: 0,
+        hoursPerYear: 0,
+        daysToFinishBacklog: null,
+        milestones: { nextBook: null, oneHundredBooks: null, oneMillionWords: null },
+      };
+    }
+    return calculateProjections(stats, progressBreakdown);
+  }, [stats, progressBreakdown]);
+
   // Daily chart data
   const dailyChartData = useMemo(() => {
     if (!stats) return [];
@@ -241,6 +319,10 @@ export function useStatistics({ archiveItems }: UseStatisticsOptions): UseStatis
     hourlyActivity,
     personalBests: stats?.personalBests ?? null,
     goalProgress,
+    rollingAverages,
+    patternInsights,
+    sparklines,
+    projections,
     dailyChartData,
     wpmChartData,
     refresh: loadStats,

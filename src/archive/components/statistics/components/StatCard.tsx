@@ -5,6 +5,7 @@
  */
 
 import type { ReactNode } from 'react';
+import { Sparkline } from './Sparkline';
 
 interface StatCardProps {
   label: string;
@@ -16,9 +17,10 @@ interface StatCardProps {
     value: number;
     isPositive: boolean;
   };
+  sparklineData?: number[];
 }
 
-export function StatCard({ label, value, subtitle, icon, accentColor, trend }: StatCardProps) {
+export function StatCard({ label, value, subtitle, icon, accentColor, trend, sparklineData }: StatCardProps) {
   return (
     <div className="p-4 rounded-lg bg-reader-text/5 flex items-start gap-3">
       <div 
@@ -41,6 +43,11 @@ export function StatCard({ label, value, subtitle, icon, accentColor, trend }: S
         </div>
         {subtitle && <p className="text-xs opacity-50 mt-0.5">{subtitle}</p>}
       </div>
+      {sparklineData && sparklineData.length >= 2 && (
+        <div className="flex-shrink-0 self-center">
+          <Sparkline data={sparklineData} color={accentColor} />
+        </div>
+      )}
     </div>
   );
 }

@@ -12,7 +12,7 @@ import {
   createAnnotation,
   getDocumentAnnotationKey,
 } from '@/lib/annotations-service';
-import { recordReadingSession } from '@/lib/stats-service';
+import { recordReadingSession, type RecordSessionResult } from '@/lib/stats-service';
 import { countWords } from '@/lib/file-utils';
 import { searchDocument, getNextMatchIndex, getPrevMatchIndex, type SearchMatch } from '@/lib/search-utils';
 
@@ -94,14 +94,16 @@ function debouncedSaveSettings(settings: ReaderSettings): void {
  * Record a reading session for statistics.
  * Called when playback stops (pause, completion, or document close).
  * Fire-and-forget - errors are logged but don't affect the reader.
+ * @param onGoalsCompleted - Optional callback when goals are completed
  */
 function recordSessionStats(params: {
   sessionTimeMs: number;
   wpm: number;
   archiveItemId: string | null;
   progress: number; // 0-100
+  onGoalsCompleted?: (goals: RecordSessionResult['goalsCompleted']) => void;
 }): void {
-  const { sessionTimeMs, wpm, archiveItemId, progress } = params;
+  const { sessionTimeMs, wpm, archiveItemId, progress, onGoalsCompleted } = params;
   
   // Skip very short sessions
   if (sessionTimeMs < 5000 || !archiveItemId) {
@@ -119,6 +121,10 @@ function recordSessionStats(params: {
     documentId: archiveItemId,
     completed,
     wpm,
+  }).then(result => {
+    if (result.goalsCompleted.length > 0 && onGoalsCompleted) {
+      onGoalsCompleted(result.goalsCompleted);
+    }
   }).catch(err => {
     console.error('[ReaderStore] Failed to record session stats:', err);
   });
@@ -177,6 +183,10 @@ interface ReaderState {
   currentSearchIndex: number;
   /** Chapter to scroll to for cross-chapter search results (doesn't change reading chapter) */
   searchScrollChapterIndex: number | null;
+
+  // Goal notifications
+  pendingGoalNotifications: RecordSessionResult['goalsCompleted'];
+  consumeGoalNotifications: () => RecordSessionResult['goalsCompleted'];
 
   // Actions
   setDocument: (doc: FlowDocument | null) => void;
@@ -304,6 +314,14 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   currentSearchIndex: -1,
   searchScrollChapterIndex: null,
 
+  // Goal notifications
+  pendingGoalNotifications: [],
+  consumeGoalNotifications: () => {
+    const notifications = get().pendingGoalNotifications;
+    set({ pendingGoalNotifications: [] });
+    return notifications;
+  },
+
   setDocument: (doc) => {
     let finalDoc = doc;
     if (doc?.book && doc.book.chapters.length > 0) {
@@ -423,6 +441,9 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         wpm: state.currentWPM,
         archiveItemId: state.archiveItemId,
         progress,
+        onGoalsCompleted: (goals) => {
+          set((s) => ({ pendingGoalNotifications: [...s.pendingGoalNotifications, ...goals] }));
+        },
       });
       
       set({
@@ -577,12 +598,15 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     pendingSavePosition = null;
     
     // Record session stats with completion flag
-    recordSessionStats({
-      sessionTimeMs: sessionTime,
-      wpm: state.currentWPM,
-      archiveItemId: state.archiveItemId,
-      progress: 100, // Completed
-    });
+      recordSessionStats({
+        sessionTimeMs: sessionTime,
+        wpm: state.currentWPM,
+        archiveItemId: state.archiveItemId,
+        progress: 100, // Completed
+        onGoalsCompleted: (goals) => {
+          set((s) => ({ pendingGoalNotifications: [...s.pendingGoalNotifications, ...goals] }));
+        },
+      });
     
     // Update archive item with 100% progress
     // This ensures the archive shows 100% when reading is complete

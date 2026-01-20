@@ -9,6 +9,7 @@ import NoteEditorModal from './NoteEditorModal';
 import NotesPanel from './NotesPanel';
 import SearchBar from './SearchBar';
 import TTSControls from './TTSControls';
+import { useToast } from './Toast';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useSwipeGestures } from '../hooks/useSwipeGestures';
 import { useTextSelection } from '../hooks/useTextSelection';
@@ -92,9 +93,22 @@ export default function ReaderView() {
     jumpToEnd,
     jumpToPercent,
     skipBlocks,
+    // Goal notifications
+    consumeGoalNotifications,
   } = useReaderStore();
 
+  const { showToast } = useToast();
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Check for and display goal completion notifications
+  useEffect(() => {
+    const goals = consumeGoalNotifications();
+    for (const goal of goals) {
+      const emoji = goal.type === 'daily' ? '🎯' : goal.type === 'weekly' ? '🏆' : '🌟';
+      const message = `${emoji} ${goal.type.charAt(0).toUpperCase() + goal.type.slice(1)} goal reached! (${goal.target} ${goal.unit})`;
+      showToast(message, 'success', 5000);
+    }
+  });
 
   useKeyboardShortcuts({
     settings,

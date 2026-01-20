@@ -28,7 +28,7 @@ interface InsightsTabProps {
 }
 
 export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
-  const { hourlyActivity, personalBests, contentBreakdown, kpis, progressBreakdown } = stats;
+  const { hourlyActivity, personalBests, contentBreakdown, kpis, progressBreakdown, rollingAverages, patternInsights, projections } = stats;
 
   // Find best hour to read
   const bestHour = [...hourlyActivity].sort((a, b) => b.totalReadingTimeMs - a.totalReadingTimeMs)[0];
@@ -137,6 +137,240 @@ export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
               </p>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Rolling Averages Section */}
+      <div>
+        <h3 className="text-sm font-medium mb-3 opacity-80 flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+          Rolling Averages
+          {rollingAverages.trend !== 'stable' && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${
+              rollingAverages.trend === 'improving' 
+                ? 'bg-green-500/20 text-green-500' 
+                : 'bg-red-500/20 text-red-500'
+            }`}>
+              {rollingAverages.trend === 'improving' ? 'Trending Up' : 'Trending Down'}
+            </span>
+          )}
+        </h3>
+        <div className="grid grid-cols-2 gap-4">
+          {/* 7-Day Average */}
+          <div className="p-4 rounded-lg bg-reader-text/5">
+            <p className="text-xs font-medium opacity-60 mb-3">Last 7 Days (avg/day)</p>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm opacity-70">Reading Time</span>
+                <span className="font-semibold">{rollingAverages.sevenDay.readingTimeMinutes}m</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm opacity-70">Words Read</span>
+                <span className="font-semibold">{formatLargeNumber(rollingAverages.sevenDay.wordsRead)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm opacity-70">Avg Speed</span>
+                <span className="font-semibold">{rollingAverages.sevenDay.avgWpm} WPM</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm opacity-70">Sessions</span>
+                <span className="font-semibold">{rollingAverages.sevenDay.sessionsPerDay}/day</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 30-Day Average */}
+          <div className="p-4 rounded-lg bg-reader-text/5">
+            <p className="text-xs font-medium opacity-60 mb-3">Last 30 Days (avg/day)</p>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm opacity-70">Reading Time</span>
+                <span className="font-semibold">{rollingAverages.thirtyDay.readingTimeMinutes}m</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm opacity-70">Words Read</span>
+                <span className="font-semibold">{formatLargeNumber(rollingAverages.thirtyDay.wordsRead)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm opacity-70">Avg Speed</span>
+                <span className="font-semibold">{rollingAverages.thirtyDay.avgWpm} WPM</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm opacity-70">Sessions</span>
+                <span className="font-semibold">{rollingAverages.thirtyDay.sessionsPerDay}/day</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Comparison Bars */}
+        {rollingAverages.thirtyDay.readingTimeMinutes > 0 && (
+          <div className="mt-3 p-3 rounded-lg bg-reader-text/5">
+            <p className="text-xs opacity-60 mb-2">7-Day vs 30-Day Reading Time</p>
+            <div className="flex gap-2 items-center">
+              <div className="flex-1">
+                <div className="flex gap-1 items-center mb-1">
+                  <div 
+                    className="h-4 rounded transition-all duration-500"
+                    style={{ 
+                      width: `${Math.min(100, (rollingAverages.sevenDay.readingTimeMinutes / Math.max(rollingAverages.sevenDay.readingTimeMinutes, rollingAverages.thirtyDay.readingTimeMinutes)) * 100)}%`,
+                      backgroundColor: accentColor,
+                    }}
+                  />
+                  <span className="text-xs opacity-70 whitespace-nowrap">7d</span>
+                </div>
+                <div className="flex gap-1 items-center">
+                  <div 
+                    className="h-4 rounded opacity-50 transition-all duration-500"
+                    style={{ 
+                      width: `${Math.min(100, (rollingAverages.thirtyDay.readingTimeMinutes / Math.max(rollingAverages.sevenDay.readingTimeMinutes, rollingAverages.thirtyDay.readingTimeMinutes)) * 100)}%`,
+                      backgroundColor: accentColor,
+                    }}
+                  />
+                  <span className="text-xs opacity-70 whitespace-nowrap">30d</span>
+                </div>
+              </div>
+              <div className="text-right">
+                {rollingAverages.sevenDay.readingTimeMinutes > rollingAverages.thirtyDay.readingTimeMinutes ? (
+                  <span className="text-green-500 text-sm font-medium">
+                    +{Math.round(((rollingAverages.sevenDay.readingTimeMinutes / rollingAverages.thirtyDay.readingTimeMinutes) - 1) * 100)}%
+                  </span>
+                ) : rollingAverages.sevenDay.readingTimeMinutes < rollingAverages.thirtyDay.readingTimeMinutes ? (
+                  <span className="text-red-500 text-sm font-medium">
+                    {Math.round(((rollingAverages.sevenDay.readingTimeMinutes / rollingAverages.thirtyDay.readingTimeMinutes) - 1) * 100)}%
+                  </span>
+                ) : (
+                  <span className="text-reader-text/50 text-sm font-medium">0%</span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Reading Patterns */}
+      <div>
+        <h3 className="text-sm font-medium mb-3 opacity-80 flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Reading Patterns
+        </h3>
+        
+        {/* Best/Worst Day + Weekend vs Weekday */}
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/20 to-green-600/10 border border-green-500/20">
+            <p className="text-xs opacity-60">Best Day to Read</p>
+            <p className="text-lg font-semibold mt-1">{patternInsights.bestDay.dayName}</p>
+            <p className="text-sm opacity-70">{patternInsights.bestDay.avgMinutes}m avg</p>
+          </div>
+          <div className="p-4 rounded-lg bg-gradient-to-br from-orange-500/20 to-orange-600/10 border border-orange-500/20">
+            <p className="text-xs opacity-60">Least Active Day</p>
+            <p className="text-lg font-semibold mt-1">{patternInsights.worstDay.dayName}</p>
+            <p className="text-sm opacity-70">{patternInsights.worstDay.avgMinutes}m avg</p>
+          </div>
+        </div>
+
+        {/* Weekday vs Weekend */}
+        <div className="p-4 rounded-lg bg-reader-text/5 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium">Weekday vs Weekend</p>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${
+              patternInsights.weekdayVsWeekend.preference === 'weekend' 
+                ? 'bg-purple-500/20 text-purple-400'
+                : patternInsights.weekdayVsWeekend.preference === 'weekday'
+                  ? 'bg-blue-500/20 text-blue-400'
+                  : 'bg-gray-500/20 text-gray-400'
+            }`}>
+              {patternInsights.weekdayVsWeekend.preference === 'weekend' 
+                ? 'Weekend Reader' 
+                : patternInsights.weekdayVsWeekend.preference === 'weekday'
+                  ? 'Weekday Reader'
+                  : 'Balanced'}
+            </span>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <span className="text-xs opacity-60 w-16">Weekday</span>
+              <div className="flex-1 h-3 bg-reader-text/10 rounded-full overflow-hidden">
+                <div 
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ 
+                    width: `${Math.min(100, (patternInsights.weekdayVsWeekend.weekdayAvgMinutes / Math.max(patternInsights.weekdayVsWeekend.weekdayAvgMinutes, patternInsights.weekdayVsWeekend.weekendAvgMinutes, 1)) * 100)}%`,
+                    backgroundColor: accentColor,
+                  }}
+                />
+              </div>
+              <span className="text-sm font-medium w-12 text-right">{patternInsights.weekdayVsWeekend.weekdayAvgMinutes}m</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs opacity-60 w-16">Weekend</span>
+              <div className="flex-1 h-3 bg-reader-text/10 rounded-full overflow-hidden">
+                <div 
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ 
+                    width: `${Math.min(100, (patternInsights.weekdayVsWeekend.weekendAvgMinutes / Math.max(patternInsights.weekdayVsWeekend.weekdayAvgMinutes, patternInsights.weekdayVsWeekend.weekendAvgMinutes, 1)) * 100)}%`,
+                    backgroundColor: accentColor,
+                  }}
+                />
+              </div>
+              <span className="text-sm font-medium w-12 text-right">{patternInsights.weekdayVsWeekend.weekendAvgMinutes}m</span>
+            </div>
+          </div>
+          <p className="text-xs opacity-50 mt-2 text-center">
+            {patternInsights.weekdayVsWeekend.weekendPercent}% of your reading happens on weekends
+          </p>
+        </div>
+
+        {/* Day of Week Breakdown */}
+        {patternInsights.dayOfWeekBreakdown.length > 0 && (
+          <div className="p-4 rounded-lg bg-reader-text/5">
+            <p className="text-xs opacity-60 mb-3">Reading by Day of Week</p>
+            <div className="flex items-end justify-between gap-1 h-20">
+              {patternInsights.dayOfWeekBreakdown.map((day) => {
+                const maxMinutes = Math.max(...patternInsights.dayOfWeekBreakdown.map(d => d.avgMinutes), 1);
+                const height = (day.avgMinutes / maxMinutes) * 100;
+                return (
+                  <div key={day.dayIndex} className="flex-1 flex flex-col items-center gap-1">
+                    <div 
+                      className="w-full rounded-t transition-all duration-500"
+                      style={{ 
+                        height: `${Math.max(height, 4)}%`,
+                        backgroundColor: day.dayIndex === patternInsights.bestDay.dayIndex ? accentColor : `${accentColor}60`,
+                      }}
+                    />
+                    <span className="text-[10px] opacity-50">{day.dayName.slice(0, 3)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Consistency Status */}
+        <div className="mt-4 p-4 rounded-lg bg-reader-text/5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Reading Consistency</p>
+            <p className="text-xs opacity-60">
+              {patternInsights.consistency.activeDaysPercent}% active days in last 30 days
+            </p>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+            patternInsights.consistency.streakStatus === 'on-fire'
+              ? 'bg-orange-500/20 text-orange-400'
+              : patternInsights.consistency.streakStatus === 'consistent'
+                ? 'bg-green-500/20 text-green-400'
+                : patternInsights.consistency.streakStatus === 'sporadic'
+                  ? 'bg-yellow-500/20 text-yellow-400'
+                  : 'bg-gray-500/20 text-gray-400'
+          }`}>
+            {patternInsights.consistency.streakStatus === 'on-fire' && 'On Fire!'}
+            {patternInsights.consistency.streakStatus === 'consistent' && 'Consistent'}
+            {patternInsights.consistency.streakStatus === 'sporadic' && 'Sporadic'}
+            {patternInsights.consistency.streakStatus === 'inactive' && 'Getting Started'}
+          </span>
         </div>
       </div>
 
@@ -283,6 +517,101 @@ export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
           <span>Completed: {Math.round((progressBreakdown.completed / Math.max(totalItems, 1)) * 100)}%</span>
           <span>In Progress: {Math.round((progressBreakdown.inProgress / Math.max(totalItems, 1)) * 100)}%</span>
         </div>
+      </div>
+
+      {/* Reading Projections */}
+      <div>
+        <h3 className="text-sm font-medium mb-3 opacity-80 flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Reading Projections
+          {projections.booksPerYear.confidence !== 'low' && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${
+              projections.booksPerYear.confidence === 'high'
+                ? 'bg-green-500/20 text-green-400'
+                : 'bg-yellow-500/20 text-yellow-400'
+            }`}>
+              {projections.booksPerYear.confidence === 'high' ? 'High Confidence' : 'Medium Confidence'}
+            </span>
+          )}
+        </h3>
+
+        {/* Main Projections Grid */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="p-4 rounded-lg bg-gradient-to-br from-indigo-500/20 to-indigo-600/10 border border-indigo-500/20 text-center">
+            <p className="text-2xl font-bold" style={{ color: accentColor }}>
+              {projections.booksPerYear.estimate}
+            </p>
+            <p className="text-xs opacity-60 mt-1">books/year</p>
+            <p className="text-[10px] opacity-40">
+              Based on {projections.booksPerYear.basedOn === 'completion-rate' ? 'completions' : 'reading pace'}
+            </p>
+          </div>
+          <div className="p-4 rounded-lg bg-reader-text/5 text-center">
+            <p className="text-2xl font-bold">{projections.hoursPerYear}</p>
+            <p className="text-xs opacity-60 mt-1">hours/year</p>
+          </div>
+          <div className="p-4 rounded-lg bg-reader-text/5 text-center">
+            <p className="text-2xl font-bold">{formatLargeNumber(projections.wordsPerYear)}</p>
+            <p className="text-xs opacity-60 mt-1">words/year</p>
+          </div>
+        </div>
+
+        {/* Backlog Estimate */}
+        {projections.daysToFinishBacklog !== null && (
+          <div className="p-4 rounded-lg bg-reader-text/5 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Backlog Completion</p>
+                <p className="text-xs opacity-60">
+                  At your current pace, you'll finish your backlog in
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xl font-bold" style={{ color: accentColor }}>
+                  {projections.daysToFinishBacklog < 365 
+                    ? `${projections.daysToFinishBacklog} days`
+                    : `${(projections.daysToFinishBacklog / 365).toFixed(1)} years`
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Milestones */}
+        {(projections.milestones.nextBook || projections.milestones.oneHundredBooks || projections.milestones.oneMillionWords) && (
+          <div className="p-4 rounded-lg bg-reader-text/5">
+            <p className="text-xs font-medium opacity-60 mb-3">Upcoming Milestones</p>
+            <div className="space-y-2">
+              {projections.milestones.nextBook !== null && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="opacity-70">Next book completion</span>
+                  <span className="font-medium">~{projections.milestones.nextBook} days</span>
+                </div>
+              )}
+              {projections.milestones.oneHundredBooks !== null && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="opacity-70">100 books milestone</span>
+                  <span className="font-medium">~{Math.round(projections.milestones.oneHundredBooks / 30)} months</span>
+                </div>
+              )}
+              {projections.milestones.oneMillionWords !== null && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="opacity-70">1 million words read</span>
+                  <span className="font-medium">~{Math.round(projections.milestones.oneMillionWords / 30)} months</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {projections.booksPerYear.confidence === 'low' && (
+          <p className="text-xs opacity-50 mt-2 text-center">
+            Keep reading to improve projection accuracy
+          </p>
+        )}
       </div>
 
       {/* Fun Fact */}
