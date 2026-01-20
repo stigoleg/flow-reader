@@ -330,6 +330,7 @@ export default function ReaderView() {
   const bionicConfig: BionicConfig = {
     intensity: settings.bionicIntensity,
     proportion: settings.bionicProportion,
+    adaptive: settings.bionicAdaptive,
   };
 
   const pacingConfig: PacingConfig = {

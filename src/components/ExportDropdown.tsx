@@ -7,7 +7,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { Annotation } from '@/types';
-import { exportAnnotations, copyToClipboard, type ExportFormat } from '@/lib/annotations-export';
+import { 
+  exportAnnotations, 
+  copyToClipboard, 
+  downloadAsFile,
+  getFileInfoForFormat,
+  type ExportFormat 
+} from '@/lib/annotations-export';
 
 interface ExportDropdownProps {
   annotations: Annotation[];
@@ -21,6 +27,8 @@ const EXPORT_OPTIONS: { format: ExportFormat; label: string; description: string
   { format: 'json', label: 'JSON', description: 'Structured data format' },
 ];
 
+type ExportAction = 'copy' | 'download';
+
 export default function ExportDropdown({
   annotations,
   documentTitle,
@@ -28,6 +36,8 @@ export default function ExportDropdown({
 }: ExportDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
+  const [activeAction, setActiveAction] = useState<ExportAction>('copy');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const hasAnnotations = annotations.length > 0;
@@ -60,14 +70,27 @@ export default function ExportDropdown({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  const handleExport = async (format: ExportFormat) => {
+  const handleExport = async (format: ExportFormat, action: ExportAction) => {
     const exported = exportAnnotations(annotations, documentTitle, format);
-    const success = await copyToClipboard(exported);
     
-    if (success) {
-      setCopied(true);
+    if (action === 'copy') {
+      const success = await copyToClipboard(exported);
+      
+      if (success) {
+        setCopied(true);
+        setIsOpen(false);
+        setTimeout(() => setCopied(false), 1500);
+      }
+    } else {
+      // Download as file
+      const { extension, mimeType } = getFileInfoForFormat(format);
+      const safeTitle = documentTitle.replace(/[^a-zA-Z0-9-_ ]/g, '').slice(0, 50);
+      const filename = `${safeTitle || 'highlights'}-highlights.${extension}`;
+      
+      downloadAsFile(exported, filename, mimeType);
+      setDownloaded(true);
       setIsOpen(false);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setDownloaded(false), 1500);
     }
   };
 
@@ -92,6 +115,13 @@ export default function ExportDropdown({
             </svg>
             <span className="text-green-500">Copied!</span>
           </>
+        ) : downloaded ? (
+          <>
+            <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-green-500">Downloaded!</span>
+          </>
         ) : (
           <>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,14 +138,35 @@ export default function ExportDropdown({
       {/* Dropdown menu */}
       {isOpen && (
         <div
-          className="absolute right-0 top-full mt-1 w-48 rounded-lg shadow-lg border border-reader-text/10 overflow-hidden z-50"
+          className="absolute right-0 top-full mt-1 w-56 rounded-lg shadow-lg border border-reader-text/10 overflow-hidden z-50"
           style={{ backgroundColor: 'var(--reader-bg)' }}
           role="menu"
         >
+          {/* Action toggle */}
+          <div className="flex border-b border-reader-text/10">
+            <button
+              onClick={() => setActiveAction('copy')}
+              className={`flex-1 px-3 py-2 text-sm transition-colors ${
+                activeAction === 'copy' ? 'bg-reader-text/10 font-medium' : 'opacity-60 hover:opacity-100'
+              }`}
+            >
+              Copy
+            </button>
+            <button
+              onClick={() => setActiveAction('download')}
+              className={`flex-1 px-3 py-2 text-sm transition-colors ${
+                activeAction === 'download' ? 'bg-reader-text/10 font-medium' : 'opacity-60 hover:opacity-100'
+              }`}
+            >
+              Download
+            </button>
+          </div>
+          
+          {/* Format options */}
           {EXPORT_OPTIONS.map(option => (
             <button
               key={option.format}
-              onClick={() => handleExport(option.format)}
+              onClick={() => handleExport(option.format, activeAction)}
               className="w-full text-left px-3 py-2 hover:bg-reader-text/10 transition-colors"
               role="menuitem"
             >

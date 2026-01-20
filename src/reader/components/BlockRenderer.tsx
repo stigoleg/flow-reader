@@ -50,7 +50,14 @@ export default memo(function BlockRenderer({
 
   const renderContent = (text: string) => {
     if (mode.isBionic) {
-      return <BionicMode text={text} intensity={bionicConfig.intensity} proportion={bionicConfig.proportion} />;
+      return (
+        <BionicMode 
+          text={text} 
+          intensity={bionicConfig.intensity} 
+          proportion={bionicConfig.proportion}
+          adaptive={bionicConfig.adaptive}
+        />
+      );
     }
 
     // Render ALL blocks with PacingContent when in pacing mode (not just active)

@@ -560,19 +560,6 @@ function mergeCustomThemes(
 // Note: isPositionFurther, furtherPosition, and furtherProgress are imported from archive-utils.ts
 
 /**
- * Get the newer of two positions based on timestamp
- * @deprecated Use furtherPosition for merge operations
- */
-function newerPosition(
-  a: ReadingPosition | undefined,
-  b: ReadingPosition | undefined
-): ReadingPosition | undefined {
-  if (!a) return b;
-  if (!b) return a;
-  return a.timestamp > b.timestamp ? a : b;
-}
-
-/**
  * Compare two settings objects for equality
  */
 function settingsEqual(a: SyncStateDocument['settings'], b: SyncStateDocument['settings']): boolean {
@@ -762,7 +749,6 @@ export const _testing = {
   mergeArchiveItems,
   mergePositions,
   mergeCustomThemes,
-  newerPosition,
   furtherPosition,
   furtherProgress,
   isPositionFurther,

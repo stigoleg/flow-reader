@@ -135,8 +135,11 @@ export default function App() {
                 // Scroll to annotation without changing reading position
                 scrollToAnnotation(annotation);
               }
-            }).catch(() => {
+            }).catch((error) => {
               // Error loading annotations - position is already restored
+              if (import.meta.env.DEV) {
+                console.warn('[FlowReader:Reader] Failed to load annotations for navigation:', error);
+              }
             });
           });
         } else {

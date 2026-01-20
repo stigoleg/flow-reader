@@ -19,6 +19,22 @@ interface CollectionManagerProps {
 // Common emojis for collections
 const EMOJI_OPTIONS = ['📚', '⭐', '💡', '🔖', '📌', '🎯', '💼', '🏠', '🎨', '🔬', '📰', '✨'];
 
+// Color options for collections
+const COLOR_OPTIONS = [
+  { value: '#ef4444', label: 'Red' },
+  { value: '#f97316', label: 'Orange' },
+  { value: '#f59e0b', label: 'Amber' },
+  { value: '#eab308', label: 'Yellow' },
+  { value: '#84cc16', label: 'Lime' },
+  { value: '#22c55e', label: 'Green' },
+  { value: '#14b8a6', label: 'Teal' },
+  { value: '#06b6d4', label: 'Cyan' },
+  { value: '#3b82f6', label: 'Blue' },
+  { value: '#6366f1', label: 'Indigo' },
+  { value: '#8b5cf6', label: 'Violet' },
+  { value: '#d946ef', label: 'Fuchsia' },
+];
+
 export default function CollectionManager({
   collections,
   onClose,
@@ -28,9 +44,11 @@ export default function CollectionManager({
 }: CollectionManagerProps) {
   const [newCollectionName, setNewCollectionName] = useState('');
   const [newCollectionIcon, setNewCollectionIcon] = useState('📁');
+  const [newCollectionColor, setNewCollectionColor] = useState<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
+  const [showColorPicker, setShowColorPicker] = useState<string | null>(null);
   
   const inputRef = useRef<HTMLInputElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +56,8 @@ export default function CollectionManager({
   useEscapeKey(() => {
     if (showEmojiPicker) {
       setShowEmojiPicker(null);
+    } else if (showColorPicker) {
+      setShowColorPicker(null);
     } else if (editingId) {
       setEditingId(null);
     } else {
@@ -60,10 +80,11 @@ export default function CollectionManager({
     const name = newCollectionName.trim();
     if (!name) return;
     
-    const created = await onCreate(name, { icon: newCollectionIcon });
+    const created = await onCreate(name, { icon: newCollectionIcon, color: newCollectionColor });
     if (created) {
       setNewCollectionName('');
       setNewCollectionIcon('📁');
+      setNewCollectionColor(undefined);
     }
   };
   
@@ -94,6 +115,11 @@ export default function CollectionManager({
   const handleIconChange = async (collectionId: string, icon: string) => {
     await onUpdate(collectionId, { icon });
     setShowEmojiPicker(null);
+  };
+  
+  const handleColorChange = async (collectionId: string, color: string | undefined) => {
+    await onUpdate(collectionId, { color });
+    setShowColorPicker(null);
   };
   
   return (
@@ -204,6 +230,7 @@ export default function CollectionManager({
                     isEditing={editingId === collection.id}
                     editingName={editingName}
                     showEmojiPicker={showEmojiPicker === collection.id}
+                    showColorPicker={showColorPicker === collection.id}
                     onEditingNameChange={setEditingName}
                     onStartEdit={() => handleStartEdit(collection)}
                     onFinishEdit={handleFinishEdit}
@@ -211,7 +238,11 @@ export default function CollectionManager({
                     onToggleEmojiPicker={() => setShowEmojiPicker(
                       showEmojiPicker === collection.id ? null : collection.id
                     )}
+                    onToggleColorPicker={() => setShowColorPicker(
+                      showColorPicker === collection.id ? null : collection.id
+                    )}
                     onIconChange={(icon) => handleIconChange(collection.id, icon)}
+                    onColorChange={(color) => handleColorChange(collection.id, color)}
                     editInputRef={editingId === collection.id ? editInputRef : undefined}
                   />
                 ))}
@@ -249,12 +280,15 @@ interface CollectionRowProps {
   isEditing: boolean;
   editingName: string;
   showEmojiPicker: boolean;
+  showColorPicker: boolean;
   onEditingNameChange: (name: string) => void;
   onStartEdit: () => void;
   onFinishEdit: () => void;
   onDelete: () => void;
   onToggleEmojiPicker: () => void;
+  onToggleColorPicker: () => void;
   onIconChange: (icon: string) => void;
+  onColorChange: (color: string | undefined) => void;
   editInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
@@ -263,12 +297,15 @@ function CollectionRow({
   isEditing,
   editingName,
   showEmojiPicker,
+  showColorPicker,
   onEditingNameChange,
   onStartEdit,
   onFinishEdit,
   onDelete,
   onToggleEmojiPicker,
+  onToggleColorPicker,
   onIconChange,
+  onColorChange,
   editInputRef,
 }: CollectionRowProps) {
   return (
@@ -331,6 +368,55 @@ function CollectionRow({
         >
           {collection.name}
         </span>
+      )}
+      
+      {/* Color picker */}
+      {!isEditing && (
+        <div className="relative">
+          <button
+            onClick={onToggleColorPicker}
+            className="w-6 h-6 rounded-full border-2 border-current/20 hover:border-current/40 transition-colors"
+            style={{ backgroundColor: collection.color || 'transparent' }}
+            title="Change color"
+          >
+            {!collection.color && (
+              <svg className="w-4 h-4 m-auto opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+            )}
+          </button>
+          {showColorPicker && (
+            <div 
+              className="absolute top-full right-0 mt-1 p-2 rounded-lg shadow-lg z-50 min-w-max"
+              style={{
+                backgroundColor: 'var(--reader-bg)',
+                border: '1px solid rgba(128, 128, 128, 0.3)',
+              }}
+            >
+              <div className="grid grid-cols-6 gap-1 mb-2">
+                {COLOR_OPTIONS.map(color => (
+                  <button
+                    key={color.value}
+                    onClick={() => onColorChange(color.value)}
+                    className={`w-6 h-6 rounded-full border-2 transition-all ${
+                      collection.color === color.value ? 'border-white scale-110' : 'border-transparent hover:scale-110'
+                    }`}
+                    style={{ backgroundColor: color.value }}
+                    title={color.label}
+                  />
+                ))}
+              </div>
+              {collection.color && (
+                <button
+                  onClick={() => onColorChange(undefined)}
+                  className="w-full text-xs opacity-60 hover:opacity-100 py-1"
+                >
+                  Remove color
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
       
       {/* Delete button */}

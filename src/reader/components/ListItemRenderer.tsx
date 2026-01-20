@@ -53,7 +53,12 @@ export default memo(function ListItemRenderer({
   if (mode.isBionic) {
     return (
       <li>
-        <BionicMode text={item} intensity={bionicConfig.intensity} proportion={bionicConfig.proportion} />
+        <BionicMode 
+          text={item} 
+          intensity={bionicConfig.intensity} 
+          proportion={bionicConfig.proportion}
+          adaptive={bionicConfig.adaptive}
+        />
       </li>
     );
   }

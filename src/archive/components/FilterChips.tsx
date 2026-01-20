@@ -5,13 +5,18 @@
  */
 
 import type { ArchiveItem, ArchiveItemType, Collection } from '@/types';
-import type { FilterType } from '../store';
+import type { FilterType, SortOption, ProgressFilter } from '../store';
+import SortDropdown from './SortDropdown';
 
 interface FilterChipsProps {
   activeFilter: FilterType;
   activeCollectionId: string | null;
+  progressFilter: ProgressFilter;
+  sortBy: SortOption;
   onFilterChange: (filter: FilterType) => void;
   onCollectionChange: (collectionId: string | null) => void;
+  onProgressFilterChange: (filter: ProgressFilter) => void;
+  onSortChange: (sort: SortOption) => void;
   items: ArchiveItem[];
   collections: Collection[];
   onClearHistory: () => void;
@@ -33,11 +38,26 @@ const FILTERS: FilterConfig[] = [
   { id: 'paste', label: 'Paste', types: ['paste'] },
 ];
 
+interface ProgressFilterConfig {
+  id: ProgressFilter;
+  label: string;
+}
+
+const PROGRESS_FILTERS: ProgressFilterConfig[] = [
+  { id: 'unread', label: 'Unread' },
+  { id: 'reading', label: 'Reading' },
+  { id: 'completed', label: 'Completed' },
+];
+
 export default function FilterChips({ 
   activeFilter, 
   activeCollectionId,
+  progressFilter,
+  sortBy,
   onFilterChange,
   onCollectionChange,
+  onProgressFilterChange,
+  onSortChange,
   items,
   collections,
   onClearHistory,
@@ -127,8 +147,18 @@ export default function FilterChips({
               onClick={() => handleCollectionClick(collection.id)}
               className={`filter-chip ${isActive ? 'active' : ''}`}
               aria-pressed={isActive}
+              style={collection.color ? {
+                borderColor: isActive ? collection.color : `${collection.color}50`,
+                backgroundColor: isActive ? `${collection.color}20` : undefined,
+              } : undefined}
             >
-              {collection.icon && (
+              {collection.color && (
+                <span 
+                  className="w-2 h-2 rounded-full mr-1.5 flex-shrink-0"
+                  style={{ backgroundColor: collection.color }}
+                />
+              )}
+              {collection.icon && !collection.color && (
                 <span className="mr-1">{collection.icon}</span>
               )}
               {collection.name}
@@ -153,16 +183,38 @@ export default function FilterChips({
         >
           +
         </button>
+        
+        {/* Separator before progress filters */}
+        <span className="mx-2 opacity-30">|</span>
+        
+        {/* Progress status filters */}
+        {PROGRESS_FILTERS.map(filter => {
+          const isActive = progressFilter === filter.id;
+          
+          return (
+            <button
+              key={filter.id}
+              onClick={() => onProgressFilterChange(isActive ? 'all' : filter.id)}
+              className={`filter-chip ${isActive ? 'active' : ''}`}
+              aria-pressed={isActive}
+            >
+              {filter.label}
+            </button>
+          );
+        })}
       </div>
       
       {items.length > 0 && (
-        <button
-          onClick={onClearHistory}
-          className="text-sm opacity-50 hover:opacity-100 transition-opacity whitespace-nowrap"
-          aria-label="Clear all history"
-        >
-          Clear History
-        </button>
+        <div className="flex items-center gap-3">
+          <SortDropdown sortBy={sortBy} onSortChange={onSortChange} />
+          <button
+            onClick={onClearHistory}
+            className="text-sm opacity-50 hover:opacity-100 transition-opacity whitespace-nowrap"
+            aria-label="Clear all history"
+          >
+            Clear History
+          </button>
+        </div>
       )}
     </div>
   );

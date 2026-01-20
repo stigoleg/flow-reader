@@ -320,7 +320,10 @@ export class DropboxAdapter implements SyncProvider {
         size: data.size,
         etag: data.rev,
       };
-    } catch {
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[FlowReader:Dropbox] getRemoteMetadata failed:', error);
+      }
       return { exists: false, updatedAt: 0, size: 0 };
     }
   }
@@ -349,8 +352,11 @@ export class DropboxAdapter implements SyncProvider {
             'Authorization': `Bearer ${this.tokens.accessToken}`,
           },
         });
-      } catch {
-        // Ignore errors during revocation
+      } catch (error) {
+        // Log but don't fail - disconnecting should always succeed locally
+        if (import.meta.env.DEV) {
+          console.warn('[FlowReader:Dropbox] Token revocation failed (non-critical):', error);
+        }
       }
     }
 
@@ -388,8 +394,11 @@ export class DropboxAdapter implements SyncProvider {
           body: JSON.stringify({ path: CONTENT_FOLDER_PATH, autorename: false }),
         });
       }
-    } catch {
-      // Ignore errors - folder might already exist
+    } catch (error) {
+      // Folder creation may fail if folder already exists (race condition) - log but don't throw
+      if (import.meta.env.DEV) {
+        console.warn('[FlowReader:Dropbox] ensureContentFolder failed (may already exist):', error);
+      }
     }
   }
 
@@ -429,7 +438,10 @@ export class DropboxAdapter implements SyncProvider {
       }
 
       return files;
-    } catch {
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[FlowReader:Dropbox] listContentFiles failed:', error);
+      }
       return [];
     }
   }
@@ -508,7 +520,10 @@ export class DropboxAdapter implements SyncProvider {
       }
 
       return await response.blob();
-    } catch {
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[FlowReader:Dropbox] downloadContentFile failed:', error);
+      }
       return null;
     }
   }
@@ -531,8 +546,11 @@ export class DropboxAdapter implements SyncProvider {
         },
         body: JSON.stringify({ path: filePath }),
       });
-    } catch {
-      // Ignore errors - file might not exist
+    } catch (error) {
+      // Log but don't fail - file might not exist or already deleted
+      if (import.meta.env.DEV) {
+        console.warn('[FlowReader:Dropbox] deleteContentFile failed (file may not exist):', error);
+      }
     }
   }
 

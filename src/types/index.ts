@@ -171,6 +171,7 @@ export interface ReaderSettings {
   // Bionic settings
   bionicIntensity: number;    // 0-1, controls font weight (0.5=600, 1=800)
   bionicProportion: number;   // 0-1, how much of each word to bold
+  bionicAdaptive: boolean;    // Adjust proportion based on word complexity
 }
 
 export type PacingGranularity = 'block' | 'sentence' | 'word';
@@ -450,6 +451,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   // Bionic defaults
   bionicIntensity: 0.7,
   bionicProportion: 0.4,
+  bionicAdaptive: false,
 };
 
 // Theme presets

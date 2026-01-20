@@ -1,5 +1,5 @@
 import type { ReaderSettings } from '@/types';
-import { SliderField } from '@/components/ui';
+import { SliderField, CheckboxField } from '@/components/ui';
 import { BIONIC_INTENSITY, BIONIC_PROPORTION } from '@/constants/settings';
 
 interface BionicSectionProps {
@@ -30,6 +30,15 @@ export function BionicSection({ settings, onUpdate }: BionicSectionProps) {
           formatValue={(v) => `${Math.round(v * 100)}%`}
           onChange={(value) => onUpdate({ bionicProportion: value })}
         />
+        <CheckboxField
+          id="bionicAdaptive"
+          label="Adaptive mode (vary by word complexity)"
+          checked={settings.bionicAdaptive}
+          onChange={(checked) => onUpdate({ bionicAdaptive: checked })}
+        />
+        <p className="text-xs opacity-50 mt-2">
+          Adaptive mode bolds more of complex words and less of common words for optimal reading flow.
+        </p>
       </div>
     </div>
   );

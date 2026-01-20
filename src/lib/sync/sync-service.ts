@@ -29,6 +29,7 @@ import type {
   SyncEventCallback,
   SyncEvent,
   EncryptedBlob,
+  SyncPhase,
 } from './types';
 
 
@@ -50,6 +51,16 @@ class SyncServiceImpl {
   private status: SyncStatus = { state: 'disabled' };
   private eventListeners: Set<SyncEventCallback> = new Set();
   private syncInProgress = false;
+  private syncStartedAt: number | null = null;
+
+  /**
+   * Update the current sync phase (for progress display)
+   */
+  private setPhase(phase: SyncPhase): void {
+    if (this.status.state === 'syncing' && this.syncStartedAt) {
+      this.status = { state: 'syncing', startedAt: this.syncStartedAt, phase };
+    }
+  }
 
   /**
    * Initialize the sync service (call on extension startup)
@@ -295,7 +306,8 @@ class SyncServiceImpl {
 
     // Start sync
     this.syncInProgress = true;
-    this.status = { state: 'syncing', startedAt: Date.now() };
+    this.syncStartedAt = Date.now();
+    this.status = { state: 'syncing', startedAt: this.syncStartedAt, phase: 'connecting' };
     
     this.emitEvent({
       type: 'sync-started',
@@ -354,6 +366,7 @@ class SyncServiceImpl {
       };
     } finally {
       this.syncInProgress = false;
+      this.syncStartedAt = null;
     }
   }
 
@@ -383,10 +396,12 @@ class SyncServiceImpl {
     const deviceId = await storageFacade.getDeviceId();
 
     // Check remote metadata
+    this.setPhase('downloading');
     const remoteMeta = await this.provider.getRemoteMetadata();
 
     if (!remoteMeta.exists) {
       // No remote state - upload local
+      this.setPhase('uploading');
       if (config.encryptionEnabled) {
         const salt = config.encryptionSalt 
           ? base64ToUint8Array(config.encryptionSalt)
@@ -453,6 +468,7 @@ class SyncServiceImpl {
     }
 
     // Merge states
+    this.setPhase('merging');
     const mergeResult = mergeStates(localState, remoteState, deviceId);
 
     // Log conflicts
@@ -471,6 +487,7 @@ class SyncServiceImpl {
 
     // Upload merged state if we have changes or local was newer
     if (mergeResult.hasChanges || localNewer) {
+      this.setPhase('uploading');
       if (config.encryptionEnabled) {
         const salt = getSaltFromBlob(remoteBlob);
         const encrypted = await encrypt(mergeResult.merged, this.passphrase!, salt);
@@ -491,6 +508,7 @@ class SyncServiceImpl {
     }
 
     // Perform content sync (separate files for document content)
+    this.setPhase('syncing-content');
     await this.performContentSync(mergeResult.merged);
 
     return {

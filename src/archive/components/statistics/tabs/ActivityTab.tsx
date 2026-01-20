@@ -10,10 +10,10 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   LineChart,
   Line,
 } from 'recharts';
+import { ChartContainer } from '../components/ChartContainer';
 import { ContributionHeatmap } from '../charts/ContributionHeatmap';
 import { TimeRangeSelector } from '../components/TimeRangeSelector';
 import type { useStatistics } from '../hooks/useStatistics';
@@ -59,8 +59,8 @@ export function ActivityTab({ stats, accentColor }: ActivityTabProps) {
       {/* Daily Activity Bar Chart */}
       <div>
         <h3 className="text-sm font-medium mb-3 opacity-80">Daily Reading (Last 14 Days)</h3>
-        <div className="h-40 -ml-2" style={{ minHeight: '160px', minWidth: '200px' }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={160}>
+        <div className="h-40 -ml-2">
+          <ChartContainer minWidth={200} minHeight={160}>
             <BarChart data={dailyChartData}>
               <XAxis 
                 dataKey="date" 
@@ -91,7 +91,7 @@ export function ActivityTab({ stats, accentColor }: ActivityTabProps) {
                 maxBarSize={40}
               />
             </BarChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </div>
       </div>
 
@@ -99,8 +99,8 @@ export function ActivityTab({ stats, accentColor }: ActivityTabProps) {
       {wpmChartData.length > 1 && (
         <div>
           <h3 className="text-sm font-medium mb-3 opacity-80">Reading Speed Trend</h3>
-          <div className="h-32 -ml-2" style={{ minHeight: '128px', minWidth: '200px' }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={128}>
+          <div className="h-32 -ml-2">
+            <ChartContainer minWidth={200} minHeight={128}>
               <LineChart data={wpmChartData}>
                 <XAxis 
                   dataKey="date" 
@@ -133,7 +133,7 @@ export function ActivityTab({ stats, accentColor }: ActivityTabProps) {
                   activeDot={{ r: 5 }}
                 />
               </LineChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </div>
         </div>
       )}

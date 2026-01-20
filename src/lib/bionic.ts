@@ -1,4 +1,5 @@
 import { getWordFrequencyTier } from './word-frequency';
+import { logDeprecation } from './logger';
 
 export interface BionicWord {
   bold: string;
@@ -109,6 +110,7 @@ export function adaptiveBionicText(text: string, baseProportion: number = 0.4): 
  * @deprecated Use bionicTextShadow instead to prevent layout shifts
  */
 export function bionicFontWeight(intensity: number): number {
+  logDeprecation('bionicFontWeight', 'bionicTextShadow');
   return Math.round(600 + intensity * 200);
 }
 

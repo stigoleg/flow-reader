@@ -140,6 +140,45 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /**
+ * Download content as a file.
+ * Creates a temporary download link and triggers the download.
+ */
+export function downloadAsFile(
+  content: string,
+  filename: string,
+  mimeType: string
+): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  // Clean up the object URL
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Get the file extension and mime type for an export format.
+ */
+export function getFileInfoForFormat(format: ExportFormat): { extension: string; mimeType: string } {
+  switch (format) {
+    case 'markdown':
+      return { extension: 'md', mimeType: 'text/markdown' };
+    case 'text':
+      return { extension: 'txt', mimeType: 'text/plain' };
+    case 'json':
+      return { extension: 'json', mimeType: 'application/json' };
+    default:
+      return { extension: 'txt', mimeType: 'text/plain' };
+  }
+}
+
+/**
  * Sort annotations by their position in the document.
  */
 function sortAnnotationsByPosition(annotations: Annotation[]): Annotation[] {

@@ -1,14 +1,22 @@
 /**
  * Sync Status Badge
  * 
- * Displays the current sync status with a colored indicator.
+ * Displays the current sync status with a colored indicator and progress phase.
  */
 
-import type { SyncStatus } from '@/lib/sync/types';
+import type { SyncStatus, SyncPhase } from '@/lib/sync/types';
 
 interface SyncStatusBadgeProps {
   status: SyncStatus;
 }
+
+const phaseLabels: Record<SyncPhase, string> = {
+  'connecting': 'Connecting...',
+  'downloading': 'Downloading...',
+  'merging': 'Merging...',
+  'uploading': 'Uploading...',
+  'syncing-content': 'Syncing content...',
+};
 
 export function SyncStatusBadge({ status }: SyncStatusBadgeProps) {
   const getStatusInfo = () => {
@@ -17,8 +25,10 @@ export function SyncStatusBadge({ status }: SyncStatusBadgeProps) {
         return { label: 'Not configured', color: 'opacity-50' };
       case 'idle':
         return { label: 'Connected', color: 'text-green-500' };
-      case 'syncing':
-        return { label: 'Syncing...', color: 'text-blue-500' };
+      case 'syncing': {
+        const phaseLabel = status.phase ? phaseLabels[status.phase] : 'Syncing...';
+        return { label: phaseLabel, color: 'text-blue-500' };
+      }
       case 'error':
         return { label: 'Error', color: 'text-red-500' };
       default:

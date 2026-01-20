@@ -8,6 +8,7 @@ export interface ModeConfig {
 export interface BionicConfig {
   intensity: number;
   proportion: number;
+  adaptive: boolean;
 }
 
 export interface PacingConfig extends PacingSettings {

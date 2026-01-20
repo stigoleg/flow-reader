@@ -11,6 +11,7 @@ import {
   SpeedSection,
   PacingSection,
   BionicSection,
+  RSVPSection,
   DisplaySection,
   KeyboardSection,
 } from './settings';
@@ -148,6 +149,10 @@ export default function SettingsPanel() {
         
         {settings.activeMode === 'bionic' && (
           <BionicSection settings={settings} onUpdate={updateSettings} />
+        )}
+        
+        {settings.activeMode === 'rsvp' && (
+          <RSVPSection settings={settings} onUpdate={updateSettings} />
         )}
 
         <DisplaySection settings={settings} onUpdate={updateSettings} />

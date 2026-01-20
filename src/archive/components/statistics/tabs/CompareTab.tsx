@@ -10,9 +10,9 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
   Legend,
 } from 'recharts';
+import { ChartContainer } from '../components/ChartContainer';
 import { ComparisonCard } from '../components/ComparisonCard';
 import { formatReadingTime } from '@/lib/stats-service';
 import type { useStatistics } from '../hooks/useStatistics';
@@ -159,8 +159,8 @@ export function CompareTab({ stats, accentColor }: CompareTabProps) {
       {/* Comparison Bar Chart */}
       <div>
         <h3 className="text-sm font-medium mb-3 opacity-80">Side-by-Side Comparison</h3>
-        <div className="h-48" style={{ minHeight: '192px', minWidth: '200px' }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={192}>
+        <div className="h-48">
+          <ChartContainer minWidth={200} minHeight={192}>
             <BarChart data={chartData} barGap={4}>
               <XAxis 
                 dataKey="metric" 
@@ -200,7 +200,7 @@ export function CompareTab({ stats, accentColor }: CompareTabProps) {
                 maxBarSize={30}
               />
             </BarChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </div>
         <p className="text-xs opacity-50 text-center mt-2">
           Note: Words shown in hundreds for better chart readability

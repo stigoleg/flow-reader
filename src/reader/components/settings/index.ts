@@ -4,5 +4,6 @@ export { TypographySection } from './TypographySection';
 export { SpeedSection } from './SpeedSection';
 export { PacingSection } from './PacingSection';
 export { BionicSection } from './BionicSection';
+export { RSVPSection } from './RSVPSection';
 export { DisplaySection } from './DisplaySection';
 export { KeyboardSection } from './KeyboardSection';

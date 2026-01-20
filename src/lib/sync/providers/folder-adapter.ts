@@ -88,7 +88,10 @@ export class FolderAdapter implements SyncProvider {
       }
 
       return false;
-    } catch {
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[FlowReader:FolderSync] restoreHandle failed:', error);
+      }
       return false;
     }
   }
@@ -210,7 +213,10 @@ export class FolderAdapter implements SyncProvider {
     try {
       const permission = await this.folderHandle.queryPermission({ mode: 'readwrite' });
       return permission === 'granted';
-    } catch {
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.warn('[FlowReader:FolderSync] isConnected permission check failed:', error);
+      }
       return false;
     }
   }

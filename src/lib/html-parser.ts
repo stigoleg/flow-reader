@@ -1,9 +1,12 @@
 import type { Block } from '@/types';
+import { sanitizeArticleHtml } from './sanitize';
 
 export interface ParseHtmlOptions {
   handleTables?: boolean;
   /** Preserve inline formatting as HTML in content */
   preserveFormatting?: boolean;
+  /** Skip sanitization (only use for trusted HTML, e.g., already-sanitized internal content) */
+  skipSanitization?: boolean;
 }
 
 /**
@@ -12,10 +15,15 @@ export interface ParseHtmlOptions {
  * This parser is designed to handle both web articles and ebook content.
  * It recursively traverses the DOM, collecting block-level elements and
  * their text content while preserving semantic structure.
+ * 
+ * HTML is sanitized using DOMPurify before parsing unless skipSanitization is true.
  */
 export function parseHtmlToBlocks(html: string, options: ParseHtmlOptions = {}): Block[] {
+  // Sanitize HTML before parsing to prevent XSS
+  const safeHtml = options.skipSanitization ? html : sanitizeArticleHtml(html);
+  
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const doc = parser.parseFromString(safeHtml, 'text/html');
   const blocks: Block[] = [];
   let blockId = 0;
 
@@ -201,17 +209,22 @@ export function parseHtmlToBlocks(html: string, options: ParseHtmlOptions = {}):
 /**
  * Parse HTML specifically for ebook content.
  * More permissive than article parsing - preserves all text content.
+ * 
+ * HTML is sanitized using DOMPurify before parsing.
  */
 export function parseEbookHtml(html: string): Block[] {
+  // Sanitize HTML before parsing to prevent XSS
+  const safeHtml = sanitizeArticleHtml(html);
+  
   const parser = new DOMParser();
   
   // Try XHTML first (ebooks often use this)
-  let doc = parser.parseFromString(html, 'application/xhtml+xml');
+  let doc = parser.parseFromString(safeHtml, 'application/xhtml+xml');
   const parseError = doc.querySelector('parsererror');
   
   if (parseError) {
-    // Fall back to HTML parsing
-    doc = parser.parseFromString(html, 'text/html');
+    // Fall back to HTML parsing (still uses sanitized HTML)
+    doc = parser.parseFromString(safeHtml, 'text/html');
   }
   
   const body = doc.querySelector('body') || doc.documentElement;

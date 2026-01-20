@@ -5,6 +5,7 @@
  */
 
 import { useState } from 'react';
+import { PasswordStrengthMeter } from './PasswordStrengthMeter';
 
 interface PassphraseModalProps {
   isNewSetup: boolean;
@@ -77,6 +78,7 @@ export function PassphraseModal({ isNewSetup, onSubmit, onCancel }: PassphraseMo
                 </svg>
               </button>
             </div>
+            {isNewSetup && <PasswordStrengthMeter password={passphrase} />}
           </div>
 
           {isNewSetup && (

@@ -203,11 +203,19 @@ export interface SyncConfig {
 }
 
 
+/** Sync progress phases */
+export type SyncPhase = 
+  | 'connecting'
+  | 'downloading'
+  | 'merging'
+  | 'uploading'
+  | 'syncing-content';
+
 /** Current sync status */
 export type SyncStatus = 
   | { state: 'disabled' }
   | { state: 'idle'; lastSyncTime?: number }
-  | { state: 'syncing'; startedAt: number }
+  | { state: 'syncing'; startedAt: number; phase?: SyncPhase }
   | { state: 'error'; message: string; lastAttempt: number; retryAt?: number };
 
 /** Sync operation result */

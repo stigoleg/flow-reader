@@ -8,6 +8,7 @@ import { DEFAULT_SETTINGS as defaultSettings } from '@/types';
 
 import { storageFacade } from './storage-facade';
 import * as chromeStorage from './chrome-storage';
+import { logDeprecation } from './logger';
 
 // Re-export StorageError for backwards compatibility
 export { StorageError } from './errors';
@@ -167,6 +168,7 @@ export async function clearStorage(): Promise<void> {
  * @deprecated Use addRecent from recents-service.ts instead.
  */
 export async function addRecentDocument(doc: { id: string; title: string; source: string; timestamp: number; preview: string; url?: string; cachedDocument?: FlowDocument }): Promise<void> {
+  logDeprecation('addRecentDocument', 'addRecent from recents-service.ts');
   const state = await storageFacade.getState();
   const recentDocuments = [
     doc,
@@ -179,6 +181,7 @@ export async function addRecentDocument(doc: { id: string; title: string; source
  * @deprecated Use queryRecents from recents-service.ts instead.
  */
 export async function getRecentDocuments(): Promise<StorageSchema['recentDocuments']> {
+  logDeprecation('getRecentDocuments', 'queryRecents from recents-service.ts');
   const state = await storageFacade.getState();
   return state.recentDocuments;
 }

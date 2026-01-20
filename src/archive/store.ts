@@ -36,6 +36,10 @@ import { syncService } from '@/lib/sync/sync-service';
 
 export type FilterType = 'all' | ArchiveItemType | 'books';
 
+export type SortOption = 'lastOpened' | 'dateAdded' | 'title' | 'author';
+
+export type ProgressFilter = 'all' | 'unread' | 'reading' | 'completed';
+
 export interface ArchiveState {
   // Data
   items: ArchiveItem[];
@@ -50,6 +54,8 @@ export interface ArchiveState {
   searchQuery: string;
   activeFilter: FilterType;
   activeCollectionId: string | null;
+  progressFilter: ProgressFilter;
+  sortBy: SortOption;
   focusedItemIndex: number;
   
   // Selection state
@@ -82,6 +88,8 @@ export interface ArchiveState {
   setSearchQuery: (query: string) => void;
   setActiveFilter: (filter: FilterType) => void;
   setActiveCollectionId: (collectionId: string | null) => void;
+  setSortBy: (sort: SortOption) => void;
+  setProgressFilter: (filter: ProgressFilter) => void;
   setFocusedItemIndex: (index: number) => void;
   openItem: (item: ArchiveItem, annotationId?: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
@@ -134,6 +142,8 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   searchQuery: '',
   activeFilter: 'all',
   activeCollectionId: null,
+  progressFilter: 'all',
+  sortBy: 'lastOpened',
   focusedItemIndex: 0,
   
   // Selection state
@@ -189,6 +199,14 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   
   setActiveCollectionId: (collectionId: string | null) => {
     set({ activeCollectionId: collectionId, activeFilter: 'all', focusedItemIndex: 0 });
+  },
+  
+  setSortBy: (sort: SortOption) => {
+    set({ sortBy: sort, focusedItemIndex: 0 });
+  },
+  
+  setProgressFilter: (filter: ProgressFilter) => {
+    set({ progressFilter: filter, focusedItemIndex: 0 });
   },
   
   setFocusedItemIndex: (index: number) => {
@@ -748,7 +766,52 @@ export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
     items = items.filter(item => matchesSearch(item, query));
   }
   
+  // Filter by progress status
+  if (state.progressFilter !== 'all') {
+    items = items.filter(item => {
+      const percent = item.progress?.percent ?? 0;
+      switch (state.progressFilter) {
+        case 'unread':
+          return percent === 0;
+        case 'reading':
+          return percent > 0 && percent < 95;
+        case 'completed':
+          return percent >= 95;
+        default:
+          return true;
+      }
+    });
+  }
+  
+  // Apply sorting
+  items = sortItems(items, state.sortBy);
+  
   return items;
+}
+
+/** Sort items by the specified option */
+function sortItems(items: ArchiveItem[], sortBy: SortOption): ArchiveItem[] {
+  return [...items].sort((a, b) => {
+    switch (sortBy) {
+      case 'lastOpened':
+        return b.lastOpenedAt - a.lastOpenedAt;
+      case 'dateAdded':
+        return b.createdAt - a.createdAt;
+      case 'title':
+        return a.title.localeCompare(b.title);
+      case 'author': {
+        const authorA = a.author?.toLowerCase() || '';
+        const authorB = b.author?.toLowerCase() || '';
+        // Items without authors go to the end
+        if (!authorA && !authorB) return a.title.localeCompare(b.title);
+        if (!authorA) return 1;
+        if (!authorB) return -1;
+        return authorA.localeCompare(authorB);
+      }
+      default:
+        return b.lastOpenedAt - a.lastOpenedAt;
+    }
+  });
 }
 
 /** Get the count of selected items that are currently visible (after filtering) */

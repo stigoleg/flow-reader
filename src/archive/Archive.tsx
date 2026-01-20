@@ -28,9 +28,12 @@ import { DEFAULT_SETTINGS, type ReaderSettings } from '@/types';
 // Lazy load StatisticsModal with retry logic for extension updates
 // When extension updates, old chunk URLs become invalid - retry with fresh import
 const StatisticsModal = lazy(() => 
-  import('./components/StatisticsModal').catch(() => {
+  import('./components/StatisticsModal').catch((error) => {
     // If first attempt fails, wait briefly and retry once
     // This handles cases where extension just updated
+    if (import.meta.env.DEV) {
+      console.warn('[FlowReader:Archive] StatisticsModal lazy load failed, retrying:', error);
+    }
     return new Promise(resolve => setTimeout(resolve, 100))
       .then(() => import('./components/StatisticsModal'));
   })
@@ -66,6 +69,8 @@ export default function Archive() {
   const searchQuery = useArchiveStore(state => state.searchQuery);
   const activeFilter = useArchiveStore(state => state.activeFilter);
   const activeCollectionId = useArchiveStore(state => state.activeCollectionId);
+  const sortBy = useArchiveStore(state => state.sortBy);
+  const progressFilter = useArchiveStore(state => state.progressFilter);
   const focusedItemIndex = useArchiveStore(state => state.focusedItemIndex);
   const isDragging = useArchiveStore(state => state.isDragging);
   const isPasteModalOpen = useArchiveStore(state => state.isPasteModalOpen);
@@ -88,6 +93,8 @@ export default function Archive() {
   const setSearchQuery = useArchiveStore(state => state.setSearchQuery);
   const setActiveFilter = useArchiveStore(state => state.setActiveFilter);
   const setActiveCollectionId = useArchiveStore(state => state.setActiveCollectionId);
+  const setSortBy = useArchiveStore(state => state.setSortBy);
+  const setProgressFilter = useArchiveStore(state => state.setProgressFilter);
   const setFocusedItemIndex = useArchiveStore(state => state.setFocusedItemIndex);
   const openItem = useArchiveStore(state => state.openItem);
   const removeItem = useArchiveStore(state => state.removeItem);
@@ -120,8 +127,8 @@ export default function Archive() {
   
   // Get filtered items
   const filteredItems = useMemo(
-    () => selectFilteredItems({ items, searchQuery, activeFilter, activeCollectionId } as ReturnType<typeof useArchiveStore.getState>),
-    [items, searchQuery, activeFilter, activeCollectionId]
+    () => selectFilteredItems({ items, searchQuery, activeFilter, activeCollectionId, sortBy, progressFilter } as ReturnType<typeof useArchiveStore.getState>),
+    [items, searchQuery, activeFilter, activeCollectionId, sortBy, progressFilter]
   );
   
   // Get search-filtered items (for filter chip counts - filtered by search but not by type)
@@ -450,8 +457,12 @@ export default function Archive() {
         <FilterChips
           activeFilter={activeFilter}
           activeCollectionId={activeCollectionId}
+          progressFilter={progressFilter}
+          sortBy={sortBy}
           onFilterChange={setActiveFilter}
           onCollectionChange={setActiveCollectionId}
+          onProgressFilterChange={setProgressFilter}
+          onSortChange={setSortBy}
           items={searchFilteredItems}
           collections={collections}
           onClearHistory={() => setClearDialogOpen(true)}

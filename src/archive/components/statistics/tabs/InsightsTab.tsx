@@ -9,7 +9,6 @@ import {
   Bar,
   XAxis,
   Tooltip,
-  ResponsiveContainer,
   RadarChart,
   Radar,
   PolarGrid,
@@ -19,6 +18,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import { ChartContainer } from '../components/ChartContainer';
 import { formatReadingTime, formatLargeNumber } from '@/lib/stats-service';
 import type { useStatistics } from '../hooks/useStatistics';
 
@@ -148,8 +148,8 @@ export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
             <p className="text-sm">Your peak reading hour:</p>
             <p className="font-semibold" style={{ color: accentColor }}>{bestHourLabel}</p>
           </div>
-          <div className="h-24" style={{ minHeight: '96px', minWidth: '200px' }}>
-            <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={96}>
+          <div className="h-24">
+            <ChartContainer minWidth={200} minHeight={96}>
               <BarChart data={hourlyChartData}>
                 <XAxis 
                   dataKey="hour" 
@@ -173,7 +173,7 @@ export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
                   radius={[2, 2, 0, 0]}
                 />
               </BarChart>
-            </ResponsiveContainer>
+            </ChartContainer>
           </div>
         </div>
       </div>
@@ -181,8 +181,8 @@ export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
       {/* Reading Habits Radar */}
       <div>
         <h3 className="text-sm font-medium mb-3 opacity-80">Reading Habits Profile</h3>
-        <div className="h-64" style={{ minHeight: '256px', minWidth: '200px' }}>
-          <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={256}>
+        <div className="h-64">
+          <ChartContainer minWidth={200} minHeight={256}>
             <RadarChart data={radarData}>
               <PolarGrid stroke="currentColor" strokeOpacity={0.1} />
               <PolarAngleAxis 
@@ -202,7 +202,7 @@ export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
                 fillOpacity={0.3}
               />
             </RadarChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </div>
       </div>
 
@@ -211,8 +211,8 @@ export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
         <div>
           <h3 className="text-sm font-medium mb-3 opacity-80">Content Mix</h3>
           <div className="flex items-center gap-4">
-            <div className="h-40 w-40" style={{ minHeight: '160px', minWidth: '160px' }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={160} minHeight={160}>
+            <div className="h-40 w-40">
+              <ChartContainer minWidth={160} minHeight={160}>
                 <PieChart>
                   <Pie
                     data={pieData}
@@ -234,7 +234,7 @@ export function InsightsTab({ stats, accentColor }: InsightsTabProps) {
                     }}
                   />
                 </PieChart>
-              </ResponsiveContainer>
+              </ChartContainer>
             </div>
             <div className="flex-1 space-y-2">
               {pieData.map((item) => (

@@ -90,38 +90,46 @@ export async function updateCollection(
 /**
  * Delete a collection.
  * Also removes the collection ID from all archive items.
+ * 
+ * Note: This operation is atomic - it reads state once and performs
+ * both updates to avoid race conditions between the two saves.
  */
 export async function deleteCollection(id: string): Promise<boolean> {
   return storageMutex.withLock(async () => {
-    const collections = await getCollections();
+    // Read state once at the beginning to avoid race conditions
+    const state = await storageFacade.getState();
+    const collections = state.collections ?? DEFAULT_COLLECTIONS;
     const collection = collections.find(c => c.id === id);
     
     if (!collection) {
       return false;
     }
     
-    // Remove from collections list
-    const filtered = collections.filter(c => c.id !== id);
-    await saveCollections(filtered);
+    // Prepare updated collections (remove the deleted one)
+    const filteredCollections = collections.filter(c => c.id !== id);
     
-    // Remove collection ID from all archive items
-    const state = await storageFacade.getState();
+    // Prepare updated archive items (remove collection ID from all items)
     const updatedItems = state.archiveItems.map(item => {
       if (item.collectionIds?.includes(id)) {
+        const newCollectionIds = item.collectionIds.filter(cid => cid !== id);
         return {
           ...item,
-          collectionIds: item.collectionIds.filter(cid => cid !== id),
+          // Clean up empty array
+          collectionIds: newCollectionIds.length > 0 ? newCollectionIds : undefined,
         };
       }
       return item;
     });
     
-    // Only save if there were changes
-    const hasChanges = updatedItems.some((item, i) => 
+    // Check if archive items need updating
+    const hasItemChanges = updatedItems.some((item, i) => 
       item.collectionIds !== state.archiveItems[i].collectionIds
     );
     
-    if (hasChanges) {
+    // Perform both updates (order doesn't matter since we're in a lock)
+    await saveCollections(filteredCollections);
+    
+    if (hasItemChanges) {
       await storageFacade.updateArchiveItems(updatedItems);
     }
     

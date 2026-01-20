@@ -65,4 +65,9 @@ export const BIONIC_PROPORTION = {
   default: 0.4,
 } as const;
 
-
+export const RSVP_CHUNK_SIZE = {
+  min: 1,
+  max: 5,
+  step: 1,
+  default: 1,
+} as const;
