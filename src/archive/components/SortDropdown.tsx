@@ -17,6 +17,8 @@ const SORT_OPTIONS: { id: SortOption; label: string }[] = [
   { id: 'dateAdded', label: 'Date Added' },
   { id: 'title', label: 'Title' },
   { id: 'author', label: 'Author' },
+  { id: 'progress', label: 'Progress' },
+  { id: 'wordCount', label: 'Length' },
 ];
 
 export default function SortDropdown({ sortBy, onSortChange }: SortDropdownProps) {

@@ -14,6 +14,7 @@ import {
   deduplicateArchive,
   getRecent,
   updateArchiveItem,
+  bulkUpdateProgress,
 } from '@/lib/recents-service';
 import {
   getCollections,
@@ -36,9 +37,29 @@ import { syncService } from '@/lib/sync/sync-service';
 
 export type FilterType = 'all' | ArchiveItemType | 'books';
 
-export type SortOption = 'lastOpened' | 'dateAdded' | 'title' | 'author';
+export type SortOption = 'lastOpened' | 'dateAdded' | 'title' | 'author' | 'progress' | 'wordCount';
 
 export type ProgressFilter = 'all' | 'unread' | 'reading' | 'completed';
+
+export type DateFilter = 'all' | 'today' | 'week' | 'month' | 'year';
+
+export type SmartCollectionId = 'in-progress' | 'completed' | 'has-notes' | 'long-reads';
+
+export interface SmartCollection {
+  id: SmartCollectionId;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+export const SMART_COLLECTIONS: SmartCollection[] = [
+  { id: 'in-progress', name: 'In Progress', icon: '📖', description: 'Items you started reading' },
+  { id: 'completed', name: 'Completed', icon: '✅', description: 'Items you finished' },
+  { id: 'has-notes', name: 'Has Notes', icon: '📝', description: 'Items with annotations' },
+  { id: 'long-reads', name: 'Long Reads', icon: '📚', description: 'Items with 10,000+ words' },
+];
+
+export type ViewMode = 'list' | 'grid';
 
 export interface ArchiveState {
   // Data
@@ -54,8 +75,11 @@ export interface ArchiveState {
   searchQuery: string;
   activeFilter: FilterType;
   activeCollectionId: string | null;
+  activeSmartCollectionId: SmartCollectionId | null;
   progressFilter: ProgressFilter;
   sortBy: SortOption;
+  viewMode: ViewMode;
+  dateFilter: DateFilter;
   focusedItemIndex: number;
   
   // Selection state
@@ -88,8 +112,11 @@ export interface ArchiveState {
   setSearchQuery: (query: string) => void;
   setActiveFilter: (filter: FilterType) => void;
   setActiveCollectionId: (collectionId: string | null) => void;
+  setActiveSmartCollectionId: (smartCollectionId: SmartCollectionId | null) => void;
   setSortBy: (sort: SortOption) => void;
+  setViewMode: (mode: ViewMode) => void;
   setProgressFilter: (filter: ProgressFilter) => void;
+  setDateFilter: (filter: DateFilter) => void;
   setFocusedItemIndex: (index: number) => void;
   openItem: (item: ArchiveItem, annotationId?: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
@@ -130,6 +157,8 @@ export interface ArchiveState {
   bulkDelete: () => Promise<void>;
   bulkAddToCollection: (collectionId: string) => Promise<void>;
   bulkRemoveFromCollection: (collectionId: string) => Promise<void>;
+  bulkMarkAsRead: () => Promise<void>;
+  bulkMarkAsUnread: () => Promise<void>;
 }
 
 
@@ -142,8 +171,11 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   searchQuery: '',
   activeFilter: 'all',
   activeCollectionId: null,
+  activeSmartCollectionId: null,
   progressFilter: 'all',
   sortBy: 'lastOpened',
+  viewMode: 'list',
+  dateFilter: 'all',
   focusedItemIndex: 0,
   
   // Selection state
@@ -194,19 +226,37 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   },
   
   setActiveFilter: (filter: FilterType) => {
-    set({ activeFilter: filter, activeCollectionId: null, focusedItemIndex: 0 });
+    set({ activeFilter: filter, activeCollectionId: null, activeSmartCollectionId: null, focusedItemIndex: 0 });
   },
   
   setActiveCollectionId: (collectionId: string | null) => {
-    set({ activeCollectionId: collectionId, activeFilter: 'all', focusedItemIndex: 0 });
+    set({ activeCollectionId: collectionId, activeFilter: 'all', activeSmartCollectionId: null, focusedItemIndex: 0 });
+  },
+  
+  setActiveSmartCollectionId: (smartCollectionId: SmartCollectionId | null) => {
+    set({ 
+      activeSmartCollectionId: smartCollectionId, 
+      activeCollectionId: null, 
+      activeFilter: 'all',
+      progressFilter: 'all', // Reset progress filter since smart collections handle this
+      focusedItemIndex: 0,
+    });
   },
   
   setSortBy: (sort: SortOption) => {
     set({ sortBy: sort, focusedItemIndex: 0 });
   },
   
+  setViewMode: (mode: ViewMode) => {
+    set({ viewMode: mode });
+  },
+  
   setProgressFilter: (filter: ProgressFilter) => {
     set({ progressFilter: filter, focusedItemIndex: 0 });
+  },
+  
+  setDateFilter: (filter: DateFilter) => {
+    set({ dateFilter: filter, focusedItemIndex: 0 });
   },
   
   setFocusedItemIndex: (index: number) => {
@@ -300,6 +350,7 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
         fileHash: doc.metadata.fileHash,
         cachedDocument: doc,
         wordCount: countWords(doc.plainText),
+        thumbnail: doc.metadata.thumbnail,
       });
       
       await chrome.runtime.sendMessage({ type: 'OPEN_READER', document: doc });
@@ -362,6 +413,7 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
           fileHash: doc.metadata.fileHash,
           cachedDocument: doc,
           wordCount: countWords(doc.plainText),
+          thumbnail: doc.metadata.thumbnail,
         });
         
         if (!firstDoc) {
@@ -723,6 +775,54 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
       set({ error: error instanceof Error ? error.message : 'Failed to remove items from collection' });
     }
   },
+  
+  bulkMarkAsRead: async () => {
+    const { selectedItemIds, items } = get();
+    if (selectedItemIds.size === 0) return;
+    
+    try {
+      const itemIds = Array.from(selectedItemIds);
+      const progress = { percent: 100, label: 'Complete' };
+      
+      await bulkUpdateProgress(itemIds, progress);
+      
+      // Update local state
+      set({
+        items: items.map(item => {
+          if (!selectedItemIds.has(item.id)) return item;
+          return { ...item, progress };
+        }),
+        selectedItemIds: new Set(),
+        isSelectionMode: false,
+      });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to mark items as read' });
+    }
+  },
+  
+  bulkMarkAsUnread: async () => {
+    const { selectedItemIds, items } = get();
+    if (selectedItemIds.size === 0) return;
+    
+    try {
+      const itemIds = Array.from(selectedItemIds);
+      const progress = { percent: 0, label: 'Not started' };
+      
+      await bulkUpdateProgress(itemIds, progress);
+      
+      // Update local state
+      set({
+        items: items.map(item => {
+          if (!selectedItemIds.has(item.id)) return item;
+          return { ...item, progress };
+        }),
+        selectedItemIds: new Set(),
+        isSelectionMode: false,
+      });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to mark items as unread' });
+    }
+  },
 }));
 
 
@@ -746,7 +846,12 @@ export function selectSearchFilteredItems(state: ArchiveState): ArchiveItem[] {
 export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
   let items = state.items;
   
-  // Filter by collection first (if active)
+  // Filter by smart collection first (if active)
+  if (state.activeSmartCollectionId) {
+    items = filterBySmartCollection(items, state.activeSmartCollectionId);
+  }
+  
+  // Filter by collection (if active)
   if (state.activeCollectionId) {
     items = items.filter(item => item.collectionIds?.includes(state.activeCollectionId!));
   }
@@ -766,8 +871,8 @@ export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
     items = items.filter(item => matchesSearch(item, query));
   }
   
-  // Filter by progress status
-  if (state.progressFilter !== 'all') {
+  // Filter by progress status (only if no smart collection is active)
+  if (state.progressFilter !== 'all' && !state.activeSmartCollectionId) {
     items = items.filter(item => {
       const percent = item.progress?.percent ?? 0;
       switch (state.progressFilter) {
@@ -783,10 +888,70 @@ export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
     });
   }
   
+  // Filter by date range
+  if (state.dateFilter !== 'all') {
+    const now = Date.now();
+    const cutoff = getDateCutoff(state.dateFilter, now);
+    items = items.filter(item => item.lastOpenedAt >= cutoff);
+  }
+  
   // Apply sorting
   items = sortItems(items, state.sortBy);
   
   return items;
+}
+
+/** Filter items by smart collection criteria */
+function filterBySmartCollection(items: ArchiveItem[], smartCollectionId: SmartCollectionId): ArchiveItem[] {
+  switch (smartCollectionId) {
+    case 'in-progress':
+      return items.filter(item => {
+        const percent = item.progress?.percent ?? 0;
+        return percent > 0 && percent < 95;
+      });
+    case 'completed':
+      return items.filter(item => {
+        const percent = item.progress?.percent ?? 0;
+        return percent >= 95;
+      });
+    case 'has-notes':
+      // Filter items that have an annotationCount > 0
+      // Note: annotationCount is cached on the item when annotations are loaded
+      return items.filter(item => (item.annotationCount ?? 0) > 0);
+    case 'long-reads':
+      // Items with 10,000+ words
+      return items.filter(item => (item.wordCount ?? 0) >= 10000);
+    default:
+      return items;
+  }
+}
+
+/** Get timestamp cutoff for date filter */
+function getDateCutoff(filter: DateFilter, now: number): number {
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  
+  switch (filter) {
+    case 'today':
+      return today.getTime();
+    case 'week': {
+      const weekAgo = new Date(today);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return weekAgo.getTime();
+    }
+    case 'month': {
+      const monthAgo = new Date(today);
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      return monthAgo.getTime();
+    }
+    case 'year': {
+      const yearAgo = new Date(today);
+      yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+      return yearAgo.getTime();
+    }
+    default:
+      return 0;
+  }
 }
 
 /** Sort items by the specified option */
@@ -807,6 +972,20 @@ function sortItems(items: ArchiveItem[], sortBy: SortOption): ArchiveItem[] {
         if (!authorA) return 1;
         if (!authorB) return -1;
         return authorA.localeCompare(authorB);
+      }
+      case 'progress': {
+        const progressA = a.progress?.percent ?? 0;
+        const progressB = b.progress?.percent ?? 0;
+        // Sort by progress descending (most progress first), then by title
+        if (progressB !== progressA) return progressB - progressA;
+        return a.title.localeCompare(b.title);
+      }
+      case 'wordCount': {
+        const countA = a.wordCount ?? 0;
+        const countB = b.wordCount ?? 0;
+        // Sort by word count descending (longest first), then by title
+        if (countB !== countA) return countB - countA;
+        return a.title.localeCompare(b.title);
       }
       default:
         return b.lastOpenedAt - a.lastOpenedAt;

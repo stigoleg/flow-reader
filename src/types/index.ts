@@ -24,6 +24,8 @@ export interface DocumentMetadata {
   fileSize?: number;
   /** SHA-256 hash of file for stable position keying */
   fileHash?: string;
+  /** Cover thumbnail as base64 data URL */
+  thumbnail?: string;
 }
 
 // BOOK STRUCTURE (for EPUB and MOBI)
@@ -311,6 +313,8 @@ export interface ArchiveItem {
   collectionIds?: string[];
   /** Word count for statistics tracking */
   wordCount?: number;
+  /** Cached annotation count (updated when annotations change) */
+  annotationCount?: number;
 }
 
 // COLLECTIONS (for organizing archive items)

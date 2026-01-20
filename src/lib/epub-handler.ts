@@ -45,6 +45,12 @@ interface SpineItem {
   linear: boolean;
 }
 
+interface ManifestItem {
+  href: string;
+  mediaType: string;
+  properties?: string;
+}
+
 interface NavPoint {
   id: string;
   label: string;
@@ -66,7 +72,7 @@ export async function extractFromEpub(file: File): Promise<FlowDocument> {
     const opfDir = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
     
     const opfContent = await loader.loadText(opfPath);
-    const { metadata, manifest, spine } = parseOpf(opfContent);
+    const { metadata, manifest, spine, coverId } = parseOpf(opfContent);
     
     const toc = await parseToc(loader, manifest, opfDir);
     
@@ -80,6 +86,9 @@ export async function extractFromEpub(file: File): Promise<FlowDocument> {
     }
     
     const fileHash = await computeFileHash(file);
+    
+    // Try to extract cover thumbnail
+    const thumbnail = await extractCoverThumbnail(loader, manifest, opfDir, coverId);
     
     // Create book structure
     const book: BookStructure = {
@@ -102,6 +111,7 @@ export async function extractFromEpub(file: File): Promise<FlowDocument> {
         fileName: file.name,
         fileSize: file.size,
         fileHash,
+        thumbnail,
       },
       blocks: firstChapter.blocks,
       plainText: firstChapter.plainText,
@@ -208,8 +218,9 @@ async function findOpfPath(loader: ZipLoader): Promise<string> {
  */
 function parseOpf(opfContent: string): {
   metadata: EpubMetadata;
-  manifest: Map<string, { href: string; mediaType: string }>;
+  manifest: Map<string, ManifestItem>;
   spine: SpineItem[];
+  coverId?: string;
 } {
   const parser = new DOMParser();
   const doc = parser.parseFromString(opfContent, 'application/xml');
@@ -224,14 +235,27 @@ function parseOpf(opfContent: string): {
     date: getTextContent(doc, 'dc\\:date, date, metadata > date'),
   };
   
+  // Try to get cover ID from metadata (EPUB2 style)
+  let coverId: string | undefined;
+  const coverMeta = doc.querySelector('meta[name="cover"]');
+  if (coverMeta) {
+    coverId = coverMeta.getAttribute('content') || undefined;
+  }
+  
   // Build manifest map
-  const manifest = new Map<string, { href: string; mediaType: string }>();
+  const manifest = new Map<string, ManifestItem>();
   doc.querySelectorAll('manifest item').forEach(item => {
     const id = item.getAttribute('id');
     const href = item.getAttribute('href');
     const mediaType = item.getAttribute('media-type') || '';
+    const properties = item.getAttribute('properties') || undefined;
     if (id && href) {
-      manifest.set(id, { href, mediaType });
+      manifest.set(id, { href, mediaType, properties });
+      
+      // EPUB3 style: look for cover-image property
+      if (properties?.includes('cover-image')) {
+        coverId = id;
+      }
     }
   });
   
@@ -249,7 +273,7 @@ function parseOpf(opfContent: string): {
     }
   });
   
-  return { metadata, manifest, spine };
+  return { metadata, manifest, spine, coverId };
 }
 
 /**
@@ -580,4 +604,131 @@ function resolvePath(basePath: string, relativePath: string): string {
   }
   
   return resolved.join('/');
+}
+
+/**
+ * Maximum thumbnail dimensions (pixels)
+ */
+const THUMBNAIL_MAX_WIDTH = 200;
+const THUMBNAIL_MAX_HEIGHT = 300;
+
+/**
+ * Extract and resize cover image to a thumbnail
+ */
+async function extractCoverThumbnail(
+  loader: ZipLoader,
+  manifest: Map<string, ManifestItem>,
+  opfDir: string,
+  coverId?: string
+): Promise<string | undefined> {
+  try {
+    // Find cover image item
+    let coverItem: ManifestItem | undefined;
+    let coverPath: string | undefined;
+    
+    // 1. Use explicit cover ID if found
+    if (coverId) {
+      coverItem = manifest.get(coverId);
+    }
+    
+    // 2. Look for items with "cover" in the ID or href
+    if (!coverItem) {
+      for (const [id, item] of manifest) {
+        if (item.mediaType.startsWith('image/')) {
+          const lowerHref = item.href.toLowerCase();
+          const lowerId = id.toLowerCase();
+          if (
+            lowerId === 'cover' ||
+            lowerId === 'cover-image' ||
+            lowerId.includes('cover') ||
+            lowerHref.includes('cover')
+          ) {
+            coverItem = item;
+            break;
+          }
+        }
+      }
+    }
+    
+    // 3. Fall back to first image in manifest
+    if (!coverItem) {
+      for (const [, item] of manifest) {
+        if (item.mediaType.startsWith('image/') && 
+            !item.href.toLowerCase().includes('logo')) {
+          coverItem = item;
+          break;
+        }
+      }
+    }
+    
+    if (!coverItem) {
+      return undefined;
+    }
+    
+    coverPath = resolvePath(opfDir, coverItem.href);
+    
+    // Load the image as a blob
+    const blob = await loader.loadBlob(coverPath);
+    
+    // Create image element and resize
+    return await resizeImageToThumbnail(blob);
+  } catch (error) {
+    // Non-fatal: just log and return undefined
+    if (import.meta.env.DEV) {
+      console.warn('[EPUB] Failed to extract cover thumbnail:', error);
+    }
+    return undefined;
+  }
+}
+
+/**
+ * Resize an image blob to a thumbnail and return as base64 data URL
+ */
+async function resizeImageToThumbnail(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      
+      // Calculate new dimensions maintaining aspect ratio
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > THUMBNAIL_MAX_WIDTH) {
+        height = (height * THUMBNAIL_MAX_WIDTH) / width;
+        width = THUMBNAIL_MAX_WIDTH;
+      }
+      
+      if (height > THUMBNAIL_MAX_HEIGHT) {
+        width = (width * THUMBNAIL_MAX_HEIGHT) / height;
+        height = THUMBNAIL_MAX_HEIGHT;
+      }
+      
+      // Create canvas and draw resized image
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width);
+      canvas.height = Math.round(height);
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      // Convert to JPEG data URL (better compression than PNG for photos)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      resolve(dataUrl);
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    
+    img.src = url;
+  });
 }

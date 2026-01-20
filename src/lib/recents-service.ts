@@ -38,6 +38,7 @@ export interface AddRecentInput {
   cachedDocument?: FlowDocument;
   fileHash?: string;
   wordCount?: number;
+  thumbnail?: string;
 }
 
 
@@ -418,6 +419,27 @@ export async function updateArchiveItem(
   await saveArchiveItems(items);
   
   return updated;
+}
+
+/**
+ * Update progress for multiple items at once (bulk operation).
+ * Does not update lastOpenedAt or reorder items.
+ */
+export async function bulkUpdateProgress(
+  ids: string[],
+  progress: ArchiveProgress
+): Promise<void> {
+  if (ids.length === 0) return;
+  
+  const items = await getArchiveItems();
+  const idSet = new Set(ids);
+  
+  const updated = items.map(item => {
+    if (!idSet.has(item.id)) return item;
+    return { ...item, progress };
+  });
+  
+  await saveArchiveItems(updated);
 }
 
 export async function removeRecent(id: string): Promise<void> {

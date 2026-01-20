@@ -11,6 +11,7 @@ import { useArchiveStore, selectFilteredItems, selectSearchFilteredItems, select
 import ArchiveHeader from './components/ArchiveHeader';
 import FilterChips from './components/FilterChips';
 import ArchiveList from './components/ArchiveList';
+import ArchiveGrid from './components/ArchiveGrid';
 import EmptyState from './components/EmptyState';
 import DropOverlay from './components/DropOverlay';
 import PasteModal from './components/PasteModal';
@@ -73,8 +74,10 @@ export default function Archive() {
   const searchQuery = useArchiveStore(state => state.searchQuery);
   const activeFilter = useArchiveStore(state => state.activeFilter);
   const activeCollectionId = useArchiveStore(state => state.activeCollectionId);
+  const activeSmartCollectionId = useArchiveStore(state => state.activeSmartCollectionId);
   const sortBy = useArchiveStore(state => state.sortBy);
   const progressFilter = useArchiveStore(state => state.progressFilter);
+  const dateFilter = useArchiveStore(state => state.dateFilter);
   const focusedItemIndex = useArchiveStore(state => state.focusedItemIndex);
   const isDragging = useArchiveStore(state => state.isDragging);
   const isPasteModalOpen = useArchiveStore(state => state.isPasteModalOpen);
@@ -85,6 +88,7 @@ export default function Archive() {
   const selectedItemIds = useArchiveStore(state => state.selectedItemIds);
   const isSelectionMode = useArchiveStore(state => state.isSelectionMode);
   const isBulkDeleteDialogOpen = useArchiveStore(state => state.isBulkDeleteDialogOpen);
+  const viewMode = useArchiveStore(state => state.viewMode);
   const { contextMenuItemId, contextMenuPosition } = useArchiveStore(
     useShallow(state => ({
       contextMenuItemId: state.contextMenuItemId,
@@ -97,8 +101,9 @@ export default function Archive() {
   const setSearchQuery = useArchiveStore(state => state.setSearchQuery);
   const setActiveFilter = useArchiveStore(state => state.setActiveFilter);
   const setActiveCollectionId = useArchiveStore(state => state.setActiveCollectionId);
+  const setActiveSmartCollectionId = useArchiveStore(state => state.setActiveSmartCollectionId);
   const setSortBy = useArchiveStore(state => state.setSortBy);
-  const setProgressFilter = useArchiveStore(state => state.setProgressFilter);
+  const setDateFilter = useArchiveStore(state => state.setDateFilter);
   const setFocusedItemIndex = useArchiveStore(state => state.setFocusedItemIndex);
   const openItem = useArchiveStore(state => state.openItem);
   const removeItem = useArchiveStore(state => state.removeItem);
@@ -128,11 +133,14 @@ export default function Archive() {
   const bulkDelete = useArchiveStore(state => state.bulkDelete);
   const bulkAddToCollection = useArchiveStore(state => state.bulkAddToCollection);
   const bulkRemoveFromCollection = useArchiveStore(state => state.bulkRemoveFromCollection);
+  const bulkMarkAsRead = useArchiveStore(state => state.bulkMarkAsRead);
+  const bulkMarkAsUnread = useArchiveStore(state => state.bulkMarkAsUnread);
+  const setViewMode = useArchiveStore(state => state.setViewMode);
   
   // Get filtered items
   const filteredItems = useMemo(
-    () => selectFilteredItems({ items, searchQuery, activeFilter, activeCollectionId, sortBy, progressFilter } as ReturnType<typeof useArchiveStore.getState>),
-    [items, searchQuery, activeFilter, activeCollectionId, sortBy, progressFilter]
+    () => selectFilteredItems({ items, searchQuery, activeFilter, activeCollectionId, activeSmartCollectionId, sortBy, progressFilter, dateFilter } as ReturnType<typeof useArchiveStore.getState>),
+    [items, searchQuery, activeFilter, activeCollectionId, activeSmartCollectionId, sortBy, progressFilter, dateFilter]
   );
   
   // Get search-filtered items (for filter chip counts - filtered by search but not by type)
@@ -447,7 +455,10 @@ export default function Archive() {
       <ArchiveHeader
         searchInputRef={searchInputRef}
         searchQuery={searchQuery}
+        viewMode={viewMode}
+        items={items}
         onSearchChange={setSearchQuery}
+        onViewModeChange={setViewMode}
         onImportClick={handleImportClick}
         onPasteClick={() => setPasteModalOpen(true)}
         onSettingsClick={toggleSettings}
@@ -462,11 +473,13 @@ export default function Archive() {
         <FilterChips
           activeFilter={activeFilter}
           activeCollectionId={activeCollectionId}
-          progressFilter={progressFilter}
+          activeSmartCollectionId={activeSmartCollectionId}
+          dateFilter={dateFilter}
           sortBy={sortBy}
           onFilterChange={setActiveFilter}
           onCollectionChange={setActiveCollectionId}
-          onProgressFilterChange={setProgressFilter}
+          onSmartCollectionChange={setActiveSmartCollectionId}
+          onDateFilterChange={setDateFilter}
           onSortChange={setSortBy}
           items={searchFilteredItems}
           collections={collections}
@@ -506,7 +519,7 @@ export default function Archive() {
           />
         )}
         
-        {!isLoading && filteredItems.length > 0 && (
+        {!isLoading && filteredItems.length > 0 && viewMode === 'list' && (
           <ArchiveList
             items={filteredItems}
             focusedIndex={focusedItemIndex}
@@ -516,6 +529,17 @@ export default function Archive() {
             onItemRemove={removeItem}
             onToggleSelection={(id, shiftKey) => toggleItemSelection(id, { shiftKey })}
             onViewNotes={viewNotesForItem}
+          />
+        )}
+        
+        {!isLoading && filteredItems.length > 0 && viewMode === 'grid' && (
+          <ArchiveGrid
+            items={filteredItems}
+            focusedIndex={focusedItemIndex}
+            selectedItemIds={selectedItemIds}
+            isSelectionMode={isSelectionMode}
+            onItemClick={openItem}
+            onToggleSelection={(id, shiftKey) => toggleItemSelection(id, { shiftKey })}
           />
         )}
       </main>
@@ -670,6 +694,8 @@ export default function Archive() {
           onDelete={() => setBulkDeleteDialogOpen(true)}
           onAddToCollection={bulkAddToCollection}
           onRemoveFromCollection={bulkRemoveFromCollection}
+          onMarkAsRead={bulkMarkAsRead}
+          onMarkAsUnread={bulkMarkAsUnread}
           onCancel={exitSelectionMode}
         />
       )}

@@ -119,6 +119,9 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
     
     const fileHash = await computeFileHash(file);
     
+    // Try to extract cover thumbnail
+    const thumbnail = await extractMobiCoverThumbnail(bytes, records, mobiHeader);
+    
     // Build TOC from chapters
     const toc: TocItem[] = chapters.map((chapter, index) => ({
       id: chapter.id,
@@ -148,6 +151,7 @@ export async function extractFromMobi(file: File): Promise<FlowDocument> {
         fileName: file.name,
         fileSize: file.size,
         fileHash,
+        thumbnail,
       },
       blocks: firstChapter.blocks,
       plainText: firstChapter.plainText,
@@ -587,4 +591,134 @@ function findFirstHeading(blocks: Block[]): string | undefined {
     }
   }
   return undefined;
+}
+
+/**
+ * Maximum thumbnail dimensions (pixels)
+ */
+const THUMBNAIL_MAX_WIDTH = 200;
+const THUMBNAIL_MAX_HEIGHT = 300;
+
+/**
+ * Extract cover thumbnail from MOBI image records
+ * The first image record (at firstImageIndex) is typically the cover
+ */
+async function extractMobiCoverThumbnail(
+  bytes: Uint8Array,
+  records: RecordInfo[],
+  mobiHeader: MobiHeader
+): Promise<string | undefined> {
+  try {
+    // Check if we have image index
+    if (mobiHeader.firstImageIndex <= 0 || mobiHeader.firstImageIndex >= records.length) {
+      return undefined;
+    }
+    
+    // Get the first image record (cover)
+    const imageRecord = getRecord(bytes, records, mobiHeader.firstImageIndex);
+    
+    if (imageRecord.length < 10) {
+      return undefined;
+    }
+    
+    // Detect image format from magic bytes
+    const mimeType = detectImageMimeType(imageRecord);
+    if (!mimeType) {
+      return undefined;
+    }
+    
+    // Create blob and resize
+    // Create a proper ArrayBuffer copy to avoid SharedArrayBuffer type issues
+    const buffer = new ArrayBuffer(imageRecord.byteLength);
+    new Uint8Array(buffer).set(imageRecord);
+    const blob = new Blob([buffer], { type: mimeType });
+    return await resizeImageToThumbnail(blob);
+  } catch (error) {
+    // Non-fatal: just log and return undefined
+    if (import.meta.env.DEV) {
+      console.warn('[MOBI] Failed to extract cover thumbnail:', error);
+    }
+    return undefined;
+  }
+}
+
+/**
+ * Detect image MIME type from magic bytes
+ */
+function detectImageMimeType(data: Uint8Array): string | undefined {
+  if (data.length < 4) return undefined;
+  
+  // JPEG: starts with FF D8 FF
+  if (data[0] === 0xFF && data[1] === 0xD8 && data[2] === 0xFF) {
+    return 'image/jpeg';
+  }
+  
+  // PNG: starts with 89 50 4E 47 (‰PNG)
+  if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47) {
+    return 'image/png';
+  }
+  
+  // GIF: starts with GIF8
+  if (data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x38) {
+    return 'image/gif';
+  }
+  
+  // BMP: starts with BM
+  if (data[0] === 0x42 && data[1] === 0x4D) {
+    return 'image/bmp';
+  }
+  
+  return undefined;
+}
+
+/**
+ * Resize an image blob to a thumbnail and return as base64 data URL
+ */
+async function resizeImageToThumbnail(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      
+      // Calculate new dimensions maintaining aspect ratio
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > THUMBNAIL_MAX_WIDTH) {
+        height = (height * THUMBNAIL_MAX_WIDTH) / width;
+        width = THUMBNAIL_MAX_WIDTH;
+      }
+      
+      if (height > THUMBNAIL_MAX_HEIGHT) {
+        width = (width * THUMBNAIL_MAX_HEIGHT) / height;
+        height = THUMBNAIL_MAX_HEIGHT;
+      }
+      
+      // Create canvas and draw resized image
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width);
+      canvas.height = Math.round(height);
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      // Convert to JPEG data URL (better compression than PNG for photos)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      resolve(dataUrl);
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    
+    img.src = url;
+  });
 }

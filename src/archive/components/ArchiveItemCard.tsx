@@ -277,10 +277,19 @@ export default memo(function ArchiveItemCard({
                 key={collection.id} 
                 className="collection-badge"
                 title={collection.name}
+                style={collection.color ? {
+                  borderColor: `${collection.color}60`,
+                  backgroundColor: `${collection.color}15`,
+                } : undefined}
               >
-                {collection.icon && (
+                {collection.color ? (
+                  <span 
+                    className="w-2 h-2 rounded-full mr-1 flex-shrink-0"
+                    style={{ backgroundColor: collection.color }}
+                  />
+                ) : collection.icon ? (
                   <span className="collection-badge-icon">{collection.icon}</span>
-                )}
+                ) : null}
                 <span>{collection.name}</span>
               </span>
             ))}

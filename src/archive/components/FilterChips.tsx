@@ -5,17 +5,21 @@
  */
 
 import type { ArchiveItem, ArchiveItemType, Collection } from '@/types';
-import type { FilterType, SortOption, ProgressFilter } from '../store';
+import type { FilterType, SortOption, DateFilter, SmartCollectionId } from '../store';
+import { SMART_COLLECTIONS } from '../store';
 import SortDropdown from './SortDropdown';
+import DateFilterDropdown from './DateFilterDropdown';
 
 interface FilterChipsProps {
   activeFilter: FilterType;
   activeCollectionId: string | null;
-  progressFilter: ProgressFilter;
+  activeSmartCollectionId: SmartCollectionId | null;
+  dateFilter: DateFilter;
   sortBy: SortOption;
   onFilterChange: (filter: FilterType) => void;
   onCollectionChange: (collectionId: string | null) => void;
-  onProgressFilterChange: (filter: ProgressFilter) => void;
+  onSmartCollectionChange: (smartCollectionId: SmartCollectionId | null) => void;
+  onDateFilterChange: (filter: DateFilter) => void;
   onSortChange: (sort: SortOption) => void;
   items: ArchiveItem[];
   collections: Collection[];
@@ -38,25 +42,16 @@ const FILTERS: FilterConfig[] = [
   { id: 'paste', label: 'Paste', types: ['paste'] },
 ];
 
-interface ProgressFilterConfig {
-  id: ProgressFilter;
-  label: string;
-}
-
-const PROGRESS_FILTERS: ProgressFilterConfig[] = [
-  { id: 'unread', label: 'Unread' },
-  { id: 'reading', label: 'Reading' },
-  { id: 'completed', label: 'Completed' },
-];
-
 export default function FilterChips({ 
   activeFilter, 
   activeCollectionId,
-  progressFilter,
+  activeSmartCollectionId,
+  dateFilter,
   sortBy,
   onFilterChange,
   onCollectionChange,
-  onProgressFilterChange,
+  onSmartCollectionChange,
+  onDateFilterChange,
   onSortChange,
   items,
   collections,
@@ -82,9 +77,12 @@ export default function FilterChips({
   }, {} as Record<string, number>);
   
   const handleFilterClick = (filterId: FilterType) => {
-    // Clear collection when switching to type filter
+    // Clear collection and smart collection when switching to type filter
     if (activeCollectionId) {
       onCollectionChange(null);
+    }
+    if (activeSmartCollectionId) {
+      onSmartCollectionChange(null);
     }
     onFilterChange(filterId);
   };
@@ -98,13 +96,22 @@ export default function FilterChips({
     }
   };
   
+  const handleSmartCollectionClick = (smartCollectionId: SmartCollectionId) => {
+    if (activeSmartCollectionId === smartCollectionId) {
+      // Clicking active smart collection clears it
+      onSmartCollectionChange(null);
+    } else {
+      onSmartCollectionChange(smartCollectionId);
+    }
+  };
+  
   return (
     <div className="flex items-center justify-between gap-4 mb-4">
       <div className="filter-chips overflow-x-auto">
         {/* Type filters */}
         {FILTERS.map(filter => {
           const count = counts[filter.id] || 0;
-          const isActive = activeFilter === filter.id && !activeCollectionId;
+          const isActive = activeFilter === filter.id && !activeCollectionId && !activeSmartCollectionId;
           
           // Hide filters with no items (except All)
           if (filter.id !== 'all' && count === 0) {
@@ -184,24 +191,32 @@ export default function FilterChips({
           +
         </button>
         
-        {/* Separator before progress filters */}
+        {/* Separator before smart collections */}
         <span className="mx-2 opacity-30">|</span>
         
-        {/* Progress status filters */}
-        {PROGRESS_FILTERS.map(filter => {
-          const isActive = progressFilter === filter.id;
+        {/* Smart Collections */}
+        {SMART_COLLECTIONS.map(smartCollection => {
+          const isActive = activeSmartCollectionId === smartCollection.id;
           
           return (
             <button
-              key={filter.id}
-              onClick={() => onProgressFilterChange(isActive ? 'all' : filter.id)}
+              key={smartCollection.id}
+              onClick={() => handleSmartCollectionClick(smartCollection.id)}
               className={`filter-chip ${isActive ? 'active' : ''}`}
               aria-pressed={isActive}
+              title={smartCollection.description}
             >
-              {filter.label}
+              <span className="mr-1 opacity-80">{smartCollection.icon}</span>
+              {smartCollection.name}
             </button>
           );
         })}
+        
+        {/* Date range filter */}
+        <DateFilterDropdown
+          dateFilter={dateFilter}
+          onDateFilterChange={onDateFilterChange}
+        />
       </div>
       
       {items.length > 0 && (

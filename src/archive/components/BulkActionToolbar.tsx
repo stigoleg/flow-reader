@@ -17,6 +17,8 @@ interface BulkActionToolbarProps {
   onDelete: () => void;
   onAddToCollection: (collectionId: string) => void;
   onRemoveFromCollection: (collectionId: string) => void;
+  onMarkAsRead: () => void;
+  onMarkAsUnread: () => void;
   onCancel: () => void;
 }
 
@@ -29,6 +31,8 @@ export default function BulkActionToolbar({
   onDelete,
   onAddToCollection,
   onRemoveFromCollection,
+  onMarkAsRead,
+  onMarkAsUnread,
   onCancel,
 }: BulkActionToolbarProps) {
   const [showCollectionMenu, setShowCollectionMenu] = useState(false);
@@ -150,6 +154,30 @@ export default function BulkActionToolbar({
               <span>Remove from {activeCollection.name}</span>
             </button>
           )}
+          
+          {/* Mark as Read */}
+          <button
+            className="bulk-action-button"
+            onClick={onMarkAsRead}
+            title="Mark as read"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Mark Read</span>
+          </button>
+          
+          {/* Mark as Unread */}
+          <button
+            className="bulk-action-button"
+            onClick={onMarkAsUnread}
+            title="Mark as unread"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
+            </svg>
+            <span>Mark Unread</span>
+          </button>
           
           {/* Delete */}
           <button

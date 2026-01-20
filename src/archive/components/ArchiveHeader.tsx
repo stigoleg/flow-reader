@@ -5,13 +5,18 @@
  * Contains FlowReader title, search field, and settings button.
  */
 
-import { RefObject } from 'react';
-import type { ReaderSettings } from '@/types';
+import { RefObject, useState, useEffect } from 'react';
+import type { ReaderSettings, ArchiveItem } from '@/types';
+import type { ViewMode } from '../store';
+import SearchSuggestions from './SearchSuggestions';
 
 interface ArchiveHeaderProps {
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;
+  viewMode: ViewMode;
+  items: ArchiveItem[];
   onSearchChange: (query: string) => void;
+  onViewModeChange: (mode: ViewMode) => void;
   onImportClick: () => void;
   onPasteClick: () => void;
   onSettingsClick: () => void;
@@ -23,7 +28,10 @@ interface ArchiveHeaderProps {
 export default function ArchiveHeader({
   searchInputRef,
   searchQuery,
+  viewMode,
+  items,
   onSearchChange,
+  onViewModeChange,
   onImportClick,
   onPasteClick,
   onSettingsClick,
@@ -31,6 +39,42 @@ export default function ArchiveHeader({
   onAllAnnotationsClick,
   settings,
 }: ArchiveHeaderProps) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Close suggestions on click outside
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.search-container')) {
+        setShowSuggestions(false);
+      }
+    };
+    
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+  // Close suggestions on escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSuggestions(false);
+      }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleSearchChange = (value: string) => {
+    onSearchChange(value);
+    setShowSuggestions(value.length >= 2);
+  };
+
+  const handleSuggestionSelect = (suggestion: string) => {
+    onSearchChange(suggestion);
+    setShowSuggestions(false);
+  };
   return (
     <header className="fixed top-0 left-0 right-0 z-40 px-2 pt-2 md:px-4 md:pt-3" role="banner">
       <div
@@ -61,9 +105,9 @@ export default function ArchiveHeader({
           </div>
 
           {/* Search field - grows to fill space */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 search-container">
             <svg 
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 opacity-50" 
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 opacity-50 pointer-events-none z-10" 
               fill="none" 
               stroke="currentColor" 
               viewBox="0 0 24 24"
@@ -74,18 +118,24 @@ export default function ArchiveHeader({
               ref={searchInputRef}
               type="text"
               value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => searchQuery.length >= 2 && setShowSuggestions(true)}
               placeholder="Search archive..."
               className="w-full py-2 pl-9 pr-8 text-sm rounded-lg bg-black/5 border-0 focus:outline-none focus:ring-2 transition-shadow"
               style={{
                 '--tw-ring-color': settings.linkColor,
               } as React.CSSProperties}
               aria-label="Search archive"
+              aria-haspopup="listbox"
+              aria-expanded={showSuggestions}
             />
             {searchQuery && (
               <button
-                onClick={() => onSearchChange('')}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded opacity-50 hover:opacity-100"
+                onClick={() => {
+                  onSearchChange('');
+                  setShowSuggestions(false);
+                }}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 rounded opacity-50 hover:opacity-100 z-10"
                 aria-label="Clear search"
               >
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -93,10 +143,46 @@ export default function ArchiveHeader({
                 </svg>
               </button>
             )}
+            
+            {/* Search suggestions */}
+            {showSuggestions && (
+              <SearchSuggestions
+                query={searchQuery}
+                items={items}
+                onSelect={handleSuggestionSelect}
+                onClose={() => setShowSuggestions(false)}
+              />
+            )}
           </div>
 
           {/* Action buttons */}
           <div className="flex items-center gap-1 md:gap-2" role="toolbar" aria-label="Archive controls">
+            {/* View mode toggle */}
+            <div className="hidden md:flex items-center rounded-lg bg-black/5 p-0.5">
+              <button
+                onClick={() => onViewModeChange('list')}
+                className={`p-1.5 rounded transition-colors ${viewMode === 'list' ? 'bg-white shadow-sm' : 'opacity-50 hover:opacity-100'}`}
+                title="List view"
+                aria-label="List view"
+                aria-pressed={viewMode === 'list'}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+              </button>
+              <button
+                onClick={() => onViewModeChange('grid')}
+                className={`p-1.5 rounded transition-colors ${viewMode === 'grid' ? 'bg-white shadow-sm' : 'opacity-50 hover:opacity-100'}`}
+                title="Grid view"
+                aria-label="Grid view"
+                aria-pressed={viewMode === 'grid'}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+              </button>
+            </div>
+
             {/* Paste - desktop only */}
             <button
               onClick={onPasteClick}
