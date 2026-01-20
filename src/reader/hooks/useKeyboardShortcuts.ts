@@ -24,6 +24,11 @@ interface KeyboardShortcutsOptions {
   toggleNotesPanel?: () => void;
   // Search
   toggleSearch?: () => void;
+  // Jump navigation
+  jumpToStart?: () => void;
+  jumpToEnd?: () => void;
+  jumpToPercent?: (percent: number) => void;
+  skipBlocks?: (count: number) => void;
   // Overlay state for Escape key handling
   overlays?: {
     isSettingsOpen: boolean;
@@ -135,6 +140,22 @@ const ACTIONS: Record<string, ActionHandler> = {
   // Notes panel
   'n': (_, { toggleNotesPanel }) => toggleNotesPanel?.(),
   'N': (_, { toggleNotesPanel }) => toggleNotesPanel?.(),
+  // Jump navigation
+  'Home': (_, { jumpToStart }) => jumpToStart?.(),
+  'End': (_, { jumpToEnd }) => jumpToEnd?.(),
+  '0': (_, { jumpToPercent }) => jumpToPercent?.(0),
+  '1': (_, { jumpToPercent }) => jumpToPercent?.(10),
+  '2': (_, { jumpToPercent }) => jumpToPercent?.(20),
+  '3': (_, { jumpToPercent }) => jumpToPercent?.(30),
+  '4': (_, { jumpToPercent }) => jumpToPercent?.(40),
+  '5': (_, { jumpToPercent }) => jumpToPercent?.(50),
+  '6': (_, { jumpToPercent }) => jumpToPercent?.(60),
+  '7': (_, { jumpToPercent }) => jumpToPercent?.(70),
+  '8': (_, { jumpToPercent }) => jumpToPercent?.(80),
+  '9': (_, { jumpToPercent }) => jumpToPercent?.(90),
+  // Page up/down for skipping multiple blocks
+  'PageUp': (_, { skipBlocks }) => skipBlocks?.(-10),
+  'PageDown': (_, { skipBlocks }) => skipBlocks?.(10),
 };
 
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {

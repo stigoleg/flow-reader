@@ -253,6 +253,12 @@ interface ReaderState {
   prevSearchResult: () => void;
   clearSearch: () => void;
   goToSearchResult: (index: number) => void;
+  
+  // Jump navigation actions
+  jumpToStart: () => void;
+  jumpToEnd: () => void;
+  jumpToPercent: (percent: number) => void;
+  skipBlocks: (count: number) => void;
 }
 
 export const useReaderStore = create<ReaderState>((set, get) => ({
@@ -1168,6 +1174,171 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         scrollToBlockIndex: match.blockIndex,
         searchScrollChapterIndex: matchChapter,
       });
+    }
+  },
+
+  // Jump navigation actions
+  jumpToStart: () => {
+    const { document, saveCurrentPosition } = get();
+    if (!document) return;
+    
+    // For books, go to chapter 0
+    if (document.book && document.book.chapters.length > 0) {
+      const chapter = document.book.chapters[0];
+      set({
+        currentChapterIndex: 0,
+        currentBlockIndex: 0,
+        currentCharOffset: 0,
+        currentSentenceIndex: 0,
+        currentWordIndex: 0,
+        currentRsvpIndex: 0,
+        document: {
+          ...document,
+          blocks: chapter.blocks,
+          plainText: chapter.plainText,
+        },
+      });
+    } else {
+      set({
+        currentBlockIndex: 0,
+        currentCharOffset: 0,
+        currentSentenceIndex: 0,
+        currentWordIndex: 0,
+        currentRsvpIndex: 0,
+      });
+    }
+    saveCurrentPosition();
+  },
+
+  jumpToEnd: () => {
+    const { document, saveCurrentPosition, showCompletion } = get();
+    if (!document) return;
+    
+    // For books, go to last chapter, last block
+    if (document.book && document.book.chapters.length > 0) {
+      const lastChapterIndex = document.book.chapters.length - 1;
+      const chapter = document.book.chapters[lastChapterIndex];
+      const lastBlockIndex = chapter.blocks.length - 1;
+      
+      set({
+        currentChapterIndex: lastChapterIndex,
+        currentBlockIndex: lastBlockIndex,
+        currentCharOffset: 0,
+        currentSentenceIndex: 0,
+        currentWordIndex: 0,
+        document: {
+          ...document,
+          blocks: chapter.blocks,
+          plainText: chapter.plainText,
+        },
+      });
+    } else {
+      const lastBlockIndex = document.blocks.length - 1;
+      set({
+        currentBlockIndex: lastBlockIndex,
+        currentCharOffset: 0,
+        currentSentenceIndex: 0,
+        currentWordIndex: 0,
+      });
+    }
+    saveCurrentPosition();
+    // Optionally show completion since we're at the end
+    showCompletion();
+  },
+
+  jumpToPercent: (percent: number) => {
+    const { document, saveCurrentPosition } = get();
+    if (!document) return;
+    
+    const clampedPercent = Math.max(0, Math.min(100, percent));
+    
+    // For books, calculate which chapter and block based on total word count
+    if (document.book && document.book.chapters.length > 0) {
+      const chapters = document.book.chapters;
+      const totalWords = chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
+      const targetWordCount = Math.floor((clampedPercent / 100) * totalWords);
+      
+      let cumulativeWords = 0;
+      for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex++) {
+        const chapter = chapters[chapterIndex];
+        if (cumulativeWords + chapter.wordCount >= targetWordCount || chapterIndex === chapters.length - 1) {
+          // Target is in this chapter
+          const wordsIntoChapter = targetWordCount - cumulativeWords;
+          const chapterPercent = chapter.wordCount > 0 ? wordsIntoChapter / chapter.wordCount : 0;
+          const targetBlockIndex = Math.floor(chapterPercent * chapter.blocks.length);
+          
+          set({
+            currentChapterIndex: chapterIndex,
+            currentBlockIndex: Math.min(targetBlockIndex, chapter.blocks.length - 1),
+            currentCharOffset: 0,
+            currentSentenceIndex: 0,
+            currentWordIndex: 0,
+            currentRsvpIndex: 0,
+            document: {
+              ...document,
+              blocks: chapter.blocks,
+              plainText: chapter.plainText,
+            },
+          });
+          break;
+        }
+        cumulativeWords += chapter.wordCount;
+      }
+    } else {
+      // Simple document - just calculate block index
+      const targetBlockIndex = Math.floor((clampedPercent / 100) * document.blocks.length);
+      set({
+        currentBlockIndex: Math.min(targetBlockIndex, document.blocks.length - 1),
+        currentCharOffset: 0,
+        currentSentenceIndex: 0,
+        currentWordIndex: 0,
+        currentRsvpIndex: 0,
+      });
+    }
+    saveCurrentPosition();
+  },
+
+  skipBlocks: (count: number) => {
+    const { document, currentBlockIndex, saveCurrentPosition, nextChapter, prevChapter, showCompletion } = get();
+    if (!document) return;
+    
+    const newIndex = currentBlockIndex + count;
+    
+    if (newIndex < 0) {
+      // Try to go to previous chapter
+      if (document.book) {
+        prevChapter();
+      } else {
+        // Just go to start
+        set({
+          currentBlockIndex: 0,
+          currentCharOffset: 0,
+          currentSentenceIndex: 0,
+          currentWordIndex: 0,
+        });
+      }
+    } else if (newIndex >= document.blocks.length) {
+      // Try to go to next chapter
+      if (document.book) {
+        const { currentChapterIndex } = get();
+        if (currentChapterIndex < document.book.chapters.length - 1) {
+          nextChapter();
+        } else {
+          // At end of book
+          showCompletion();
+        }
+      } else {
+        // At end of document
+        showCompletion();
+      }
+    } else {
+      set({
+        currentBlockIndex: newIndex,
+        currentCharOffset: 0,
+        currentSentenceIndex: 0,
+        currentWordIndex: 0,
+      });
+      saveCurrentPosition();
     }
   },
 }));

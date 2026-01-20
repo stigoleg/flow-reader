@@ -956,3 +956,234 @@ export function checkGoalProgress(
  * Get the week start date helper (exported for use in components)
  */
 export { getWeekStart };
+
+// ============================================================================
+// EXPORT FUNCTIONS
+// ============================================================================
+
+/** Exported stats data structure */
+export interface ExportedStats {
+  exportedAt: string;
+  version: string;
+  lifetime: {
+    totalReadingTimeMs: number;
+    totalReadingTimeFormatted: string;
+    totalWordsRead: number;
+    totalDocumentsCompleted: number;
+    totalAnnotationsCreated: number;
+    currentStreak: number;
+    longestStreak: number;
+    lastReadingDate: string | null;
+  };
+  dailyStats: Array<{
+    date: string;
+    readingTimeMs: number;
+    readingTimeFormatted: string;
+    wordsRead: number;
+    documentsOpened: number;
+    documentsCompleted: number;
+    annotationsCreated: number;
+  }>;
+  weeklyStats: Array<{
+    weekStart: string;
+    readingTimeMs: number;
+    readingTimeFormatted: string;
+    wordsRead: number;
+    documentsCompleted: number;
+    annotationsCreated: number;
+    avgWpm: number;
+    sessionCount: number;
+    activeDays: number;
+  }>;
+  wpmHistory: WpmHistoryEntry[];
+  hourlyActivity: HourlyActivity[];
+  personalBests: {
+    longestSession: { date: string; durationMs: number; durationFormatted: string } | null;
+    mostWordsInDay: { date: string; words: number } | null;
+    fastestWpm: { date: string; wpm: number } | null;
+  };
+  goals: ReadingGoals | null;
+}
+
+/**
+ * Transform stats into exportable format
+ */
+function transformStatsForExport(stats: ReadingStats): ExportedStats {
+  return {
+    exportedAt: new Date().toISOString(),
+    version: '1.0',
+    lifetime: {
+      totalReadingTimeMs: stats.totalReadingTimeMs,
+      totalReadingTimeFormatted: formatReadingTime(stats.totalReadingTimeMs),
+      totalWordsRead: stats.totalWordsRead,
+      totalDocumentsCompleted: stats.totalDocumentsCompleted,
+      totalAnnotationsCreated: stats.totalAnnotationsCreated,
+      currentStreak: stats.currentStreak,
+      longestStreak: stats.longestStreak,
+      lastReadingDate: stats.lastReadingDate,
+    },
+    dailyStats: Object.values(stats.dailyStats)
+      .map(d => ({
+        date: d.date,
+        readingTimeMs: d.readingTimeMs,
+        readingTimeFormatted: formatReadingTime(d.readingTimeMs),
+        wordsRead: d.wordsRead,
+        documentsOpened: d.documentsOpened.length,
+        documentsCompleted: d.documentsCompleted.length,
+        annotationsCreated: d.annotationsCreated,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date)),
+    weeklyStats: Object.values(stats.weeklyStats)
+      .map(w => ({
+        weekStart: w.weekStart,
+        readingTimeMs: w.readingTimeMs,
+        readingTimeFormatted: formatReadingTime(w.readingTimeMs),
+        wordsRead: w.wordsRead,
+        documentsCompleted: w.documentsCompleted,
+        annotationsCreated: w.annotationsCreated,
+        avgWpm: w.avgWpm,
+        sessionCount: w.sessionCount,
+        activeDays: w.activeDays,
+      }))
+      .sort((a, b) => a.weekStart.localeCompare(b.weekStart)),
+    wpmHistory: [...stats.wpmHistory].sort((a, b) => a.date.localeCompare(b.date)),
+    hourlyActivity: getHourlyActivityData(stats),
+    personalBests: {
+      longestSession: stats.personalBests?.longestSession 
+        ? {
+            ...stats.personalBests.longestSession,
+            durationFormatted: formatReadingTime(stats.personalBests.longestSession.durationMs),
+          }
+        : null,
+      mostWordsInDay: stats.personalBests?.mostWordsInDay ?? null,
+      fastestWpm: stats.personalBests?.fastestWpm ?? null,
+    },
+    goals: stats.goals ?? null,
+  };
+}
+
+/**
+ * Export stats as JSON string
+ */
+export async function exportStatsAsJSON(): Promise<string> {
+  const stats = await getReadingStats();
+  const exported = transformStatsForExport(stats);
+  return JSON.stringify(exported, null, 2);
+}
+
+/**
+ * Export stats as CSV string
+ * Creates a multi-section CSV with daily stats, weekly stats, and summary
+ */
+export async function exportStatsAsCSV(): Promise<string> {
+  const stats = await getReadingStats();
+  const exported = transformStatsForExport(stats);
+  const lines: string[] = [];
+
+  // Summary section
+  lines.push('# READING STATISTICS EXPORT');
+  lines.push(`# Exported: ${exported.exportedAt}`);
+  lines.push('');
+  
+  // Lifetime summary
+  lines.push('## LIFETIME SUMMARY');
+  lines.push('Metric,Value');
+  lines.push(`Total Reading Time,${exported.lifetime.totalReadingTimeFormatted}`);
+  lines.push(`Total Reading Time (ms),${exported.lifetime.totalReadingTimeMs}`);
+  lines.push(`Total Words Read,${exported.lifetime.totalWordsRead}`);
+  lines.push(`Documents Completed,${exported.lifetime.totalDocumentsCompleted}`);
+  lines.push(`Annotations Created,${exported.lifetime.totalAnnotationsCreated}`);
+  lines.push(`Current Streak,${exported.lifetime.currentStreak}`);
+  lines.push(`Longest Streak,${exported.lifetime.longestStreak}`);
+  lines.push(`Last Reading Date,${exported.lifetime.lastReadingDate ?? 'N/A'}`);
+  lines.push('');
+
+  // Personal bests
+  lines.push('## PERSONAL BESTS');
+  lines.push('Record,Date,Value');
+  if (exported.personalBests.longestSession) {
+    lines.push(`Longest Session,${exported.personalBests.longestSession.date},${exported.personalBests.longestSession.durationFormatted}`);
+  }
+  if (exported.personalBests.mostWordsInDay) {
+    lines.push(`Most Words in Day,${exported.personalBests.mostWordsInDay.date},${exported.personalBests.mostWordsInDay.words}`);
+  }
+  if (exported.personalBests.fastestWpm) {
+    lines.push(`Fastest WPM,${exported.personalBests.fastestWpm.date},${exported.personalBests.fastestWpm.wpm}`);
+  }
+  lines.push('');
+
+  // Daily stats
+  lines.push('## DAILY STATISTICS');
+  lines.push('Date,Reading Time,Reading Time (ms),Words Read,Docs Opened,Docs Completed,Annotations');
+  for (const day of exported.dailyStats) {
+    lines.push([
+      day.date,
+      day.readingTimeFormatted,
+      day.readingTimeMs,
+      day.wordsRead,
+      day.documentsOpened,
+      day.documentsCompleted,
+      day.annotationsCreated,
+    ].join(','));
+  }
+  lines.push('');
+
+  // Weekly stats
+  lines.push('## WEEKLY STATISTICS');
+  lines.push('Week Start,Reading Time,Reading Time (ms),Words Read,Docs Completed,Annotations,Avg WPM,Sessions,Active Days');
+  for (const week of exported.weeklyStats) {
+    lines.push([
+      week.weekStart,
+      week.readingTimeFormatted,
+      week.readingTimeMs,
+      week.wordsRead,
+      week.documentsCompleted,
+      week.annotationsCreated,
+      week.avgWpm,
+      week.sessionCount,
+      week.activeDays,
+    ].join(','));
+  }
+  lines.push('');
+
+  // WPM history
+  lines.push('## WPM HISTORY');
+  lines.push('Date,Average WPM,Session Count');
+  for (const wpm of exported.wpmHistory) {
+    lines.push([wpm.date, wpm.avgWpm, wpm.sessionCount].join(','));
+  }
+  lines.push('');
+
+  // Hourly activity
+  lines.push('## HOURLY ACTIVITY');
+  lines.push('Hour,Total Reading Time (ms),Session Count');
+  for (const hour of exported.hourlyActivity) {
+    lines.push([hour.hour, hour.totalReadingTimeMs, hour.sessionCount].join(','));
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Download stats as a file (JSON or CSV)
+ */
+export async function downloadStats(format: 'json' | 'csv'): Promise<void> {
+  const content = format === 'json' 
+    ? await exportStatsAsJSON() 
+    : await exportStatsAsCSV();
+  
+  const mimeType = format === 'json' ? 'application/json' : 'text/csv';
+  const extension = format;
+  const filename = `flowreader-stats-${new Date().toISOString().split('T')[0]}.${extension}`;
+  
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

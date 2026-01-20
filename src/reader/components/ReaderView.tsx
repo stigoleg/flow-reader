@@ -8,9 +8,11 @@ import AnnotationToolbar from './AnnotationToolbar';
 import NoteEditorModal from './NoteEditorModal';
 import NotesPanel from './NotesPanel';
 import SearchBar from './SearchBar';
+import TTSControls from './TTSControls';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useSwipeGestures } from '../hooks/useSwipeGestures';
 import { useTextSelection } from '../hooks/useTextSelection';
+import { useTTS } from '../hooks/useTTS';
 import type { ModeConfig, BionicConfig, PacingConfig, PositionState, BlockHandlers } from './types';
 import type { Annotation, AnnotationAnchor } from '@/types';
 
@@ -85,6 +87,11 @@ export default function ReaderView() {
     currentSearchIndex,
     toggleSearch,
     closeSearch,
+    // Jump navigation
+    jumpToStart,
+    jumpToEnd,
+    jumpToPercent,
+    skipBlocks,
   } = useReaderStore();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -108,6 +115,10 @@ export default function ReaderView() {
     toggleToc,
     toggleNotesPanel,
     toggleSearch,
+    jumpToStart,
+    jumpToEnd,
+    jumpToPercent,
+    skipBlocks,
     overlays: {
       isSettingsOpen,
       closeSettings: toggleSettings,
@@ -142,6 +153,14 @@ export default function ReaderView() {
   }), [settings.pacingGranularity, nextWord, nextSentence, nextBlock, prevWord, prevSentence, prevBlock, adjustWPM]);
 
   useSwipeGestures(containerRef, swipeHandlers);
+
+  // Text-to-speech functionality
+  const tts = useTTS({
+    settings,
+    blocks: document?.blocks || [],
+    currentBlockIndex,
+    onBlockComplete: nextBlock,
+  });
 
   // Load annotations when document loads
   useEffect(() => {
@@ -454,6 +473,17 @@ export default function ReaderView() {
         onEditAnnotation={(annotation) => setEditingAnnotation(annotation.id)}
         onDeleteAnnotation={removeAnnotation}
       />
+
+      {/* TTS Controls - floating controls when TTS is enabled */}
+      {settings.ttsEnabled && (
+        <TTSControls
+          isAvailable={tts.isAvailable}
+          isSpeaking={tts.isSpeaking}
+          isPaused={tts.isPaused}
+          onToggle={tts.toggle}
+          onStop={tts.stop}
+        />
+      )}
     </>
   );
 }

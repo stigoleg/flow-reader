@@ -172,6 +172,14 @@ export interface ReaderSettings {
   bionicIntensity: number;    // 0-1, controls font weight (0.5=600, 1=800)
   bionicProportion: number;   // 0-1, how much of each word to bold
   bionicAdaptive: boolean;    // Adjust proportion based on word complexity
+  
+  // Text-to-Speech settings
+  ttsEnabled: boolean;
+  ttsVoiceId: string | null;
+  ttsRate: number;           // 0.5 - 2.0
+  ttsPitch: number;          // 0 - 2
+  ttsVolume: number;         // 0 - 1
+  ttsHighlightMode: 'none' | 'word' | 'sentence';
 }
 
 export type PacingGranularity = 'block' | 'sentence' | 'word';
@@ -452,6 +460,14 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   bionicIntensity: 0.7,
   bionicProportion: 0.4,
   bionicAdaptive: false,
+  
+  // TTS defaults
+  ttsEnabled: false,
+  ttsVoiceId: null,
+  ttsRate: 1.0,
+  ttsPitch: 1.0,
+  ttsVolume: 1.0,
+  ttsHighlightMode: 'sentence',
 };
 
 // Theme presets

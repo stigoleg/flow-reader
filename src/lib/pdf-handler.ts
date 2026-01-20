@@ -1,6 +1,11 @@
-import type { FlowDocument } from '@/types';
+import type { FlowDocument, Block, HeadingBlock, ParagraphBlock, ListBlock } from '@/types';
 import { createDocument } from './block-utils';
 import { computeFileHash } from './file-utils';
+
+// Constants for structure detection
+const HEADING_FONT_RATIO_THRESHOLD = 1.15; // Font must be 15% larger than body to be a heading
+const BULLET_PATTERNS = /^[\u2022\u2023\u25E6\u2043\u2219\u25AA\u25AB\u25CF\u25CB\u25A0\u25A1\u2013\u2014•◦‣⁃-]\s+/;
+const NUMBERED_PATTERN = /^(\d+[\.\):]|\([a-z\d]+\)|[a-z][\.\)])\s+/i;
 
 // PDF.js types
 interface PDFDocumentProxy {
@@ -19,6 +24,19 @@ interface TextContent {
 interface TextItem {
   str: string;
   hasEOL?: boolean;
+  height?: number;           // Font size (height of text)
+  transform?: number[];      // Transformation matrix [scaleX, skewX, skewY, scaleY, x, y]
+  fontName?: string;         // Font identifier
+}
+
+/** Represents a line of text with metadata for structure detection */
+interface TextLine {
+  text: string;
+  fontSize: number;
+  isBold: boolean;
+  isNumberedListItem: boolean;
+  isBulletListItem: boolean;
+  isEmptyLine: boolean;  // Track paragraph breaks
 }
 
 /** Specific error types for PDF extraction failures */
@@ -97,40 +115,72 @@ export async function extractFromPdf(file: File): Promise<FlowDocument> {
     );
   }
 
-  const textParts: string[] = [];
-  const paragraphs: string[] = [];
+  // Collect all text items with their font info
+  const allTextLines: TextLine[] = [];
 
-  // Extract text from each page
+  // Extract text from each page with font metadata
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
     const textContent = await page.getTextContent();
 
-    let pageText = '';
+    let currentLine = '';
+    let currentFontSize = 0;
+    let currentFontName = '';
+    let itemCount = 0;
+
     for (const item of textContent.items) {
       const textItem = item as TextItem;
-      pageText += textItem.str;
+      const text = textItem.str;
+      
+      // Get font size from height or transform matrix
+      const fontSize = textItem.height ?? 
+        (textItem.transform ? Math.abs(textItem.transform[3]) : 12);
+      const fontName = textItem.fontName ?? '';
+
+      // Accumulate font size weighted by text length for averaging
+      if (itemCount === 0 || currentFontSize === 0) {
+        currentFontSize = fontSize;
+        currentFontName = fontName;
+      }
+      
+      currentLine += text;
+      itemCount++;
+
+      // End of line - save it
       if (textItem.hasEOL) {
-        pageText += '\n';
+        const trimmedLine = currentLine.trim();
+        // Track both content lines and empty lines (for paragraph breaks)
+        allTextLines.push({
+          text: trimmedLine,
+          fontSize: currentFontSize,
+          isBold: fontName.toLowerCase().includes('bold'),
+          isBulletListItem: trimmedLine.length > 0 && BULLET_PATTERNS.test(trimmedLine),
+          isNumberedListItem: trimmedLine.length > 0 && NUMBERED_PATTERN.test(trimmedLine),
+          isEmptyLine: trimmedLine.length === 0,
+        });
+        currentLine = '';
+        currentFontSize = 0;
+        currentFontName = '';
+        itemCount = 0;
       }
     }
 
-    textParts.push(pageText);
-  }
-
-  // Join all pages
-  const fullText = textParts.join('\n\n');
-
-  // Split into paragraphs
-  const rawParagraphs = fullText.split(/\n\n+/);
-  for (const para of rawParagraphs) {
-    const trimmed = para.trim();
-    if (trimmed.length > 0) {
-      paragraphs.push(trimmed);
+    // Don't forget the last line if it didn't end with EOL
+    const trimmedLine = currentLine.trim();
+    if (trimmedLine.length > 0) {
+      allTextLines.push({
+        text: trimmedLine,
+        fontSize: currentFontSize,
+        isBold: currentFontName.toLowerCase().includes('bold'),
+        isBulletListItem: BULLET_PATTERNS.test(trimmedLine),
+        isNumberedListItem: NUMBERED_PATTERN.test(trimmedLine),
+        isEmptyLine: false,
+      });
     }
   }
 
-  // Check if we got any text
-  if (paragraphs.length === 0) {
+  // Check if we got any text (filter out empty lines for this check)
+  if (allTextLines.filter(l => !l.isEmptyLine).length === 0) {
     throw new PdfExtractionError(
       'No text could be extracted from this PDF. ' +
       'This may be a scanned document without a text layer. ' +
@@ -139,12 +189,8 @@ export async function extractFromPdf(file: File): Promise<FlowDocument> {
     );
   }
 
-  // Create blocks
-  const blocks = paragraphs.map((content, index) => ({
-    type: 'paragraph' as const,
-    content,
-    id: `block-${index}`,
-  }));
+  // Analyze font sizes to determine structure
+  const blocks = analyzeAndCreateBlocks(allTextLines);
 
   const fileHash = await computeFileHash(file);
 
@@ -153,6 +199,137 @@ export async function extractFromPdf(file: File): Promise<FlowDocument> {
     source: 'pdf',
     fileHash,
   });
+}
+
+/**
+ * Analyze text lines and create structured blocks
+ */
+function analyzeAndCreateBlocks(lines: TextLine[]): Block[] {
+  // Calculate the most common font size (body text) - only from non-empty lines
+  const fontSizeCounts = new Map<number, number>();
+  for (const line of lines) {
+    if (line.isEmptyLine) continue;
+    // Round to nearest 0.5 to group similar sizes
+    const rounded = Math.round(line.fontSize * 2) / 2;
+    fontSizeCounts.set(rounded, (fontSizeCounts.get(rounded) ?? 0) + 1);
+  }
+
+  // Find the most common font size (body text)
+  let bodyFontSize = 12; // Default fallback
+  let maxCount = 0;
+  for (const [size, count] of fontSizeCounts) {
+    if (count > maxCount) {
+      maxCount = count;
+      bodyFontSize = size;
+    }
+  }
+
+  const blocks: Block[] = [];
+  let blockIndex = 0;
+  let pendingParagraph: string[] = [];
+  let pendingListItems: string[] = [];
+  let pendingListOrdered = false;
+
+  const flushParagraph = () => {
+    if (pendingParagraph.length > 0) {
+      const content = pendingParagraph.join(' ').trim();
+      if (content) {
+        blocks.push({
+          type: 'paragraph',
+          content,
+          id: `block-${blockIndex++}`,
+        } as ParagraphBlock);
+      }
+      pendingParagraph = [];
+    }
+  };
+
+  const flushList = () => {
+    if (pendingListItems.length > 0) {
+      blocks.push({
+        type: 'list',
+        ordered: pendingListOrdered,
+        items: pendingListItems,
+        id: `block-${blockIndex++}`,
+      } as ListBlock);
+      pendingListItems = [];
+    }
+  };
+
+  for (const line of lines) {
+    // Empty lines indicate paragraph breaks
+    if (line.isEmptyLine) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const fontRatio = line.fontSize / bodyFontSize;
+    const isLargerFont = fontRatio >= HEADING_FONT_RATIO_THRESHOLD;
+    const isShortLine = line.text.length < 100; // Headings are usually short
+    const isHeading = (isLargerFont || line.isBold) && isShortLine;
+
+    // Handle list items
+    if (line.isBulletListItem || line.isNumberedListItem) {
+      flushParagraph();
+      
+      const isCurrentlyOrdered = line.isNumberedListItem;
+      
+      // If list type changes, flush the previous list
+      if (pendingListItems.length > 0 && pendingListOrdered !== isCurrentlyOrdered) {
+        flushList();
+      }
+      
+      pendingListOrdered = isCurrentlyOrdered;
+      
+      // Remove the bullet/number prefix
+      let itemText = line.text;
+      if (line.isBulletListItem) {
+        itemText = line.text.replace(BULLET_PATTERNS, '');
+      } else {
+        itemText = line.text.replace(NUMBERED_PATTERN, '');
+      }
+      pendingListItems.push(itemText.trim());
+      continue;
+    }
+
+    // Not a list item - flush any pending list
+    flushList();
+
+    // Handle headings
+    if (isHeading) {
+      flushParagraph();
+      
+      // Determine heading level based on font size ratio
+      let level: 1 | 2 | 3 | 4 | 5 | 6;
+      if (fontRatio >= 1.8 || (fontRatio >= 1.5 && line.isBold)) {
+        level = 1;
+      } else if (fontRatio >= 1.4) {
+        level = 2;
+      } else if (fontRatio >= 1.2 || line.isBold) {
+        level = 3;
+      } else {
+        level = 4;
+      }
+
+      blocks.push({
+        type: 'heading',
+        level,
+        content: line.text,
+        id: `block-${blockIndex++}`,
+      } as HeadingBlock);
+      continue;
+    }
+
+    // Regular paragraph text - accumulate
+    pendingParagraph.push(line.text);
+  }
+
+  // Flush any remaining content
+  flushList();
+  flushParagraph();
+
+  return blocks;
 }
 
 /**

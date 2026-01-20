@@ -7,3 +7,4 @@ export { BionicSection } from './BionicSection';
 export { RSVPSection } from './RSVPSection';
 export { DisplaySection } from './DisplaySection';
 export { KeyboardSection } from './KeyboardSection';
+export { default as TTSSection } from './TTSSection';

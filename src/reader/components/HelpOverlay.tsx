@@ -20,6 +20,13 @@ const SHORTCUTS = [
   { keys: ['['], description: 'Previous chapter (books)' },
   { keys: [']'], description: 'Next chapter (books)' },
   { keys: ['T'], description: 'Toggle table of contents (books)' },
+  { keys: ['Home'], description: 'Jump to start' },
+  { keys: ['End'], description: 'Jump to end' },
+  { keys: ['0-9'], description: 'Jump to 0%-90% of document' },
+  { keys: ['PgUp'], description: 'Skip 10 blocks back' },
+  { keys: ['PgDn'], description: 'Skip 10 blocks forward' },
+  { keys: ['N'], description: 'Toggle notes panel' },
+  { keys: ['Ctrl', 'F'], description: 'Search in document' },
   { keys: ['?'], description: 'Show this help' },
   { keys: ['Esc'], description: 'Close reader / overlay' },
 ];
