@@ -51,6 +51,9 @@ async function getArchiveItems(): Promise<ArchiveItem[]> {
   return state.archiveItems;
 }
 
+/** Export for use in preload-service */
+export { getArchiveItems };
+
 /**
  * Save archive items with debouncing.
  * Multiple rapid calls will be coalesced into a single save, and ALL callers
@@ -390,7 +393,7 @@ export async function updateLastOpened(
 
 export async function updateArchiveItem(
   id: string,
-  updates: Partial<Pick<ArchiveItem, 'title' | 'author' | 'sourceLabel'>>
+  updates: Partial<Pick<ArchiveItem, 'title' | 'author' | 'sourceLabel' | 'cachedDocument' | 'wordCount'>>
 ): Promise<ArchiveItem | null> {
   const items = await getArchiveItems();
   const index = items.findIndex(item => item.id === id);

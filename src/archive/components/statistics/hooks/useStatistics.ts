@@ -40,6 +40,7 @@ interface UseStatisticsResult {
   // Raw stats
   stats: ReadingStats | null;
   loading: boolean;
+  error: string | null;
   
   // Time range
   timeRange: TimeRange;
@@ -108,17 +109,21 @@ interface UseStatisticsResult {
 export function useStatistics({ archiveItems }: UseStatisticsOptions): UseStatisticsResult {
   const [stats, setStats] = useState<ReadingStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>({ preset: '30d' });
   const [heatmapMetric, setHeatmapMetric] = useState<'time' | 'words' | 'documents' | 'combined'>('time');
   const [comparisonType, setComparisonType] = useState<'week' | 'month' | 'year'>('week');
 
   const loadStats = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const readingStats = await getReadingStats();
       setStats(readingStats);
-    } catch (error) {
-      console.error('[useStatistics] Failed to load stats:', error);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load statistics';
+      console.error('[useStatistics] Failed to load stats:', err);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -305,6 +310,7 @@ export function useStatistics({ archiveItems }: UseStatisticsOptions): UseStatis
   return {
     stats,
     loading,
+    error,
     timeRange,
     setTimeRange,
     kpis,

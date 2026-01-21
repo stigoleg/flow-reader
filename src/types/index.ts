@@ -26,6 +26,8 @@ export interface DocumentMetadata {
   fileHash?: string;
   /** Cover thumbnail as base64 data URL */
   thumbnail?: string;
+  /** Original paste content for editing (only for source: 'paste') */
+  pasteContent?: string;
 }
 
 // BOOK STRUCTURE (for EPUB and MOBI)
@@ -169,19 +171,14 @@ export interface ReaderSettings {
 
   // Display settings
   showTimeRemaining: boolean;      // Show estimated time remaining to finish
+  
+  // Performance settings
+  enablePreloading: boolean;       // Preload next articles in background
 
   // Bionic settings
   bionicIntensity: number;    // 0-1, controls font weight (0.5=600, 1=800)
   bionicProportion: number;   // 0-1, how much of each word to bold
   bionicAdaptive: boolean;    // Adjust proportion based on word complexity
-  
-  // Text-to-Speech settings
-  ttsEnabled: boolean;
-  ttsVoiceId: string | null;
-  ttsRate: number;           // 0.5 - 2.0
-  ttsPitch: number;          // 0 - 2
-  ttsVolume: number;         // 0 - 1
-  ttsHighlightMode: 'none' | 'word' | 'sentence';
 }
 
 export type PacingGranularity = 'block' | 'sentence' | 'word';
@@ -311,6 +308,8 @@ export interface ArchiveItem {
   fileHash?: string;
   /** Collection IDs this item belongs to (tags-like, can be in multiple) */
   collectionIds?: string[];
+  /** When collection membership was last modified (for sync conflict resolution) */
+  collectionIdsUpdatedAt?: number;
   /** Word count for statistics tracking */
   wordCount?: number;
   /** Cached annotation count (updated when annotations change) */
@@ -418,7 +417,8 @@ export type MessageType =
   | { type: 'EXTRACT_FROM_URL'; url: string }
   | { type: 'EXTRACT_FROM_URL_AND_OPEN'; url: string }
   | { type: 'OPEN_ARCHIVE' }
-  | { type: 'FOCUS_SEARCH' };
+  | { type: 'FOCUS_SEARCH' }
+  | { type: 'TRIGGER_PRELOAD' };
 
 // Default settings
 export const DEFAULT_SETTINGS: ReaderSettings = {
@@ -463,19 +463,14 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 
   // Display settings
   showTimeRemaining: false,
+  
+  // Performance settings
+  enablePreloading: true,  // Preload next articles by default
 
   // Bionic defaults
   bionicIntensity: 0.7,
   bionicProportion: 0.4,
   bionicAdaptive: false,
-  
-  // TTS defaults
-  ttsEnabled: false,
-  ttsVoiceId: null,
-  ttsRate: 1.0,
-  ttsPitch: 1.0,
-  ttsVolume: 1.0,
-  ttsHighlightMode: 'sentence',
 };
 
 // Theme presets

@@ -52,12 +52,16 @@ export interface SmartCollection {
   description: string;
 }
 
+// Legacy smart collections - kept for backward compatibility
 export const SMART_COLLECTIONS: SmartCollection[] = [
   { id: 'in-progress', name: 'In Progress', icon: '📖', description: 'Items you started reading' },
   { id: 'completed', name: 'Completed', icon: '✅', description: 'Items you finished' },
   { id: 'has-notes', name: 'Has Notes', icon: '📝', description: 'Items with annotations' },
   { id: 'long-reads', name: 'Long Reads', icon: '📚', description: 'Items with 10,000+ words' },
 ];
+
+// New filter types for redesigned filter bar
+export type StatusFilter = 'any' | 'in-progress' | 'completed';
 
 export type ViewMode = 'list' | 'grid';
 
@@ -81,6 +85,11 @@ export interface ArchiveState {
   viewMode: ViewMode;
   dateFilter: DateFilter;
   focusedItemIndex: number;
+  
+  // New filter bar state
+  statusFilter: StatusFilter;
+  hasNotesFilter: boolean;
+  longReadsFilter: boolean;
   
   // Selection state
   selectedItemIds: Set<string>;
@@ -118,6 +127,13 @@ export interface ArchiveState {
   setProgressFilter: (filter: ProgressFilter) => void;
   setDateFilter: (filter: DateFilter) => void;
   setFocusedItemIndex: (index: number) => void;
+  
+  // New filter bar actions
+  setStatusFilter: (status: StatusFilter) => void;
+  setHasNotesFilter: (enabled: boolean) => void;
+  setLongReadsFilter: (enabled: boolean) => void;
+  clearAllFilters: () => void;
+  
   openItem: (item: ArchiveItem, annotationId?: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   clearHistory: () => Promise<void>;
@@ -178,6 +194,11 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   dateFilter: 'all',
   focusedItemIndex: 0,
   
+  // New filter bar state
+  statusFilter: 'any',
+  hasNotesFilter: false,
+  longReadsFilter: false,
+  
   // Selection state
   selectedItemIds: new Set<string>(),
   isSelectionMode: false,
@@ -212,6 +233,12 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
         collections,
         syncEnabled: syncConfig?.enabled ?? false,
         isLoading: false,
+      });
+      
+      // Trigger background preloading after loading items
+      // This runs in the background and doesn't block the UI
+      chrome.runtime.sendMessage({ type: 'TRIGGER_PRELOAD' }).catch(() => {
+        // Ignore errors - preload is best-effort
       });
     } catch (error) {
       set({ 
@@ -261,6 +288,45 @@ export const useArchiveStore = create<ArchiveState>((set, get) => ({
   
   setFocusedItemIndex: (index: number) => {
     set({ focusedItemIndex: index });
+  },
+  
+  // New filter bar actions
+  setStatusFilter: (status: StatusFilter) => {
+    set({ 
+      statusFilter: status, 
+      activeSmartCollectionId: null, // Clear legacy smart collection
+      focusedItemIndex: 0,
+    });
+  },
+  
+  setHasNotesFilter: (enabled: boolean) => {
+    set({ 
+      hasNotesFilter: enabled,
+      activeSmartCollectionId: null, // Clear legacy smart collection
+      focusedItemIndex: 0,
+    });
+  },
+  
+  setLongReadsFilter: (enabled: boolean) => {
+    set({ 
+      longReadsFilter: enabled,
+      activeSmartCollectionId: null, // Clear legacy smart collection
+      focusedItemIndex: 0,
+    });
+  },
+  
+  clearAllFilters: () => {
+    set({
+      activeFilter: 'all',
+      activeCollectionId: null,
+      activeSmartCollectionId: null,
+      statusFilter: 'any',
+      hasNotesFilter: false,
+      longReadsFilter: false,
+      dateFilter: 'all',
+      progressFilter: 'all',
+      focusedItemIndex: 0,
+    });
   },
   
   openItem: async (item: ArchiveItem, annotationId?: string) => {
@@ -846,7 +912,7 @@ export function selectSearchFilteredItems(state: ArchiveState): ArchiveItem[] {
 export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
   let items = state.items;
   
-  // Filter by smart collection first (if active)
+  // Filter by smart collection first (if active) - legacy support
   if (state.activeSmartCollectionId) {
     items = filterBySmartCollection(items, state.activeSmartCollectionId);
   }
@@ -871,8 +937,23 @@ export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
     items = items.filter(item => matchesSearch(item, query));
   }
   
-  // Filter by progress status (only if no smart collection is active)
-  if (state.progressFilter !== 'all' && !state.activeSmartCollectionId) {
+  // Filter by status (new filter bar)
+  if (state.statusFilter !== 'any' && !state.activeSmartCollectionId) {
+    items = items.filter(item => {
+      const percent = item.progress?.percent ?? 0;
+      switch (state.statusFilter) {
+        case 'in-progress':
+          return percent > 0 && percent < 95;
+        case 'completed':
+          return percent >= 95;
+        default:
+          return true;
+      }
+    });
+  }
+  
+  // Filter by progress status (legacy - only if no smart collection or status filter is active)
+  if (state.progressFilter !== 'all' && !state.activeSmartCollectionId && state.statusFilter === 'any') {
     items = items.filter(item => {
       const percent = item.progress?.percent ?? 0;
       switch (state.progressFilter) {
@@ -886,6 +967,16 @@ export function selectFilteredItems(state: ArchiveState): ArchiveItem[] {
           return true;
       }
     });
+  }
+  
+  // Filter by has notes (new filter bar)
+  if (state.hasNotesFilter && !state.activeSmartCollectionId) {
+    items = items.filter(item => (item.annotationCount ?? 0) > 0);
+  }
+  
+  // Filter by long reads (new filter bar)
+  if (state.longReadsFilter && !state.activeSmartCollectionId) {
+    items = items.filter(item => (item.wordCount ?? 0) >= 10000);
   }
   
   // Filter by date range

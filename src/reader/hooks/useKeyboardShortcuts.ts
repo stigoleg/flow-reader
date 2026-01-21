@@ -16,6 +16,7 @@ interface KeyboardShortcutsOptions {
   // RSVP navigation
   rsvpAdvance?: () => void;
   rsvpRetreat?: () => void;
+  rsvpReplaySentence?: () => void;
   // Chapter navigation (for books)
   nextChapter?: () => void;
   prevChapter?: () => void;
@@ -29,6 +30,11 @@ interface KeyboardShortcutsOptions {
   jumpToEnd?: () => void;
   jumpToPercent?: (percent: number) => void;
   skipBlocks?: (count: number) => void;
+  // Focus mode
+  toggleFocusMode?: () => void;
+  isFocusMode?: boolean;
+  // Quick bookmark
+  addQuickBookmark?: () => Promise<unknown>;
   // Overlay state for Escape key handling
   overlays?: {
     isSettingsOpen: boolean;
@@ -105,10 +111,12 @@ const ACTIONS: Record<string, ActionHandler> = {
       updateSettings({ pacingGranularity: GRANULARITIES[(idx + 1) % GRANULARITIES.length] });
     }
   },
-  'Escape': (_, { overlays }) => {
-    // Close overlays in priority order: search > help > import > settings > notes > toc
+  'Escape': (_, { overlays, isFocusMode, toggleFocusMode }) => {
+    // Close overlays in priority order: focus mode > search > help > import > settings > notes > toc
     // Only close reader if no overlays are open
-    if (overlays?.isSearchOpen) {
+    if (isFocusMode) {
+      toggleFocusMode?.();
+    } else if (overlays?.isSearchOpen) {
       overlays.closeSearch?.();
     } else if (overlays?.isHelpOpen) {
       overlays.closeHelp();
@@ -156,6 +164,34 @@ const ACTIONS: Record<string, ActionHandler> = {
   // Page up/down for skipping multiple blocks
   'PageUp': (_, { skipBlocks }) => skipBlocks?.(-10),
   'PageDown': (_, { skipBlocks }) => skipBlocks?.(10),
+  // Focus mode toggle
+  'f': (_, { toggleFocusMode }) => toggleFocusMode?.(),
+  'F': (_, { toggleFocusMode }) => toggleFocusMode?.(),
+  // RSVP-specific shortcuts
+  'r': (_, { settings, rsvpReplaySentence }) => {
+    if (settings.activeMode === 'rsvp') rsvpReplaySentence?.();
+  },
+  'R': (_, { settings, rsvpReplaySentence }) => {
+    if (settings.activeMode === 'rsvp') rsvpReplaySentence?.();
+  },
+  '+': (_, { settings, updateSettings }) => {
+    if (settings.activeMode === 'rsvp') {
+      const newSize = Math.min((settings.rsvpChunkSize || 1) + 1, 5);
+      updateSettings({ rsvpChunkSize: newSize });
+    }
+  },
+  '=': (_, { settings, updateSettings }) => {
+    if (settings.activeMode === 'rsvp') {
+      const newSize = Math.min((settings.rsvpChunkSize || 1) + 1, 5);
+      updateSettings({ rsvpChunkSize: newSize });
+    }
+  },
+  '-': (_, { settings, updateSettings }) => {
+    if (settings.activeMode === 'rsvp') {
+      const newSize = Math.max((settings.rsvpChunkSize || 1) - 1, 1);
+      updateSettings({ rsvpChunkSize: newSize });
+    }
+  },
 };
 
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
@@ -177,6 +213,13 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
       e.preventDefault();
       options.toggleSearch?.();
+      return;
+    }
+
+    // Handle Ctrl/Cmd+D to add quick bookmark
+    if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      e.preventDefault();
+      options.addQuickBookmark?.();
       return;
     }
 

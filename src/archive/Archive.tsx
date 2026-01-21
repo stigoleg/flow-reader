@@ -9,13 +9,12 @@ import { useEffect, useRef, useCallback, useMemo, useState, lazy, Suspense } fro
 import { useShallow } from 'zustand/shallow';
 import { useArchiveStore, selectFilteredItems, selectSearchFilteredItems, selectVisibleSelectedCount } from './store';
 import ArchiveHeader from './components/ArchiveHeader';
-import FilterChips from './components/FilterChips';
+import { FilterBar } from './components/filters';
 import ArchiveList from './components/ArchiveList';
 import ArchiveGrid from './components/ArchiveGrid';
 import EmptyState from './components/EmptyState';
 import DropOverlay from './components/DropOverlay';
 import PasteModal from './components/PasteModal';
-import ClearHistoryDialog from './components/ClearHistoryDialog';
 import ContextMenu from './components/ContextMenu';
 import CollectionManager from './components/CollectionManager';
 import ArchiveSettingsPanel from './components/ArchiveSettingsPanel';
@@ -23,6 +22,7 @@ import ArchiveNotesModal from './components/ArchiveNotesModal';
 import BulkActionToolbar from './components/BulkActionToolbar';
 import BulkDeleteDialog from './components/BulkDeleteDialog';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import OfflineIndicator from '@/components/OfflineIndicator';
 import { getSettings } from '@/lib/storage';
 import { DEFAULT_SETTINGS, type ReaderSettings } from '@/types';
 
@@ -32,16 +32,24 @@ const StatisticsModal = lazy(() =>
   import('./components/StatisticsModal').catch((error) => {
     // If first attempt fails, wait briefly and retry once
     // This handles cases where extension just updated
-    if (import.meta.env.DEV) {
-      console.warn('[FlowReader:Archive] StatisticsModal lazy load failed, retrying:', error);
-    }
-    return new Promise(resolve => setTimeout(resolve, 100))
-      .then(() => import('./components/StatisticsModal'));
+    console.warn('[FlowReader:Archive] StatisticsModal lazy load failed, retrying:', error);
+    return new Promise<void>(resolve => setTimeout(resolve, 200))
+      .then(() => import('./components/StatisticsModal'))
+      .catch((retryError) => {
+        console.error('[FlowReader:Archive] StatisticsModal lazy load retry failed:', retryError);
+        throw retryError;
+      });
   })
 );
 
-// Lazy load AllAnnotationsModal
-const AllAnnotationsModal = lazy(() => import('./components/AllAnnotationsModal'));
+// Lazy load AllAnnotationsModal with same retry pattern
+const AllAnnotationsModal = lazy(() => 
+  import('./components/AllAnnotationsModal').catch((error) => {
+    console.warn('[FlowReader:Archive] AllAnnotationsModal lazy load failed, retrying:', error);
+    return new Promise<void>(resolve => setTimeout(resolve, 200))
+      .then(() => import('./components/AllAnnotationsModal'));
+  })
+);
 
 /**
  * Apply theme settings to the document (CSS variables and body styles)
@@ -78,10 +86,12 @@ export default function Archive() {
   const sortBy = useArchiveStore(state => state.sortBy);
   const progressFilter = useArchiveStore(state => state.progressFilter);
   const dateFilter = useArchiveStore(state => state.dateFilter);
+  const statusFilter = useArchiveStore(state => state.statusFilter);
+  const hasNotesFilter = useArchiveStore(state => state.hasNotesFilter);
+  const longReadsFilter = useArchiveStore(state => state.longReadsFilter);
   const focusedItemIndex = useArchiveStore(state => state.focusedItemIndex);
   const isDragging = useArchiveStore(state => state.isDragging);
   const isPasteModalOpen = useArchiveStore(state => state.isPasteModalOpen);
-  const isClearDialogOpen = useArchiveStore(state => state.isClearDialogOpen);
   const isCollectionManagerOpen = useArchiveStore(state => state.isCollectionManagerOpen);
   const isSettingsOpen = useArchiveStore(state => state.isSettingsOpen);
   const viewingNotesForItem = useArchiveStore(state => state.viewingNotesForItem);
@@ -101,9 +111,11 @@ export default function Archive() {
   const setSearchQuery = useArchiveStore(state => state.setSearchQuery);
   const setActiveFilter = useArchiveStore(state => state.setActiveFilter);
   const setActiveCollectionId = useArchiveStore(state => state.setActiveCollectionId);
-  const setActiveSmartCollectionId = useArchiveStore(state => state.setActiveSmartCollectionId);
   const setSortBy = useArchiveStore(state => state.setSortBy);
   const setDateFilter = useArchiveStore(state => state.setDateFilter);
+  const setStatusFilter = useArchiveStore(state => state.setStatusFilter);
+  const setHasNotesFilter = useArchiveStore(state => state.setHasNotesFilter);
+  const setLongReadsFilter = useArchiveStore(state => state.setLongReadsFilter);
   const setFocusedItemIndex = useArchiveStore(state => state.setFocusedItemIndex);
   const openItem = useArchiveStore(state => state.openItem);
   const removeItem = useArchiveStore(state => state.removeItem);
@@ -111,7 +123,6 @@ export default function Archive() {
   const importPaste = useArchiveStore(state => state.importPaste);
   const setDragging = useArchiveStore(state => state.setDragging);
   const setPasteModalOpen = useArchiveStore(state => state.setPasteModalOpen);
-  const setClearDialogOpen = useArchiveStore(state => state.setClearDialogOpen);
   const setCollectionManagerOpen = useArchiveStore(state => state.setCollectionManagerOpen);
   const hideContextMenu = useArchiveStore(state => state.hideContextMenu);
   const startRenaming = useArchiveStore(state => state.startRenaming);
@@ -139,8 +150,8 @@ export default function Archive() {
   
   // Get filtered items
   const filteredItems = useMemo(
-    () => selectFilteredItems({ items, searchQuery, activeFilter, activeCollectionId, activeSmartCollectionId, sortBy, progressFilter, dateFilter } as ReturnType<typeof useArchiveStore.getState>),
-    [items, searchQuery, activeFilter, activeCollectionId, activeSmartCollectionId, sortBy, progressFilter, dateFilter]
+    () => selectFilteredItems({ items, searchQuery, activeFilter, activeCollectionId, activeSmartCollectionId, sortBy, progressFilter, dateFilter, statusFilter, hasNotesFilter, longReadsFilter } as ReturnType<typeof useArchiveStore.getState>),
+    [items, searchQuery, activeFilter, activeCollectionId, activeSmartCollectionId, sortBy, progressFilter, dateFilter, statusFilter, hasNotesFilter, longReadsFilter]
   );
   
   // Get search-filtered items (for filter chip counts - filtered by search but not by type)
@@ -352,8 +363,6 @@ export default function Archive() {
           setBulkDeleteDialogOpen(false);
         } else if (isPasteModalOpen) {
           setPasteModalOpen(false);
-        } else if (isClearDialogOpen) {
-          setClearDialogOpen(false);
         } else if (searchQuery) {
           setSearchQuery('');
         } else {
@@ -388,14 +397,12 @@ export default function Archive() {
     contextMenuItemId,
     hideContextMenu,
     isPasteModalOpen,
-    isClearDialogOpen,
     isBulkDeleteDialogOpen,
     isSelectionMode,
     searchQuery,
     filteredItems,
     focusedItemIndex,
     setPasteModalOpen,
-    setClearDialogOpen,
     setBulkDeleteDialogOpen,
     setSearchQuery,
     setFocusedItemIndex,
@@ -470,21 +477,24 @@ export default function Archive() {
       {/* Main content */}
       <main className="archive-content">
         {/* Filters */}
-        <FilterChips
+        <FilterBar
           activeFilter={activeFilter}
-          activeCollectionId={activeCollectionId}
-          activeSmartCollectionId={activeSmartCollectionId}
-          dateFilter={dateFilter}
-          sortBy={sortBy}
           onFilterChange={setActiveFilter}
+          activeCollectionId={activeCollectionId}
           onCollectionChange={setActiveCollectionId}
-          onSmartCollectionChange={setActiveSmartCollectionId}
+          collections={collections}
+          onManageCollections={() => setCollectionManagerOpen(true)}
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          hasNotesFilter={hasNotesFilter}
+          longReadsFilter={longReadsFilter}
+          dateFilter={dateFilter}
+          onHasNotesChange={setHasNotesFilter}
+          onLongReadsChange={setLongReadsFilter}
           onDateFilterChange={setDateFilter}
+          sortBy={sortBy}
           onSortChange={setSortBy}
           items={searchFilteredItems}
-          collections={collections}
-          onClearHistory={() => setClearDialogOpen(true)}
-          onManageCollections={() => setCollectionManagerOpen(true)}
         />
         
         {/* Error message */}
@@ -554,15 +564,6 @@ export default function Archive() {
         />
       )}
       
-      {isClearDialogOpen && (
-        <ClearHistoryDialog
-          onClose={() => setClearDialogOpen(false)}
-          onConfirm={() => {
-            useArchiveStore.getState().clearHistory();
-          }}
-        />
-      )}
-      
       {contextMenuItemId && contextMenuPosition && (
         <ContextMenu
           itemId={contextMenuItemId}
@@ -628,23 +629,35 @@ export default function Archive() {
       {/* Statistics Modal - lazy loaded to avoid loading recharts upfront */}
       {isStatsOpen && (
         <ErrorBoundary
-          fallback={
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          fallbackRender={({ reset }) => (
+            <div className="modal-backdrop">
               <div 
-                className="p-6 rounded-xl max-w-sm text-center"
-                style={{ backgroundColor: settings.backgroundColor, color: settings.textColor }}
+                className="modal-content modal-md p-6 text-center"
               >
-                <p className="mb-4">Unable to load statistics. Please try again.</p>
-                <button
-                  onClick={() => setIsStatsOpen(false)}
-                  className="px-4 py-2 rounded-lg"
-                  style={{ backgroundColor: settings.linkColor, color: '#fff' }}
-                >
-                  Close
-                </button>
+                <svg className="w-12 h-12 mx-auto mb-4 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <p className="mb-2 font-medium">Unable to load statistics</p>
+                <p className="text-sm opacity-60 mb-4">
+                  There was an error loading the statistics module.
+                </p>
+                <div className="flex gap-2 justify-center">
+                  <button
+                    onClick={reset}
+                    className="modal-btn modal-btn-primary"
+                  >
+                    Try Again
+                  </button>
+                  <button
+                    onClick={() => setIsStatsOpen(false)}
+                    className="modal-btn modal-btn-secondary"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
-          }
+          )}
         >
           <Suspense fallback={
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -708,6 +721,9 @@ export default function Archive() {
           onConfirm={bulkDelete}
         />
       )}
+      
+      {/* Offline indicator */}
+      <OfflineIndicator />
     </div>
   );
 }

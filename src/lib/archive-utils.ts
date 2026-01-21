@@ -77,20 +77,63 @@ export function furtherProgress(
 
 
 /**
- * Merge collection IDs from two items (union of both).
- * Used when merging duplicate items to preserve all collection memberships.
+ * Merge collection IDs from two items based on timestamps.
+ * If both have timestamps, use the newer one. Otherwise fall back to union.
+ * 
+ * @returns Object with merged collectionIds and collectionIdsUpdatedAt
  */
 function mergeCollectionIds(
   a: string[] | undefined,
-  b: string[] | undefined
-): string[] | undefined {
-  if (!a && !b) return undefined;
-  if (!a) return b;
-  if (!b) return a;
+  aTimestamp: number | undefined,
+  b: string[] | undefined,
+  bTimestamp: number | undefined
+): { collectionIds: string[] | undefined; collectionIdsUpdatedAt: number | undefined } {
+  // If both have timestamps, use the newer one (timestamp-based merge)
+  if (aTimestamp !== undefined && bTimestamp !== undefined) {
+    if (aTimestamp >= bTimestamp) {
+      return {
+        collectionIds: a && a.length > 0 ? a : undefined,
+        collectionIdsUpdatedAt: aTimestamp,
+      };
+    } else {
+      return {
+        collectionIds: b && b.length > 0 ? b : undefined,
+        collectionIdsUpdatedAt: bTimestamp,
+      };
+    }
+  }
+  
+  // If only one has a timestamp, prefer that one (it has explicit info)
+  if (aTimestamp !== undefined) {
+    return {
+      collectionIds: a && a.length > 0 ? a : undefined,
+      collectionIdsUpdatedAt: aTimestamp,
+    };
+  }
+  if (bTimestamp !== undefined) {
+    return {
+      collectionIds: b && b.length > 0 ? b : undefined,
+      collectionIdsUpdatedAt: bTimestamp,
+    };
+  }
+  
+  // Neither has timestamp - fall back to union (legacy behavior)
+  if (!a && !b) {
+    return { collectionIds: undefined, collectionIdsUpdatedAt: undefined };
+  }
+  if (!a) {
+    return { collectionIds: b, collectionIdsUpdatedAt: undefined };
+  }
+  if (!b) {
+    return { collectionIds: a, collectionIdsUpdatedAt: undefined };
+  }
   
   // Union of both arrays
   const merged = new Set([...a, ...b]);
-  return merged.size > 0 ? Array.from(merged) : undefined;
+  return {
+    collectionIds: merged.size > 0 ? Array.from(merged) : undefined,
+    collectionIdsUpdatedAt: undefined,
+  };
 }
 
 
@@ -109,6 +152,8 @@ interface MergeableItem {
   url?: string;
   pasteContent?: string;
   collectionIds?: string[];
+  /** When collection membership was last modified (for sync conflict resolution) */
+  collectionIdsUpdatedAt?: number;
 }
 
 /**
@@ -157,8 +202,13 @@ export function mergeArchiveItemPair<T extends MergeableItem>(
   // Get the better progress
   const mergedProgress = furtherProgress(primary.progress, secondary.progress);
   
-  // Merge collectionIds (union of both)
-  const mergedCollectionIds = mergeCollectionIds(primary.collectionIds, secondary.collectionIds);
+  // Merge collectionIds using timestamps for conflict resolution
+  const mergedCollections = mergeCollectionIds(
+    primary.collectionIds,
+    primary.collectionIdsUpdatedAt,
+    secondary.collectionIds,
+    secondary.collectionIdsUpdatedAt
+  );
   
   return {
     ...newerMetadata,
@@ -171,8 +221,9 @@ export function mergeArchiveItemPair<T extends MergeableItem>(
     url: primary.url || secondary.url,
     // Preserve cached data
     pasteContent: primary.pasteContent || secondary.pasteContent,
-    // Merged collection membership
-    collectionIds: mergedCollectionIds,
+    // Merged collection membership (with timestamp)
+    collectionIds: mergedCollections.collectionIds,
+    collectionIdsUpdatedAt: mergedCollections.collectionIdsUpdatedAt,
   };
 }
 

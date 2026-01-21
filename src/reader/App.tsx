@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useShallow } from 'zustand/shallow';
 import { 
   useReaderStore,
@@ -7,6 +7,7 @@ import {
   selectError,
   selectSettings,
   selectSettingsLoaded,
+  selectIsFocusMode,
 } from './store';
 import TopBar from './components/TopBar';
 import ReaderView from './components/ReaderView';
@@ -17,10 +18,14 @@ import ImportPanel from './components/ImportPanel';
 import HelpOverlay from './components/HelpOverlay';
 import CompletionOverlay from './components/CompletionOverlay';
 import Onboarding, { useOnboarding } from './components/Onboarding';
+import OfflineIndicator from '@/components/OfflineIndicator';
 import { useStorageSync } from './hooks/useStorageSync';
 import { getCurrentDocument } from '@/lib/storage';
 import { getAnnotations, getDocumentAnnotationKey } from '@/lib/annotations-service';
 import type { FlowDocument } from '@/types';
+
+// Focus mode hover timeout (show UI on mouse move)
+const FOCUS_MODE_HOVER_TIMEOUT = 2000;
 
 export default function App() {
   // Use selectors for primitive state (no shallow needed)
@@ -29,6 +34,7 @@ export default function App() {
   const error = useReaderStore(selectError);
   const settings = useReaderStore(selectSettings);
   const settingsLoaded = useReaderStore(selectSettingsLoaded);
+  const isFocusMode = useReaderStore(selectIsFocusMode);
   
   // Use useShallow for selectors that return objects
   const { isPlaying } = useReaderStore(
@@ -56,6 +62,49 @@ export default function App() {
   const scrollToAnnotation = useReaderStore(state => state.scrollToAnnotation);
   
   const onboarding = useOnboarding();
+  
+  // Focus mode hover state - show UI on mouse movement
+  const [focusModeHover, setFocusModeHover] = useState(false);
+  const focusModeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showFocusModeHint, setShowFocusModeHint] = useState(false);
+  
+  // Track when focus mode changes to show hint
+  const prevFocusModeRef = useRef(isFocusMode);
+  useEffect(() => {
+    if (isFocusMode && !prevFocusModeRef.current) {
+      // Just entered focus mode - show hint
+      setShowFocusModeHint(true);
+      const timer = setTimeout(() => setShowFocusModeHint(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    prevFocusModeRef.current = isFocusMode;
+  }, [isFocusMode]);
+  
+  // Handle mouse movement in focus mode
+  const handleMouseMove = useCallback(() => {
+    if (!isFocusMode) return;
+    
+    setFocusModeHover(true);
+    
+    // Clear existing timer
+    if (focusModeTimerRef.current) {
+      clearTimeout(focusModeTimerRef.current);
+    }
+    
+    // Hide UI after timeout
+    focusModeTimerRef.current = setTimeout(() => {
+      setFocusModeHover(false);
+    }, FOCUS_MODE_HOVER_TIMEOUT);
+  }, [isFocusMode]);
+  
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (focusModeTimerRef.current) {
+        clearTimeout(focusModeTimerRef.current);
+      }
+    };
+  }, []);
   
   // Subscribe to storage changes for live sync updates
   useStorageSync();
@@ -216,8 +265,16 @@ export default function App() {
     );
   }
 
+  // Build focus mode class names
+  const focusModeClasses = isFocusMode 
+    ? `reader-focus-mode${focusModeHover ? ' focus-mode-hover' : ''}`
+    : '';
+
   return (
-    <div className="min-h-screen fade-in">
+    <div 
+      className={`min-h-screen fade-in ${focusModeClasses}`}
+      onMouseMove={handleMouseMove}
+    >
       <ProgressBar />
       <TopBar onImportClick={() => setImportOpen(true)} />
       <ReaderView />
@@ -240,6 +297,13 @@ export default function App() {
       {onboarding.checked && onboarding.showOnboarding && (
         <Onboarding onComplete={onboarding.close} />
       )}
+      {/* Focus mode hint - shows briefly when entering focus mode */}
+      {showFocusModeHint && (
+        <div className="focus-mode-indicator">
+          Focus mode enabled. Press F or Esc to exit.
+        </div>
+      )}
+      <OfflineIndicator />
     </div>
   );
 }

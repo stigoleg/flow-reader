@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS, HIGHLIGHT_COLORS } from '@/types';
 import { getSettings, saveSettings, savePosition, getPosition, isExitConfirmationDismissed, dismissExitConfirmation, saveCurrentDocument } from '@/lib/storage';
 import { addRecent, mapSourceToType, getSourceLabel, shouldCacheDocument, calculateProgress, updateLastOpened, updateArchiveItem, flushPendingArchiveWrites, type BookProgressInfo } from '@/lib/recents-service';
 import { pacingToWordCount, wordCountToRsvpIndex, rsvpIndexToWordCount, wordCountToPacing } from '@/lib/position-utils';
+import { tokenizeForRSVP } from '@/lib/tokenizer';
 import { 
   getAnnotations, 
   saveAnnotation, 
@@ -162,6 +163,12 @@ interface ReaderState {
   isExitConfirmOpen: boolean;
   exitConfirmationDismissed: boolean;
   
+  // Focus mode (hide UI for distraction-free reading)
+  isFocusMode: boolean;
+  
+  // Edit paste modal
+  isEditPasteOpen: boolean;
+  
   accumulatedReadingTime: number;
   playStartTime: number | null;
 
@@ -232,6 +239,7 @@ interface ReaderState {
   setRsvpTokenCount: (count: number) => void;
   rsvpAdvance: () => void;
   rsvpRetreat: () => void;
+  rsvpReplaySentence: () => void;
   
   setChapter: (chapterIndex: number) => void;
   nextChapter: () => void;
@@ -257,6 +265,7 @@ interface ReaderState {
   navigateToAnnotation: (annotation: Annotation) => void;
   scrollToAnnotation: (annotation: Annotation) => void;
   clearScrollToBlock: () => void;
+  addQuickBookmark: () => Promise<Annotation | null>;
 
   // Search actions
   toggleSearch: () => void;
@@ -273,6 +282,14 @@ interface ReaderState {
   jumpToEnd: () => void;
   jumpToPercent: (percent: number) => void;
   skipBlocks: (count: number) => void;
+  
+  // Focus mode actions
+  toggleFocusMode: () => void;
+  setFocusMode: (enabled: boolean) => void;
+  
+  // Edit paste actions
+  setEditPasteOpen: (open: boolean) => void;
+  updatePasteContent: (content: string) => Promise<void>;
 }
 
 export const useReaderStore = create<ReaderState>((set, get) => ({
@@ -298,6 +315,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   isCompletionOpen: false,
   isExitConfirmOpen: false,
   exitConfirmationDismissed: false,
+  isFocusMode: false,
+  isEditPasteOpen: false,
   accumulatedReadingTime: 0,
   playStartTime: null,
   
@@ -634,6 +653,12 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     // This ensures the reader has finished processing the last content
     setTimeout(() => {
       set({ isCompletionOpen: true });
+      
+      // Trigger background preloading for next items
+      // This preloads content while the user is on the completion screen
+      chrome.runtime.sendMessage({ type: 'TRIGGER_PRELOAD' }).catch(() => {
+        // Ignore errors - preload is best-effort
+      });
     }, 1000);
   },
 
@@ -811,6 +836,34 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     if (currentRsvpIndex > 0) {
       set({ currentRsvpIndex: currentRsvpIndex - 1 });
     }
+  },
+
+  rsvpReplaySentence: () => {
+    const { document, currentRsvpIndex, settings } = get();
+    if (!document) return;
+
+    // Tokenize with current chunk size to get the same tokens as displayed
+    const tokens = tokenizeForRSVP(document.plainText, settings.rsvpChunkSize);
+    
+    if (tokens.length === 0 || currentRsvpIndex <= 0) {
+      // Already at start
+      set({ currentRsvpIndex: 0 });
+      return;
+    }
+
+    // Find the start of the current sentence by going backwards
+    // until we find a token that ends a sentence (or reach the start)
+    let sentenceStart = currentRsvpIndex;
+    
+    // First, go back one to avoid re-finding the current position if it's a sentence end
+    sentenceStart--;
+    
+    // Then keep going back until we find a sentence ending
+    while (sentenceStart > 0 && !tokens[sentenceStart - 1].isEndOfSentence) {
+      sentenceStart--;
+    }
+
+    set({ currentRsvpIndex: sentenceStart });
   },
 
   // Chapter navigation (for books)
@@ -1056,6 +1109,49 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   },
 
   clearScrollToBlock: () => set({ scrollToBlockIndex: null }),
+
+  addQuickBookmark: async () => {
+    const { document, currentBlockIndex, currentChapterIndex, documentKey, annotations } = get();
+    if (!document || !documentKey) return null;
+
+    const block = document.blocks[currentBlockIndex];
+    if (!block) return null;
+
+    // Get first few words of the block for context
+    const blockContent = 'content' in block ? block.content : 
+                         ('items' in block ? block.items[0] || '' : '');
+    const preview = blockContent.slice(0, 50) + (blockContent.length > 50 ? '...' : '');
+
+    // Create a bookmark annotation (note type with bookmark marker)
+    const chapterInfo = document.book 
+      ? ` (Chapter ${currentChapterIndex + 1})`
+      : '';
+    
+    const bookmarkNote = `Bookmarked at ${new Date().toLocaleString()}${chapterInfo}`;
+    
+    const anchor: AnnotationAnchor = {
+      blockId: String(currentBlockIndex),
+      startWordIndex: 0,
+      endBlockId: String(currentBlockIndex),
+      endWordIndex: 0,
+      textContent: preview,
+    };
+
+    // Use a gold color for bookmarks
+    const bookmarkColor = '#FFD700';
+    
+    const annotation = createAnnotation(anchor, bookmarkColor, bookmarkNote);
+    
+    // Save to storage
+    await saveAnnotation(documentKey, annotation);
+    
+    // Update state
+    set({
+      annotations: [...annotations, annotation],
+    });
+    
+    return annotation;
+  },
 
   // Search actions
   toggleSearch: () => {
@@ -1410,6 +1506,65 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       saveCurrentPosition();
     }
   },
+
+  // Focus mode actions
+  toggleFocusMode: () => {
+    set((state) => ({ isFocusMode: !state.isFocusMode }));
+  },
+
+  setFocusMode: (enabled: boolean) => {
+    set({ isFocusMode: enabled });
+  },
+
+  // Edit paste actions
+  setEditPasteOpen: (open: boolean) => {
+    set({ isEditPasteOpen: open });
+  },
+
+  updatePasteContent: async (content: string) => {
+    const { document, archiveItemId } = get();
+    if (!document || document.metadata.source !== 'paste') return;
+    
+    // Import extractFromPaste dynamically to avoid circular dependencies
+    const { extractFromPaste } = await import('@/lib/paste-utils');
+    
+    // Re-extract the document with the new content
+    const newDoc = extractFromPaste(content);
+    
+    // Preserve the original document's metadata where appropriate
+    const updatedDoc: FlowDocument = {
+      ...newDoc,
+      metadata: {
+        ...newDoc.metadata,
+        // Keep original creation time
+        createdAt: document.metadata.createdAt,
+      },
+    };
+    
+    // Update state with new document
+    set({
+      document: updatedDoc,
+      currentBlockIndex: 0,
+      currentCharOffset: 0,
+      currentSentenceIndex: 0,
+      currentWordIndex: 0,
+      currentRsvpIndex: 0,
+      isEditPasteOpen: false,
+    });
+    
+    // Update archive item if exists
+    if (archiveItemId) {
+      const { updateArchiveItem } = await import('@/lib/recents-service');
+      await updateArchiveItem(archiveItemId, {
+        title: updatedDoc.metadata.title,
+        cachedDocument: updatedDoc,
+        wordCount: updatedDoc.plainText.split(/\s+/).filter(Boolean).length,
+      });
+    }
+    
+    // Save current document for refresh persistence
+    await saveCurrentDocument(updatedDoc);
+  },
 }));
 
 // Use these selectors with useReaderStore(selector) to minimize re-renders.
@@ -1438,5 +1593,8 @@ export const selectSearchQuery = (state: ReaderState) => state.searchQuery;
 export const selectSearchResults = (state: ReaderState) => state.searchResults;
 export const selectCurrentSearchIndex = (state: ReaderState) => state.currentSearchIndex;
 export const selectSearchScrollChapterIndex = (state: ReaderState) => state.searchScrollChapterIndex;
+
+/** Select focus mode */
+export const selectIsFocusMode = (state: ReaderState) => state.isFocusMode;
 
 

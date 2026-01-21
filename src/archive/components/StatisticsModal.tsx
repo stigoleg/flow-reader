@@ -70,8 +70,16 @@ export default function StatisticsModal({
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [isLayoutReady, setIsLayoutReady] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const stats = useStatistics({ archiveItems });
+
+  // Wait for modal layout to stabilize before rendering charts
+  // This prevents "width(-1) height(-1)" warnings from recharts
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLayoutReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Handle escape key
   useEffect(() => {
@@ -183,7 +191,7 @@ export default function StatisticsModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          {stats.loading && (
+          {(stats.loading || !isLayoutReady) && (
             <div className="flex items-center justify-center py-12">
               <div 
                 className="animate-spin rounded-full h-6 w-6 border-b-2" 
@@ -192,7 +200,24 @@ export default function StatisticsModal({
             </div>
           )}
 
-          {!stats.loading && activeTab === 'overview' && (
+          {!stats.loading && isLayoutReady && stats.error && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <svg className="w-12 h-12 opacity-30 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <p className="opacity-70 mb-2">Failed to load statistics</p>
+              <p className="text-sm opacity-50 mb-4">{stats.error}</p>
+              <button
+                onClick={stats.refresh}
+                className="px-4 py-2 text-sm rounded transition-colors"
+                style={{ backgroundColor: accentColor, color: 'white' }}
+              >
+                Try Again
+              </button>
+            </div>
+          )}
+
+          {!stats.loading && isLayoutReady && !stats.error && activeTab === 'overview' && (
             <OverviewTab 
               stats={stats} 
               accentColor={accentColor} 
@@ -200,15 +225,15 @@ export default function StatisticsModal({
             />
           )}
 
-          {!stats.loading && activeTab === 'activity' && (
+          {!stats.loading && isLayoutReady && !stats.error && activeTab === 'activity' && (
             <ActivityTab stats={stats} accentColor={accentColor} />
           )}
 
-          {!stats.loading && activeTab === 'compare' && (
+          {!stats.loading && isLayoutReady && !stats.error && activeTab === 'compare' && (
             <CompareTab stats={stats} accentColor={accentColor} />
           )}
 
-          {!stats.loading && activeTab === 'insights' && (
+          {!stats.loading && isLayoutReady && !stats.error && activeTab === 'insights' && (
             <InsightsTab stats={stats} accentColor={accentColor} />
           )}
         </div>

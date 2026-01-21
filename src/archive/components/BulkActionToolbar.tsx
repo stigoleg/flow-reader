@@ -58,6 +58,7 @@ export default function BulkActionToolbar({
   
   /**
    * Handle bulk collection toggle with proper add/remove logic based on current state.
+   * Don't close menu - allow multiple collection toggles.
    */
   const handleBulkToggleCollection = (collectionId: string) => {
     const state = getBulkCollectionState(collectionId);
@@ -68,7 +69,6 @@ export default function BulkActionToolbar({
       // None or some items are in collection - add all
       onAddToCollection(collectionId);
     }
-    setShowCollectionMenu(false);
   };
   
   return (

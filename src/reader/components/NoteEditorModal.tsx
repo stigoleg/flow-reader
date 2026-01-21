@@ -1,7 +1,8 @@
 /**
  * NoteEditorModal Component
  * 
- * Modal for editing annotation notes and changing highlight colors.
+ * Slide-in panel for editing annotation notes and changing highlight colors.
+ * Slides in from the right, matching the Settings panel pattern.
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -38,13 +39,26 @@ export default function NoteEditorModal({
   const [note, setNote] = useState(annotation.note || '');
   const [tags, setTags] = useState<string[]>(annotation.tags || []);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const modalRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  // Focus textarea on open
+  // Animate open on mount
   useEffect(() => {
-    textareaRef.current?.focus();
+    // Small delay to trigger CSS transition
+    requestAnimationFrame(() => {
+      setIsOpen(true);
+    });
   }, []);
+
+  // Focus textarea after panel opens
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 200); // Wait for slide animation
+    }
+  }, [isOpen]);
 
   // Handle escape key to close
   useEffect(() => {
@@ -53,26 +67,26 @@ export default function NoteEditorModal({
         if (showDeleteConfirm) {
           setShowDeleteConfirm(false);
         } else {
-          onClose();
+          handleClose();
         }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, showDeleteConfirm]);
+  }, [showDeleteConfirm]);
 
-  // Handle click outside to close
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
+  const handleClose = () => {
+    setIsOpen(false);
+    // Wait for animation to complete
+    setTimeout(onClose, 200);
+  };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onClose]);
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleClose();
+    }
+  };
 
   const handleSave = async () => {
     await onSave(note);
@@ -83,33 +97,43 @@ export default function NoteEditorModal({
     if (tagsChanged) {
       await onChangeTags(tags);
     }
-    onClose();
+    handleClose();
   };
 
   const handleDelete = async () => {
     if (showDeleteConfirm) {
       await onDelete();
-      onClose();
+      handleClose();
     } else {
       setShowDeleteConfirm(true);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <>
+      {/* Backdrop */}
+      <div 
+        className={`slide-panel-backdrop ${isOpen ? 'open' : ''}`}
+        onClick={handleBackdropClick}
+        aria-hidden="true"
+      />
+
+      {/* Panel */}
       <div
-        ref={modalRef}
-        className="w-full max-w-md mx-4 rounded-lg shadow-xl border border-reader-text/10"
-        style={{ backgroundColor: 'var(--reader-bg)' }}
+        ref={panelRef}
+        className={`slide-panel ${isOpen ? 'open' : ''}`}
         role="dialog"
-        aria-label="Edit annotation note"
+        aria-modal="true"
+        aria-labelledby="note-editor-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-reader-text/10">
-          <h2 className="text-lg font-medium">Edit Note</h2>
+        <div className="slide-panel-header">
+          <div>
+            <h2 id="note-editor-title" className="slide-panel-title">Edit Note</h2>
+          </div>
           <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-reader-text/10 transition-colors"
+            onClick={handleClose}
+            className="slide-panel-close"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,8 +142,8 @@ export default function NoteEditorModal({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-4 space-y-4">
+        {/* Body */}
+        <div className="slide-panel-body space-y-5">
           {/* Highlighted text preview */}
           <div
             className="p-3 rounded text-sm"
@@ -131,20 +155,21 @@ export default function NoteEditorModal({
           </div>
 
           {/* Color picker */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-reader-text/70">Color:</span>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-3">
+            <span className="text-sm opacity-70">Color:</span>
+            <div className="flex items-center gap-1.5">
               {HIGHLIGHT_COLORS.map((colorOption) => (
                 <button
                   key={colorOption.id}
-                  className={`w-6 h-6 rounded-full transition-all ${
+                  className={`w-7 h-7 rounded-full transition-all ${
                     annotation.color === colorOption.color
-                      ? 'ring-2 ring-offset-2 ring-reader-link'
+                      ? 'ring-2 ring-offset-2'
                       : 'hover:scale-110'
                   }`}
                   style={{ 
                     backgroundColor: colorOption.color,
                     // @ts-expect-error CSS custom property
+                    '--tw-ring-color': 'var(--reader-link)',
                     '--tw-ring-offset-color': 'var(--reader-bg)',
                   }}
                   onClick={() => onChangeColor(colorOption.color)}
@@ -158,7 +183,7 @@ export default function NoteEditorModal({
 
           {/* Note textarea */}
           <div>
-            <label htmlFor="annotation-note" className="block text-sm text-reader-text/70 mb-1">
+            <label htmlFor="annotation-note" className="block text-sm opacity-70 mb-2">
               Note (optional)
             </label>
             <textarea
@@ -167,13 +192,18 @@ export default function NoteEditorModal({
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Add your thoughts about this passage..."
-              className="w-full h-32 p-3 rounded border border-reader-text/20 bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-reader-link"
+              className="w-full h-40 p-3 rounded bg-transparent resize-none focus:outline-none focus:ring-2"
+              style={{
+                border: '1px solid rgba(128, 128, 128, 0.2)',
+                // @ts-expect-error CSS custom property
+                '--tw-ring-color': 'var(--reader-link)',
+              }}
             />
           </div>
 
           {/* Tags */}
           <div>
-            <label className="block text-sm text-reader-text/70 mb-1">
+            <label className="block text-sm opacity-70 mb-2">
               Tags (optional)
             </label>
             <TagInput
@@ -186,13 +216,13 @@ export default function NoteEditorModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-reader-text/10">
+        <div className="slide-panel-footer slide-panel-footer-split">
           <button
             onClick={handleDelete}
-            className={`px-3 py-1.5 text-sm rounded transition-colors ${
+            className={`modal-btn ${
               showDeleteConfirm
-                ? 'bg-red-500 text-white hover:bg-red-600'
-                : 'text-red-500 hover:bg-red-500/10'
+                ? 'modal-btn-danger modal-btn-danger-confirm'
+                : 'modal-btn-danger'
             }`}
           >
             {showDeleteConfirm ? 'Confirm Delete' : 'Delete'}
@@ -200,24 +230,20 @@ export default function NoteEditorModal({
           
           <div className="flex items-center gap-2">
             <button
-              onClick={onClose}
-              className="px-3 py-1.5 text-sm rounded hover:bg-reader-text/10 transition-colors"
+              onClick={handleClose}
+              className="modal-btn modal-btn-secondary"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="px-4 py-1.5 text-sm rounded hover:opacity-90 transition-opacity"
-              style={{ 
-                backgroundColor: 'var(--reader-link)',
-                color: 'white',
-              }}
+              className="modal-btn modal-btn-primary"
             >
               Save
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

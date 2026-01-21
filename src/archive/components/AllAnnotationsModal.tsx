@@ -1,7 +1,7 @@
 /**
  * AllAnnotationsModal Component
  * 
- * Global annotations browser showing all annotations across all documents.
+ * Slide-in panel showing all annotations across all documents.
  * Provides search, filtering, grouping, and navigation to specific annotations.
  */
 
@@ -33,6 +33,7 @@ export default function AllAnnotationsModal({
 }: AllAnnotationsModalProps) {
   const [loading, setLoading] = useState(true);
   const [annotations, setAnnotations] = useState<AnnotationWithDoc[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,6 +47,13 @@ export default function AllAnnotationsModal({
   // Delete confirmation
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Animate open on mount
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      setIsOpen(true);
+    });
+  }, []);
 
   // Load data
   useEffect(() => {
@@ -84,12 +92,23 @@ export default function AllAnnotationsModal({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        handleClose();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
+    setTimeout(onClose, 200);
   }, [onClose]);
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      handleClose();
+    }
+  };
 
   // Get all unique tags
   const allTags = useMemo(() => {
@@ -192,9 +211,9 @@ export default function AllAnnotationsModal({
   const handleNavigate = useCallback((ann: AnnotationWithDoc) => {
     if (ann.archiveItem) {
       onOpenDocument(ann.archiveItem, ann.id);
-      onClose();
+      handleClose();
     }
-  }, [onOpenDocument, onClose]);
+  }, [onOpenDocument, handleClose]);
 
   // Delete annotation
   const handleDelete = useCallback(async (ann: AnnotationWithDoc) => {
@@ -242,24 +261,27 @@ export default function AllAnnotationsModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
+    <>
+      {/* Backdrop */}
+      <div 
+        className={`slide-panel-backdrop ${isOpen ? 'open' : ''}`}
+        onClick={handleBackdropClick}
+        aria-hidden="true"
+      />
+
+      {/* Panel */}
       <div
-        className="w-full max-w-2xl max-h-[85vh] rounded-lg shadow-xl flex flex-col"
-        style={{ backgroundColor: 'var(--reader-bg)' }}
-        onClick={e => e.stopPropagation()}
+        className={`slide-panel slide-panel-lg ${isOpen ? 'open' : ''}`}
         role="dialog"
         aria-modal="true"
-        aria-label="All Annotations"
+        aria-labelledby="all-annotations-title"
       >
         {/* Header */}
-        <div className="flex items-start justify-between p-4 border-b border-reader-text/10">
+        <div className="slide-panel-header">
           <div className="flex-1 min-w-0 pr-4">
-            <h2 className="text-lg font-semibold">All Annotations</h2>
+            <h2 id="all-annotations-title" className="slide-panel-title">All Annotations</h2>
             {!loading && stats.total > 0 && (
-              <p className="text-sm opacity-60 mt-1">
+              <p className="slide-panel-subtitle">
                 {stats.total} highlight{stats.total !== 1 ? 's' : ''} across {stats.documentCount} document{stats.documentCount !== 1 ? 's' : ''}
                 {stats.withNotes > 0 && ` · ${stats.withNotes} with notes`}
                 {stats.favorites > 0 && ` · ${stats.favorites} starred`}
@@ -267,8 +289,8 @@ export default function AllAnnotationsModal({
             )}
           </div>
           <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-reader-text/10 transition-colors"
+            onClick={handleClose}
+            className="slide-panel-close"
             aria-label="Close"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -279,7 +301,7 @@ export default function AllAnnotationsModal({
 
         {/* Filters */}
         {!loading && stats.total > 0 && (
-          <div className="px-4 py-3 border-b border-reader-text/10 space-y-3">
+          <div className="px-4 py-3 border-b border-reader-text/10 space-y-3 flex-shrink-0">
             {/* Search */}
             <div className="relative">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -584,15 +606,15 @@ export default function AllAnnotationsModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-reader-text/10">
+        <div className="slide-panel-footer">
           <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded hover:bg-reader-text/10 transition-colors"
+            onClick={handleClose}
+            className="modal-btn modal-btn-secondary"
           >
             Close
           </button>
         </div>
       </div>
-    </div>
+    </>
   );
 }

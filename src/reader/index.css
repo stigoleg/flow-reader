@@ -657,3 +657,357 @@ input[type="checkbox"] {
     box-shadow: 0 0 0 2px rgba(255, 140, 0, 0.6);
   }
 }
+
+/* ============================================
+   Focus Mode
+   Hide UI for distraction-free reading
+   ============================================ */
+
+.reader-focus-mode .top-bar,
+.reader-focus-mode .progress-bar,
+.reader-focus-mode .settings-panel,
+.reader-focus-mode .toc-panel,
+.reader-focus-mode .notes-panel,
+.reader-focus-mode .speed-indicator,
+.reader-focus-mode .chapter-nav {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* Show UI elements on mouse movement in focus mode */
+.reader-focus-mode.focus-mode-hover .progress-bar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Focus mode indicator - subtle hint at bottom */
+.focus-mode-indicator {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border-radius: 20px;
+  font-size: 12px;
+  z-index: 100;
+  opacity: 0;
+  animation: focusModeHint 3s ease forwards;
+}
+
+@keyframes focusModeHint {
+  0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  10% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  80% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(0); }
+}
+
+/* Respect reduced motion preference for focus mode */
+@media (prefers-reduced-motion: reduce) {
+  .reader-focus-mode .top-bar,
+  .reader-focus-mode .progress-bar,
+  .reader-focus-mode .settings-panel,
+  .reader-focus-mode .toc-panel,
+  .reader-focus-mode .notes-panel {
+    transition: none;
+  }
+  
+  .focus-mode-indicator {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   Offline Indicator
+   Shows when user is offline
+   ============================================ */
+
+.offline-indicator {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(245, 158, 11, 0.95);
+  color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  animation: slideInFromLeft 0.3s ease;
+}
+
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offline-indicator {
+    animation: none;
+  }
+}
+
+/* ============================================
+   Modal/Dialog Styles
+   Consistent styling for modals across the app
+   ============================================ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-content {
+  background-color: var(--reader-bg);
+  color: var(--reader-text);
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  max-width: 32rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.modal-content.modal-md {
+  max-width: 28rem;
+}
+
+.modal-content.modal-lg {
+  max-width: 40rem;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.modal-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+.modal-footer.modal-footer-split {
+  justify-content: space-between;
+}
+
+/* Modal button styles */
+.modal-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  border: none;
+}
+
+.modal-btn-secondary {
+  background-color: rgba(128, 128, 128, 0.1);
+  color: inherit;
+}
+
+.modal-btn-secondary:hover {
+  background-color: rgba(128, 128, 128, 0.2);
+}
+
+.modal-btn-primary {
+  background-color: var(--reader-link);
+  color: white;
+}
+
+.modal-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.modal-btn-danger {
+  color: #dc2626;
+  background-color: transparent;
+}
+
+.modal-btn-danger:hover {
+  background-color: rgba(220, 38, 38, 0.1);
+}
+
+.modal-btn-danger.modal-btn-danger-confirm {
+  background-color: #dc2626;
+  color: white;
+}
+
+.modal-btn-danger.modal-btn-danger-confirm:hover {
+  background-color: #b91c1c;
+}
+
+/* Close button in modal header */
+.modal-close-btn {
+  padding: 0.25rem;
+  border-radius: 0.375rem;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.modal-close-btn:hover {
+  background-color: rgba(128, 128, 128, 0.1);
+  opacity: 1;
+}
+
+/* ============================================
+   Slide-in Panel Styles
+   Right-side panels for Edit Note, All Annotations, Edit Paste
+   Matches Settings panel pattern but wider
+   ============================================ */
+
+.slide-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  background-color: rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.slide-panel-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.slide-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  background: var(--reader-bg);
+  color: var(--reader-text);
+  border-left: none;
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  .slide-panel {
+    width: 420px;
+    border-left: 1px solid rgba(128, 128, 128, 0.2);
+  }
+}
+
+.slide-panel.slide-panel-lg {
+  /* Larger panel for content-heavy views */
+}
+
+@media (min-width: 768px) {
+  .slide-panel.slide-panel-lg {
+    width: 520px;
+  }
+}
+
+.slide-panel.open {
+  transform: translateX(0);
+}
+
+/* Panel header - matches modal header but with panel styling */
+.slide-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  flex-shrink: 0;
+}
+
+.slide-panel-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.slide-panel-subtitle {
+  font-size: 0.875rem;
+  opacity: 0.6;
+  margin-top: 0.25rem;
+}
+
+/* Panel body - scrollable content area */
+.slide-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+}
+
+/* Panel footer - fixed at bottom */
+.slide-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  flex-shrink: 0;
+}
+
+.slide-panel-footer.slide-panel-footer-split {
+  justify-content: space-between;
+}
+
+/* Close button for panels */
+.slide-panel-close {
+  padding: 0.375rem;
+  border-radius: 0.375rem;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+}
+
+.slide-panel-close:hover {
+  background-color: rgba(128, 128, 128, 0.1);
+  opacity: 1;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .slide-panel,
+  .slide-panel-backdrop {
+    transition: none;
+  }
+}

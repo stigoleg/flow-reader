@@ -3,6 +3,7 @@
  * 
  * Slide-in settings panel for the Archive page.
  * Focused on theme settings only (no reader-specific options).
+ * Also includes Clear History action (moved from filter bar).
  */
 
 import { useState, useEffect } from 'react';
@@ -10,6 +11,7 @@ import { THEME_PRESETS, type ThemePreset, type ReaderSettings, type ThemeColors 
 import { getPresets, savePreset, deletePreset, saveSettings } from '@/lib/storage';
 import { ThemeSection, PresetSection } from '@/reader/components/settings';
 import { SyncSettingsSection } from './SyncSettingsSection';
+import { useArchiveStore } from '../store';
 
 interface ArchiveSettingsPanelProps {
   isOpen: boolean;
@@ -25,10 +27,18 @@ export default function ArchiveSettingsPanel({
   onClose,
 }: ArchiveSettingsPanelProps) {
   const [presets, setPresets] = useState<Record<string, Partial<ReaderSettings>>>({});
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  
+  const clearHistory = useArchiveStore(state => state.clearHistory);
+  const itemCount = useArchiveStore(state => state.items.length);
 
   useEffect(() => {
     if (isOpen) {
       getPresets().then(setPresets);
+    } else {
+      // Reset clear confirmation when panel closes
+      setShowClearConfirm(false);
     }
   }, [isOpen]);
 
@@ -131,6 +141,64 @@ export default function ArchiveSettingsPanel({
           onDelete={handleDeletePreset}
         />
         <SyncSettingsSection />
+
+        {/* Data section with Clear History */}
+        <div className="settings-group mt-6">
+          <h3>Data</h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">Clear History</p>
+                <p className="text-xs opacity-60">
+                  Remove all {itemCount} items from your archive
+                </p>
+              </div>
+              {!showClearConfirm ? (
+                <button
+                  onClick={() => setShowClearConfirm(true)}
+                  disabled={itemCount === 0}
+                  className="px-3 py-1.5 text-sm rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{
+                    color: '#dc2626',
+                    border: '1px solid rgba(220, 38, 38, 0.3)',
+                  }}
+                >
+                  Clear...
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowClearConfirm(false)}
+                    className="px-3 py-1.5 text-sm rounded-lg transition-colors"
+                    style={{ backgroundColor: 'rgba(128, 128, 128, 0.1)' }}
+                    disabled={isClearing}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setIsClearing(true);
+                      try {
+                        await clearHistory();
+                        setShowClearConfirm(false);
+                      } finally {
+                        setIsClearing(false);
+                      }
+                    }}
+                    disabled={isClearing}
+                    className="px-3 py-1.5 text-sm rounded-lg font-medium transition-colors disabled:opacity-60"
+                    style={{
+                      backgroundColor: '#dc2626',
+                      color: 'white',
+                    }}
+                  >
+                    {isClearing ? 'Clearing...' : 'Confirm'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* About section */}
         <div className="settings-group mt-8">

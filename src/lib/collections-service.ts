@@ -109,6 +109,7 @@ export async function deleteCollection(id: string): Promise<boolean> {
     const filteredCollections = collections.filter(c => c.id !== id);
     
     // Prepare updated archive items (remove collection ID from all items)
+    const now = Date.now();
     const updatedItems = state.archiveItems.map(item => {
       if (item.collectionIds?.includes(id)) {
         const newCollectionIds = item.collectionIds.filter(cid => cid !== id);
@@ -116,6 +117,7 @@ export async function deleteCollection(id: string): Promise<boolean> {
           ...item,
           // Clean up empty array
           collectionIds: newCollectionIds.length > 0 ? newCollectionIds : undefined,
+          collectionIdsUpdatedAt: now,
         };
       }
       return item;
@@ -181,6 +183,7 @@ export async function addItemToCollection(
     const updated: ArchiveItem = {
       ...item,
       collectionIds: Array.from(collectionIds),
+      collectionIdsUpdatedAt: Date.now(),
     };
     
     items[index] = updated;
@@ -217,6 +220,7 @@ export async function removeItemFromCollection(
     const updated: ArchiveItem = {
       ...item,
       collectionIds: item.collectionIds.filter(id => id !== collectionId),
+      collectionIdsUpdatedAt: Date.now(),
     };
     
     // Clean up empty array
@@ -252,6 +256,7 @@ export async function setItemCollections(
     const updated: ArchiveItem = {
       ...item,
       collectionIds: collectionIds.length > 0 ? collectionIds : undefined,
+      collectionIdsUpdatedAt: Date.now(),
     };
     
     items[index] = updated;
@@ -282,12 +287,14 @@ export async function toggleItemInCollection(
     const isInCollection = item.collectionIds?.includes(collectionId) ?? false;
     
     let updated: ArchiveItem;
+    const now = Date.now();
     
     if (isInCollection) {
       // Remove from collection
       updated = {
         ...item,
         collectionIds: item.collectionIds?.filter(id => id !== collectionId),
+        collectionIdsUpdatedAt: now,
       };
       if (updated.collectionIds?.length === 0) {
         delete updated.collectionIds;
@@ -297,6 +304,7 @@ export async function toggleItemInCollection(
       updated = {
         ...item,
         collectionIds: [...(item.collectionIds ?? []), collectionId],
+        collectionIdsUpdatedAt: now,
       };
     }
     
@@ -330,6 +338,7 @@ export async function addItemsToCollection(
     const state = await storageFacade.getState();
     const items = state.archiveItems;
     const itemIdSet = new Set(itemIds);
+    const now = Date.now();
     
     let hasChanges = false;
     
@@ -349,6 +358,7 @@ export async function addItemsToCollection(
       return {
         ...item,
         collectionIds: Array.from(collectionIds),
+        collectionIdsUpdatedAt: now,
       };
     });
     
@@ -388,6 +398,7 @@ export async function removeItemsFromCollection(
       return {
         ...item,
         collectionIds: newCollectionIds.length > 0 ? newCollectionIds : undefined,
+        collectionIdsUpdatedAt: Date.now(),
       };
     });
     

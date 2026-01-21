@@ -8,12 +8,11 @@ import AnnotationToolbar from './AnnotationToolbar';
 import NoteEditorModal from './NoteEditorModal';
 import NotesPanel from './NotesPanel';
 import SearchBar from './SearchBar';
-import TTSControls from './TTSControls';
+import EditPasteModal from './EditPasteModal';
 import { useToast } from './Toast';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useSwipeGestures } from '../hooks/useSwipeGestures';
 import { useTextSelection } from '../hooks/useTextSelection';
-import { useTTS } from '../hooks/useTTS';
 import type { ModeConfig, BionicConfig, PacingConfig, PositionState, BlockHandlers } from './types';
 import type { Annotation, AnnotationAnchor } from '@/types';
 
@@ -53,6 +52,7 @@ export default function ReaderView() {
     // RSVP navigation
     rsvpAdvance,
     rsvpRetreat,
+    rsvpReplaySentence,
     // Chapter navigation (for books)
     nextChapter,
     prevChapter,
@@ -96,8 +96,17 @@ export default function ReaderView() {
     jumpToEnd,
     jumpToPercent,
     skipBlocks,
+    // Focus mode
+    isFocusMode,
+    toggleFocusMode,
+    // Quick bookmark
+    addQuickBookmark,
     // Goal notifications
     consumeGoalNotifications,
+    // Edit paste
+    isEditPasteOpen,
+    setEditPasteOpen,
+    updatePasteContent,
   } = useReaderStore();
 
   const { showToast } = useToast();
@@ -113,6 +122,14 @@ export default function ReaderView() {
     }
   }, []);
 
+  // Create a wrapped bookmark handler that shows toast
+  const handleQuickBookmark = useCallback(async () => {
+    const annotation = await addQuickBookmark();
+    if (annotation) {
+      showToast('Bookmark added', 'success', 2000);
+    }
+  }, [addQuickBookmark, showToast]);
+
   useKeyboardShortcuts({
     settings,
     togglePlay,
@@ -127,6 +144,7 @@ export default function ReaderView() {
     updateSettings,
     rsvpAdvance,
     rsvpRetreat,
+    rsvpReplaySentence,
     nextChapter,
     prevChapter,
     toggleToc,
@@ -136,6 +154,9 @@ export default function ReaderView() {
     jumpToEnd,
     jumpToPercent,
     skipBlocks,
+    toggleFocusMode,
+    isFocusMode,
+    addQuickBookmark: handleQuickBookmark,
     overlays: {
       isSettingsOpen,
       closeSettings: toggleSettings,
@@ -170,14 +191,6 @@ export default function ReaderView() {
   }), [settings.pacingGranularity, nextWord, nextSentence, nextBlock, prevWord, prevSentence, prevBlock, adjustWPM]);
 
   useSwipeGestures(containerRef, swipeHandlers);
-
-  // Text-to-speech functionality
-  const tts = useTTS({
-    settings,
-    blocks: document?.blocks || [],
-    currentBlockIndex,
-    onBlockComplete: nextBlock,
-  });
 
   // Load annotations when document loads
   useEffect(() => {
@@ -502,16 +515,15 @@ export default function ReaderView() {
         onImportAnnotations={importAnnotationsFromData}
       />
 
-      {/* TTS Controls - floating controls when TTS is enabled */}
-      {settings.ttsEnabled && (
-        <TTSControls
-          isAvailable={tts.isAvailable}
-          isSpeaking={tts.isSpeaking}
-          isPaused={tts.isPaused}
-          onToggle={tts.toggle}
-          onStop={tts.stop}
+      {/* Edit Paste Modal - for editing pasted content */}
+      {isEditPasteOpen && document?.metadata.pasteContent && (
+        <EditPasteModal
+          initialContent={document.metadata.pasteContent}
+          onSave={updatePasteContent}
+          onClose={() => setEditPasteOpen(false)}
         />
       )}
+
     </>
   );
 }

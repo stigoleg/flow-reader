@@ -1,6 +1,7 @@
 import type { FlowDocument, MessageType } from '@/types';
 import { runMigrations, initializeDefaultStorage } from '@/lib/migrations';
 import { syncScheduler, setupSyncAlarmListener } from '@/lib/sync/sync-scheduler';
+import { triggerPreload } from '@/lib/preload-service';
 
 /**
  * Service worker for FlowReader extension
@@ -130,6 +131,15 @@ chrome.runtime.onMessage.addListener((message: MessageType, sender, sendResponse
     case 'OPEN_ARCHIVE':
       // Open or focus the Archive page
       openOrFocusArchiveTab().then(() => {
+        sendResponse({ success: true });
+      }).catch(error => {
+        sendResponse({ error: error.message });
+      });
+      return true; // Keep channel open for async response
+    
+    case 'TRIGGER_PRELOAD':
+      // Trigger background preloading of next items
+      triggerPreload().then(() => {
         sendResponse({ success: true });
       }).catch(error => {
         sendResponse({ error: error.message });

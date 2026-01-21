@@ -2,7 +2,12 @@ import { Component, type ReactNode, type ErrorInfo } from 'react';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  /** Static fallback (deprecated, use fallbackRender instead) */
   fallback?: ReactNode;
+  /** Render prop fallback with reset capability */
+  fallbackRender?: (props: { error: Error | null; reset: () => void }) => ReactNode;
+  /** Called when error is caught */
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
 }
 
 interface ErrorBoundaryState {
@@ -22,6 +27,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+    this.props.onError?.(error, errorInfo);
   }
 
   handleReload = (): void => {
@@ -34,10 +40,20 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   render(): ReactNode {
     if (this.state.hasError) {
+      // Render prop fallback has priority
+      if (this.props.fallbackRender) {
+        return this.props.fallbackRender({
+          error: this.state.error,
+          reset: this.handleReset,
+        });
+      }
+
+      // Static fallback (for backward compatibility)
       if (this.props.fallback) {
         return this.props.fallback;
       }
 
+      // Default fallback UI
       return (
         <div className="min-h-screen flex items-center justify-center p-8">
           <div className="max-w-md text-center">

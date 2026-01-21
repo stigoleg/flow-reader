@@ -14,7 +14,6 @@ import {
   RSVPSection,
   DisplaySection,
   KeyboardSection,
-  TTSSection,
 } from './settings';
 
 export default function SettingsPanel() {
@@ -157,8 +156,6 @@ export default function SettingsPanel() {
         )}
 
         <DisplaySection settings={settings} onUpdate={updateSettings} />
-        
-        <TTSSection settings={settings} updateSettings={updateSettings} />
         
         <KeyboardSection />
       </aside>

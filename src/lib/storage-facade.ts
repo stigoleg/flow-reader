@@ -295,6 +295,7 @@ class StorageFacadeImpl {
       fileHash: item.fileHash,
       pasteContent: item.pasteContent,
       collectionIds: item.collectionIds,
+      collectionIdsUpdatedAt: item.collectionIdsUpdatedAt,
     }));
 
     return {

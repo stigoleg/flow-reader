@@ -141,6 +141,8 @@ export interface SyncArchiveItem {
   pasteContent?: string;
   /** Collection IDs this item belongs to */
   collectionIds?: string[];
+  /** When collection membership was last modified (for sync conflict resolution) */
+  collectionIdsUpdatedAt?: number;
   // Note: cachedDocument is explicitly excluded
 }
 

@@ -588,7 +588,36 @@ class SyncServiceImpl {
           uploaded: syncResult.uploaded.length,
           downloaded: syncResult.downloaded.length,
           errors: syncResult.errors.length,
+          manifestItems: Object.keys(syncResult.manifest.items).length,
         });
+        
+        // Log detailed info for debugging book sync issues
+        if (syncResult.errors.length > 0) {
+          console.log('FlowReader Content Sync Errors:', syncResult.errors);
+        }
+        
+        // Log local items without cachedDocument that weren't downloaded
+        const itemsNeedingContent = localItems.filter(item => 
+          !item.cachedDocument && 
+          (item.type === 'epub' || item.type === 'mobi' || item.type === 'pdf' || item.type === 'docx')
+        );
+        const downloadedIds = new Set(syncResult.downloaded.map(d => d.itemId));
+        const notDownloaded = itemsNeedingContent.filter(item => !downloadedIds.has(item.id));
+        
+        if (notDownloaded.length > 0) {
+          console.log('FlowReader Content Sync: Items needing content but not downloaded:', 
+            notDownloaded.map(item => ({
+              id: item.id,
+              type: item.type,
+              title: item.title,
+              fileHash: item.fileHash,
+              hasFileHash: !!item.fileHash,
+            }))
+          );
+          console.log('FlowReader Content Sync: Available manifest hashes:', 
+            Object.keys(syncResult.manifest.items)
+          );
+        }
       }
     } catch (error) {
       // Content sync errors should not fail the overall sync

@@ -30,6 +30,8 @@ export default function TopBar({ onImportClick }: TopBarProps) {
     toggleNotesPanel,
     // Search
     toggleSearch,
+    // Edit paste
+    setEditPasteOpen,
   } = useReaderStore();
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -83,9 +85,12 @@ export default function TopBar({ onImportClick }: TopBarProps) {
   const canGoPrev = isBook && currentChapterIndex > 0;
   const canGoNext = isBook && chapters && currentChapterIndex < chapters.length - 1;
   const currentChapterTitle = chapters?.[currentChapterIndex]?.title;
+  
+  // Can edit if this is a paste document with stored content
+  const canEditPaste = document?.metadata.source === 'paste' && !!document.metadata.pasteContent;
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 px-2 pt-2 md:px-4 md:pt-3" role="banner">
+    <header className="top-bar fixed top-0 left-0 right-0 z-40 px-2 pt-2 md:px-4 md:pt-3" role="banner">
       <div
         className="mx-auto rounded-xl px-2 py-2 shadow-lg md:max-w-4xl md:px-4"
         style={{
@@ -248,6 +253,25 @@ export default function TopBar({ onImportClick }: TopBarProps) {
                 />
               </svg>
             </button>
+
+            {/* Edit Paste (only for paste documents) */}
+            {canEditPaste && (
+              <button
+                onClick={() => setEditPasteOpen(true)}
+                className="flex w-10 h-10 items-center justify-center rounded opacity-60 hover:opacity-100 md:w-8 md:h-8"
+                title="Edit pasted text"
+                aria-label="Edit pasted content"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
+              </button>
+            )}
 
             {/* Notes & Highlights */}
             <button
